@@ -1,0 +1,73 @@
+---
+title: "chromatin_mod_exp_percentile"
+output: html_document
+---
+
+```{r libraries}
+install.packages("matrixStats")
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+```
+```{r clean table}
+View(gtex)
+#remove first line of gtex
+gtex <- gtex[-c(1), ]
+colnames(gtex) <- gtex[1,]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+View(gene_id_to_name)
+rownames(gtex) <- gtex$Name
+gtex <- gtex[-c(1), ]
+#gives ensemble id of duplicated gene names
+gtex$V1[which(duplicated(gtex$V2))]
+#drop first column gtex
+gtex <- gtex[,-c(1)]
+#drop first line gene_id_to_name
+gene_id_to_name<- gene_id_to_name[-c(1),]
+```
+```{r calculate percentiles for each gene in each tissue}
+
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx[is.na(gtex_mx)] <- 0
+gtex_mx[gtex_mx==0] <- NA
+
+gtex_rank <- matrix(nrow= nrow(gtex), ncol= ncol(gtex))
+colnames(gtex_rank) <- colnames(gtex)
+rownames(gtex_rank) <- rownames(gtex)
+
+
+for(i in 1:ncol(gtex_mx)){
+  gtex_rank[,i] <- percent_rank(gtex_mx[,i])
+}
+gtex_rankdf <- data.frame(gtex_rank)
+
+```
+```{r add gene names to rankdf}
+gtex_rankdf$Description <- gene_id_to_name$Description
+gtex_rankdf <- gtex_rankdf[,c(55, 1:54)]
+#replace NA with 0
+gtex_rankdf[is.na(gtex_rankdf)] <- 0
+
+
+```
+```{r filter for modifiers}
+#read in modifier lists
+kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+
+kmt_rank <- filter(gtex_rankdf, Description %in% kmt2)
+kdm_rank <- filter(gtex_rankdf, Description %in% kdm)
+kat_rank <- filter(gtex_rankdf, Description %in% kat)
+hdac_rank <- filter(gtex_rankdf, Description %in% hdac)
+
+```
