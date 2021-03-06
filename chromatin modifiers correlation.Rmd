@@ -1,0 +1,154 @@
+---
+title: "Chromatin Modifiers Correlation"
+output: html_document
+---
+
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+```
+```{r read table}
+gtex <- read.delim("~/Downloads/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", header=FALSE, comment.char="#")
+```
+```{r clean table}
+View(gtex)
+#remove first line of gtex
+gtex <- gtex[-c(1), ]
+colnames(gtex) <- gtex[1,]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+View(gene_id_to_name)
+rownames(gtex) <- gtex$Name
+gtex <- gtex[-c(1), ]
+#gives ensemble id of duplicated gene names
+gtex$V1[which(duplicated(gtex$V2))]
+#drop first column gtex
+gtex <- gtex[,-c(1)]
+#drop first line gene_id_to_name
+gene_id_to_name<- gene_id_to_name[-c(1),]
+
+```
+```{r filter for modifiers}
+#read in modifier lists
+kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+kmt_table <- filter(gtex, Description %in% kmt2)
+kdm_table <- filter(gtex, Description %in% kdm)
+kat_table <- filter(gtex, Description %in% kat)
+hdac_table <- filter(gtex, Description %in% hdac)
+#convert to matrices
+kmt_mx <- t(apply(as.matrix(kmt_table, ncol= ncol(kmt_table)), 2, as.numeric))
+colnames(kmt_mx) <- kmt_table$"Description"
+kmt_mx[is.na(kmt_mx)] <- 0
+
+kdm_mx <- t(apply(as.matrix(kdm_table, ncol= ncol(kdm_table)), 2, as.numeric))
+colnames(kdm_mx) <- kdm_table$"Description"
+kdm_mx[is.na(kdm_mx)] <- 0
+
+kat_mx <- t(apply(as.matrix(kat_table, ncol= ncol(kat_table)), 2, as.numeric))
+colnames(kat_mx) <- kat_table$"Description"
+kat_mx[is.na(kat_mx)] <- 0
+
+hdac_mx <- t(apply(as.matrix(hdac_table, ncol= ncol(hdac_table)), 2, as.numeric))
+colnames(hdac_mx) <- hdac_table$"Description"
+hdac_mx[is.na(hdac_mx)] <- 0
+
+
+```
+```{r correlate kmt and kdm}
+kmt.kdm <- cor(kmt_mx, kdm_mx, method= "spearman")
+kmt.kdm.hm <- Heatmap(kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.kdm.hm
+
+```
+```{r correlate kat and hdac}
+kat.hdac <- cor(kat_mx, hdac_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kat.hdac[is.na(kat.hdac)] <- 0
+kat.hdac.hm <- Heatmap(kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kat.hdac.hm
+```
+```{r correlate kmt and kat}
+kmt.kat <- cor(kmt_mx, kat_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kmt.kat[is.na(kmt.kat)] <- 0
+kmt.kat.hm <- Heatmap(kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.kat.hm
+```
+```{r correlate kmt and hdac}
+kmt.hdac <- cor(kmt_mx, hdac_mx, method= "spearman")
+
+kmt.hdac.hm <- Heatmap(kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.hdac.hm
+```
+```{r correlate kdm and kat}
+kdm.kat <- cor(kdm_mx, kat_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kdm.kat[is.na(kdm.kat)] <- 0
+kdm.kat.hm <- Heatmap(kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.kat.hm
+
+```
+```{r correlate kdm and hdac}
+kdm.hdac <- cor(kdm_mx, hdac_mx, method= "spearman")
+
+kdm.hdac.hm <- Heatmap(kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.hdac.hm
+
+```
+```{r KMT correlation}
+#compare KMTs with each other
+kmt.cor <- cor(kmt_mx, method= "spearman")
+
+kmt.cor.hm <- Heatmap(kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.cor.hm
+```
+
+```{r KDM correlation}
+#compare KDMs with each other
+kdm.cor <- cor(kdm_mx, method= "spearman")
+
+kdm.cor.hm <- Heatmap(kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.cor.hm
+```
+
+```{r KAT correlation}
+#compare KATs with each other
+kat.cor <- cor(kat_mx, method= "spearman")
+kat.cor[is.na(kat.cor)] <- 0
+kat.cor.hm <- Heatmap(kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kat.cor.hm
+```
+```{r HDAC correlation}
+#compare HDACs with each other
+hdac.cor <- cor(hdac_mx, method= "spearman")
+hdac.cor.hm <- Heatmap(hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+hdac.cor.hm
+```
+
+```{r p values}
+#Find p-values for each correlation
+#convert matrices to df
+kmt.frame <- data.frame(kmt_mx)
+kdm.frame <- data.frame(kdm_mx)
+kat.frame <- data.frame(kat_mx)
+hdac.frame <- data.frame(hdac_mx)
+#combine all df to one
+all.modifiers.df <- bind_cols(kmt.frame, kdm.frame, kat.frame, hdac.frame)
+# find p-values
+modifier.mx <- as.matrix(all.modifiers.df)
+modifiers.sig <- rcorr(modifier.mx, type= c("spearman"))
+modifiers.p <- data.frame(modifiers.sig$P)
+
+```
