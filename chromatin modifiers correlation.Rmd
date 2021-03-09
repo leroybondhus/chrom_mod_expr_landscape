@@ -19,7 +19,6 @@ library("RColorBrewer")
 gtex <- read.delim("~/Downloads/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", header=FALSE, comment.char="#")
 ```
 ```{r clean table}
-View(gtex)
 #remove first line of gtex
 gtex <- gtex[-c(1), ]
 colnames(gtex) <- gtex[1,]
@@ -71,6 +70,13 @@ kmt.kdm <- cor(kmt_mx, kdm_mx, method= "spearman")
 kmt.kdm.hm <- Heatmap(kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kmt.kdm.hm
 
+# Open a png file
+png("kmt_kdm_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+
 ```
 ```{r correlate kat and hdac}
 kat.hdac <- cor(kat_mx, hdac_mx, method= "spearman")
@@ -78,6 +84,13 @@ kat.hdac <- cor(kat_mx, hdac_mx, method= "spearman")
 kat.hdac[is.na(kat.hdac)] <- 0
 kat.hdac.hm <- Heatmap(kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kat.hdac.hm
+
+# Open a png file
+png("kat_hdac_cor.png") 
+# 2. Create a plot
+Heatmap(kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r correlate kmt and kat}
 kmt.kat <- cor(kmt_mx, kat_mx, method= "spearman")
@@ -85,6 +98,13 @@ kmt.kat <- cor(kmt_mx, kat_mx, method= "spearman")
 kmt.kat[is.na(kmt.kat)] <- 0
 kmt.kat.hm <- Heatmap(kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kmt.kat.hm
+
+# Open a png file
+png("kmt_kat_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r correlate kmt and hdac}
 kmt.hdac <- cor(kmt_mx, hdac_mx, method= "spearman")
@@ -99,6 +119,12 @@ kdm.kat[is.na(kdm.kat)] <- 0
 kdm.kat.hm <- Heatmap(kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kdm.kat.hm
 
+# Open a png file
+png("kdm_kat_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r correlate kdm and hdac}
 kdm.hdac <- cor(kdm_mx, hdac_mx, method= "spearman")
@@ -106,6 +132,12 @@ kdm.hdac <- cor(kdm_mx, hdac_mx, method= "spearman")
 kdm.hdac.hm <- Heatmap(kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kdm.hdac.hm
 
+# Open a png file
+png("kdm_hdac_cor.png") 
+# 2. Create a plot
+Heatmap(kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r KMT correlation}
 #compare KMTs with each other
@@ -121,6 +153,13 @@ kdm.cor <- cor(kdm_mx, method= "spearman")
 
 kdm.cor.hm <- Heatmap(kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kdm.cor.hm
+
+# Open a png file
+png("kdm_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 
 ```{r KAT correlation}
@@ -129,12 +168,26 @@ kat.cor <- cor(kat_mx, method= "spearman")
 kat.cor[is.na(kat.cor)] <- 0
 kat.cor.hm <- Heatmap(kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kat.cor.hm
+
+# Open a png file
+png("kat_cor.png") 
+# 2. Create a plot
+Heatmap(kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r HDAC correlation}
 #compare HDACs with each other
 hdac.cor <- cor(hdac_mx, method= "spearman")
 hdac.cor.hm <- Heatmap(hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 hdac.cor.hm
+
+# Open a png file
+png("hdac_cor.png") 
+# 2. Create a plot
+Heatmap(hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 
 ```{r p values}
@@ -148,7 +201,19 @@ hdac.frame <- data.frame(hdac_mx)
 all.modifiers.df <- bind_cols(kmt.frame, kdm.frame, kat.frame, hdac.frame)
 # find p-values
 modifier.mx <- as.matrix(all.modifiers.df)
+modifier.cor<- cor(modifier.mx, method="spearman")
 modifiers.sig <- rcorr(modifier.mx, type= c("spearman"))
 modifiers.p <- data.frame(modifiers.sig$P)
 
+modifier.cor[is.na(modifier.cor)] <- 0
+
+all.mod.hm <- Heatmap(modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+all.mod.hm
+
+# Open a png file
+png("all_cor.png", res=300, width=5000, height=5000) 
+# 2. Create a plot
+Heatmap(modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
