@@ -111,6 +111,13 @@ kmt.hdac <- cor(kmt_mx, hdac_mx, method= "spearman")
 
 kmt.hdac.hm <- Heatmap(kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kmt.hdac.hm
+
+# Open a png file
+png("kmt_hdac_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 ```{r correlate kdm and kat}
 kdm.kat <- cor(kdm_mx, kat_mx, method= "spearman")
