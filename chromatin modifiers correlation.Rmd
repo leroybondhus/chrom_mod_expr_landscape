@@ -152,6 +152,13 @@ kmt.cor <- cor(kmt_mx, method= "spearman")
 
 kmt.cor.hm <- Heatmap(kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 kmt.cor.hm
+
+# Open a png file
+png("kmt_cor.png") 
+# 2. Create a plot
+Heatmap(kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
 ```
 
 ```{r KDM correlation}
