@@ -1,0 +1,276 @@
+---
+title: "Modifiers Correlation Log TPM"
+output: html_document
+---
+
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+```
+```{r read table}
+gtex <- read.delim("~/Downloads/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", header=FALSE, comment.char="#")
+```
+```{r clean table}
+#remove first line of gtex
+gtex <- gtex[-c(1), ]
+colnames(gtex) <- gtex[1,]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+View(gene_id_to_name)
+rownames(gtex) <- gtex$Name
+gtex <- gtex[-c(1), ]
+#gives ensemble id of duplicated gene names
+gtex$V1[which(duplicated(gtex$V2))]
+#drop first column gtex
+gtex <- gtex[,-c(1)]
+#drop first line gene_id_to_name
+gene_id_to_name<- gene_id_to_name[-c(1),]
+#log TPM (use log(x+1))
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx<- gtex_mx[,-c(1)]
+gtex_log <- log(gtex_mx + 1)
+rownames(gtex_log) <- gtex$"Description"
+gtex_log_df <- data.frame(gtex_log)
+
+
+```
+
+
+```{r filter for modifiers}
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+log_kmt_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kmt)
+log_kdm_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kdm)
+log_kat_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kat)
+log_hdac_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% hdac)
+#convert to matrices
+log_kmt_mx <- t(apply(as.matrix(log_kmt_table, ncol= ncol(log_kmt_table)), 2, as.numeric))
+colnames(log_kmt_mx) <- rownames(log_kmt_table)
+
+log_kdm_mx <- t(apply(as.matrix(log_kdm_table, ncol= ncol(log_kdm_table)), 2, as.numeric))
+colnames(log_kdm_mx) <- rownames(log_kdm_table)
+
+log_kat_mx <- t(apply(as.matrix(log_kat_table, ncol= ncol(log_kat_table)), 2, as.numeric))
+colnames(log_kat_mx) <- rownames(log_kat_table)
+
+log_hdac_mx <- t(apply(as.matrix(log_hdac_table, ncol= ncol(log_hdac_table)), 2, as.numeric))
+colnames(log_hdac_mx) <- rownames(log_hdac_table)
+
+
+```
+```{r correlate kmt and kdm}
+log.kmt.kdm <- cor(log_kmt_mx, log_kdm_mx, method= "pearson")
+#reorder matrix columns to match clustering in Spearman heatmap
+kmt.kdm.row.order <- c("NSD1", "SETD2", "KMT2C", "SETD5", "KMT2D", "SETDB1", "EHMT1", "KMT2B", "SETD1A", "SETDB2", "KMT5B", "KMT5C", "SETD6", "SUV39H2", "DOT1L", "ASH1L", "KMT2A", "NSD3", "PRDM2", "SETD1B", "EZH1", "KMT5A", "SETMAR", "EZH2", "SUV39H1", "NSD2", "N6AMT1", "SETD7", "PRDM6", "SMYD3", "EHMT2", "SMYD2", "PRDM8", "MECOM", "PRDM7", "PRDM9", "PRDM16", "SMYD1")
+kmt.kdm.col.order <- c("KDM3B", "PHF2", "RSBN1", "JMJD1C", "KDM5C", "KDM4C", "KDM1A", "KDM2B", "KDM2A", "KDM4B", "KDM4A", "PHF8", "KDM6A", "KDM3A", "KDM5B", "KDM5A", "RIOX1", "KDM1B", "KDM6B", "RIOX2", "JMJD6", "KDM8", "KDM4D", "KDM4E", "KDM7A", "UTY", "KDM5D", "HR", "KDM4F")
+log.kmt.kdm <- log.kmt.kdm[kmt.kdm.row.order, kmt.kdm.col.order]
+log.kmt.kdm.hm <- Heatmap(log.kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kmt.kdm.hm
+
+# Open a png file
+png("log_kmt_kdm_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(log.kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+
+```
+```{r correlate kat and hdac}
+log.kat.hdac <- cor(log_kat_mx, log_hdac_mx, method= "pearson")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+log.kat.hdac[is.na(log.kat.hdac)] <- 0
+kat.hdac.row.order <- c("ATF2", "KAT14", "NCOA1", "KAT5", "KAT7", "KAT6B", "CLOCK", "KAT8", "KAT2A", "MCM3AP", "TAF1", "CREBBP", "EP300", "KAT6A", "NAT10", "GTF3C4", "NCOA2", "NAA10", "NAA60", "NCOA3", "HAT1", "NAA50", "KAT2B", "CDY2A", "CDY1")
+kat.hdac.col.order <- c("HDAC2", "SIRT1", "HDAC3", "HDAC6", "SIRT6", "HDAC8", "HDAC7", "HDAC10", "SIRT7", "HDAC1", "HDAC5", "HDAC4", "HDAC9", "SIRT3", "SIRT2", "HDAC11")
+log.kat.hdac <- log.kat.hdac[kat.hdac.row.order, kat.hdac.col.order]
+
+log.kat.hdac.hm <- Heatmap(log.kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kat.hdac.hm
+
+# Open a png file
+png("log_kat_hdac_cor.png") 
+# 2. Create a plot
+Heatmap(log.kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kmt and kat}
+log.kmt.kat <- cor(log_kmt_mx, log_kat_mx, method= "pearson")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+log.kmt.kat[is.na(log.kmt.kat)] <- 0
+kmt.kat.row.order <- c("SETD2", "KMT2C", "SETD5", "NSD1", "SETDB1", "EHMT1", "KMT2D", "SETD1A", "KMT5B", "KMT2B", "SETDB2", "SUV39H2", "ASH1L", "KMT2A", "PRDM2", "NSD3", "EZH1", "SETD1B", "SETMAR", "KMT5A", "SETD6", "KMT5C", "N6AMT1", "SUV39H1", "NSD2", "DOT1L", "EZH2", "SETD7", "PRDM6", "SMYD3", "EHMT2", "PRDM8", "SMYD2", "MECOM", "PRDM7", "PRDM9", "PRDM16", "SMYD1")
+kmt.kat.col.order <- c("EP300", "MCM3AP", "NCOA2", "NAT10", "GTF3C4", "KAT7", "KAT5", "CREBBP", "KAT6B", "KAT8", "CLOCK", "TAF1", "KAT6A", "KAT2A", "KAT14", "ATF2", "NCOA1", "NAA60", "NAA10", "NCOA3", "HAT1", "NAA50", "KAT2B", "CDY2A", "CDY1")
+log.kmt.kat <- log.kmt.kat[kmt.kat.row.order, kmt.kat.col.order]
+
+log.kmt.kat.hm <- Heatmap(log.kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kmt.kat.hm
+
+# Open a png file
+png("log_kmt_kat_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(log.kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kmt and hdac}
+log.kmt.hdac <- cor(log_kmt_mx, log_hdac_mx, method= "pearson")
+kmt.hdac.row.order <- c("EHMT1", "SETDB1", "KMT2B", "KMT2D", "SETDB2", "SETD1B", "KMT5A", "KMT2A", "NSD3", "SETD5", "SETD2", "NSD1", "KMT5B", "SETD1A", "KMT2C", "PRDM2", "ASH1L", "EZH1", "N6AMT1", "SETMAR", "KMT5C", "SUV39H2", "SETD6", "SUV39H1", "NSD2", "SETD7", "PRDM6", "DOT1L", "EZH2", "SMYD3", "PRDM8", "PRDM7", "SMYD2", "MECOM", "PRDM9", "PRDM16", "SMYD1")
+kmt.hdac.col.order <- c("HDAC2", "SIRT1", "HDAC6", "HDAC8", "HDAC3", "SIRT6", "HDAC7", "HDAC1", "HDAC10", "SIRT7", "HDAC5", "HDAC4", "HDAC9", "SIRT3", "SIRT2", "HDAC11")
+log.kmt.hdac <- log.kmt.hdac[kmt.hdac.row.order, kmt.hdac.col.order]
+
+log.kmt.hdac.hm <- Heatmap(log.kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kmt.hdac.hm
+
+# Open a png file
+png("log_kmt_hdac_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(log.kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kdm and kat}
+log.kdm.kat <- cor(log_kdm_mx, log_kat_mx, method= "pearson")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+log.kdm.kat[is.na(log.kdm.kat)] <- 0
+kdm.kat.row.order <- c("KDM3B", "RSBN1", "JMJD1C", "KDM5C", "KDM4C", "PHF2", "KDM1A", "PHF8", "KDM6A", "KDM3A", "KDM2A", "KDM4B", "KDM2B", "KDM5B", "KDM4A", "KDM1B", "RIOX1", "KDM5A", "JMJD6", "KDM6B", "KDM4D", "KDM8", "KDM4E", "RIOX2", "KDM7A", "UTY", "KDM5D", "HR", "KDM4F")
+kdm.kat.col.order <- c("NAT10", "GTF3C4", "EP300", "KAT5", "CREBBP", "KAT7", "NCOA2", "KAT6A", "MCM3AP", "KAT6B", "TAF1", "KAT8", "CLOCK", "NCOA3", "HAT1", "NAA50", "NAA10", "KAT14", "KAT2A", "ATF2", "NCOA1", "NAA60", "CDY2A", "KAT2B", "CDY1")
+log.kdm.kat <- log.kdm.kat[kdm.kat.row.order, kdm.kat.col.order]
+
+log.kdm.kat.hm <- Heatmap(log.kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kdm.kat.hm
+
+# Open a png file
+png("log_kdm_kat_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(log.kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kdm and hdac}
+log.kdm.hdac <- cor(log_kdm_mx, log_hdac_mx, method= "pearson")
+kdm.hdac.row.order <- c("PHF2", "KDM1A", "KDM4C", "KDM2B", "KDM5C", "KDM4A", "KDM4B", "KDM2A", "PHF8", "KDM6A", "RSBN1", "KDM3B", "JMJD1C", "KDM5B", "KDM3A", "RIOX1", "KDM1B", "KDM6B", "KDM4E", "KDM5A", "RIOX2", "JMJD6", "KDM7A", "KDM8", "KDM4D", "UTY", "KDM5D", "HR", "KDM4F")
+kdm.hdac.col.order <- c("HDAC2", "SIRT1", "HDAC3", "SIRT6", "HDAC6", "SIRT7", "HDAC7", "HDAC1", "HDAC8", "HDAC10", "HDAC4", "HDAC5", "SIRT3", "HDAC9", "SIRT2", "HDAC11")
+log.kdm.hdac <- log.kdm.hdac[kdm.hdac.row.order, kdm.hdac.col.order]
+
+log.kdm.hdac.hm <- Heatmap(log.kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kdm.hdac.hm
+
+# Open a png file
+png("log_kdm_hdac_cor.png") 
+# 2. Create a plot
+Heatmap(log.kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r KMT correlation}
+#compare KMTs with each other
+log.kmt.cor <- cor(log_kmt_mx, method= "pearson")
+kmt.cor.order <- c("ASH1L", "KMT2A", "NSD3", "PRDM2", "SETD1A", "KMT5B", "SETD2", "SETD5", "KMT2C", "EHMT1", "SETDB1", "KMT2D", "KMT2B", "SETDB2", "NSD1", "SUV39H2", "KMT5C", "SETD6", "SUV39H1", "NSD2", "SETD1B", "KMT5A", "EZH1", "SETMAR", "N6AMT1", "DOT1L", "EZH2", "SMYD3", "EHMT2", "SMYD2", "PRDM7", "PRDM6", "SETD7", "PRDM8", "MECOM", "PRDM9", "PRDM16", "SMYD1")
+log.kmt.cor <- log.kmt.cor[kmt.cor.order, kmt.cor.order]
+
+
+log.kmt.cor.hm <- Heatmap(log.kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kmt.cor.hm
+
+# Open a png file
+png("log_kmt_cor.png") 
+# 2. Create a plot
+Heatmap(log.kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+
+```{r KDM correlation}
+#compare KDMs with each other
+log.kdm.cor <- cor(log_kdm_mx, method= "pearson")
+
+kdm.cor.order <- c("KDM2A", "KDM6A", "PHF8", "KDM4B", "RSBN1", "KDM3B", "KDM5C", "KDM4C", "JMJD1C", "PHF2", "KDM1A", "KDM2B", "KDM5B", "KDM4A", "KDM3A", "KDM5A", "KDM1B", "RIOX1", "KDM6B", "JMJD6", "RIOX2", "KDM7A", "KDM4E", "KDM8", "KDM4D", "UTY", "KDM5D", "HR", "KDM4F")
+log.kdm.cor <- log.kdm.cor[kdm.cor.order, kdm.cor.order]
+log.kdm.cor.hm <- Heatmap(log.kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kdm.cor.hm
+
+# Open a png file
+png("log_kdm_cor.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(log.kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+
+```{r KAT correlation}
+#compare KATs with each other
+log.kat.cor <- cor(log_kat_mx, method= "spearman")
+log.kat.cor[is.na(log.kat.cor)] <- 0
+
+kat.cor.order <- c("EP300", "KAT6B", "KAT7", "KAT5", "CREBBP", "CLOCK", "NAT10", "GTF3C4", "NCOA2", "MCM3AP", "TAF1", "KAT6A", "KAT8", "KAT2A", "ATF2", "KAT14", "NCOA1", "NAA10", "NCOA3", "HAT1", "NAA50", "NAA60", "KAT2B", "CDY2A", "CDY1")
+log.kat.cor <- log.kat.cor[kat.cor.order, kat.cor.order]
+
+log.kat.cor.hm <- Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kat.cor.hm
+
+# Open a png file
+png("log_kat_cor.png") 
+# 2. Create a plot
+Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r HDAC correlation}
+#compare HDACs with each other
+log.hdac.cor <- cor(log_hdac_mx, method= "pearson")
+
+hdac.cor.order <- c("HDAC2", "SIRT1", "HDAC6", "HDAC8", "SIRT6", "HDAC3", "HDAC7", "HDAC10", "SIRT7", "HDAC1", "HDAC4", "HDAC5", "HDAC9", "SIRT3", "SIRT2", "HDAC11")
+log.hdac.cor <- log.hdac.cor[hdac.cor.order, hdac.cor.order]
+
+log.hdac.cor.hm <- Heatmap(log.hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.hdac.cor.hm
+
+# Open a png file
+png("log_hdac_cor.png") 
+# 2. Create a plot
+Heatmap(log.hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+
+```{r p values}
+#Find p-values for each correlation
+#convert matrices to df
+log.kmt.frame <- data.frame(log_kmt_mx)
+log.kdm.frame <- data.frame(log_kdm_mx)
+log.kat.frame <- data.frame(log_kat_mx)
+log.hdac.frame <- data.frame(log_hdac_mx)
+#combine all df to one
+log.all.modifiers.df <- bind_cols(log.kmt.frame, log.kdm.frame, log.kat.frame, log.hdac.frame)
+# find p-values
+log.modifier.mx <- as.matrix(log.all.modifiers.df)
+log.modifier.cor<- cor(log.modifier.mx, method="pearson")
+log.modifiers.sig <- rcorr(log.modifier.mx, type= c("pearson"))
+log.modifiers.p <- data.frame(log.modifiers.sig$P)
+
+log.modifier.cor[is.na(log.modifier.cor)] <- 0
+
+log.modifier.order <- c("SETD2", "EP300", "RSBN1", "KAT7", "KMT2C", "KAT5", "CREBBP", "KDM3B", "KAT6B", "HDAC2", "CLOCK", "SIRT1", "SETD1A", "KMT5B", "KAT8", "MCM3AP", "JMJD1C", "TAF1", "SETD5", "KDM5C", "KDM4C", "ASH1L", "PHF2", "KMT2A", "NSD3", "PRDM2", "EHMT1", "SETDB1", "KMT2D", "KMT2B", "KMT2A", "KDM4B", "PHF8", "SETDB2", "NSD1", "KDM1A", "NAT10", "GTF3C4", "KDM2B", "SUV39H2", "HDAC3", "KDM4A", "NCOA2", "KDM6A", "KDM5B", "KDM3A", "KAT6A", "KDM5A", "KDM1B", "KMT5C", "SETD6", "SIRT6", "RIOX1", "DOT1L", "KDM6B", "SETD1B", "KMT5A", "SETMAR", "HDAC7", "EZH1", "NAA10", "HDAC8", "NCOA3", "HAT1", "NAA50", "RIOX2", "KAT2A", "HDAC6", "ATF2", "N6AMT1", "KAT14", "NCOA1", "SUV39H1", "NSD2", "JMJD6", "HDAC4", "HDAC5", "HDAC10", "NAA60", "KDM8", "SIRT7", "EZH2", "HDAC1", "KDM4E", "SETD7", "PRDM6", "KDM7A", "KDM4D", "SMYD3", "SIRT3", "EHMT2", "HDAC9", "PRDM8", "UTY", "KDM5D", "SMYD2", "MECOM", "PRDM7", "KDM4F", "CDY2A", "PRDM9", "HR", "KAT2B", "SIRT2", "HDAC11", "CDY1", "PRDM16", "SMYD1")
+log.modifier.cor <- log.modifier.cor[log.modifier.order, log.modifier.order]
+
+log.all.mod.hm <- Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.all.mod.hm
+
+# Open a png file
+png("log_all_cor.png", res=300, width=5000, height=5000) 
+# 2. Create a plot
+Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
