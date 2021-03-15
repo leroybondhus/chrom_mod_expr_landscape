@@ -125,7 +125,7 @@ dev.off()
 ```
 ```{r correlate kmt and hdac}
 log.kmt.hdac <- cor(log_kmt_mx, log_hdac_mx, method= "pearson")
-kmt.hdac.row.order <- c("EHMT1", "SETDB1", "KMT2B", "KMT2D", "SETDB2", "SETD1B", "KMT5A", "KMT2A", "NSD3", "SETD5", "SETD2", "NSD1", "KMT5B", "SETD1A", "KMT2C", "PRDM2", "ASH1L", "EZH1", "N6AMT1", "SETMAR", "KMT5C", "SUV39H2", "SETD6", "SUV39H1", "NSD2", "SETD7", "PRDM6", "DOT1L", "EZH2", "SMYD3", "PRDM8", "PRDM7", "SMYD2", "MECOM", "PRDM9", "PRDM16", "SMYD1")
+kmt.hdac.row.order <- c("EHMT1", "SETDB1", "KMT2B", "KMT2D", "SETDB2", "SETD1B", "KMT5A", "KMT2A", "NSD3", "SETD5", "SETD2", "NSD1", "KMT5B", "SETD1A", "KMT2C", "PRDM2", "ASH1L", "EZH1", "N6AMT1", "SETMAR", "KMT5C", "SUV39H2", "SETD6", "SUV39H1", "NSD2", "SETD7", "PRDM6", "DOT1L", "EZH2", "EHMT2", "SMYD3", "PRDM8", "PRDM7", "SMYD2", "MECOM", "PRDM9", "PRDM16", "SMYD1")
 kmt.hdac.col.order <- c("HDAC2", "SIRT1", "HDAC6", "HDAC8", "HDAC3", "SIRT6", "HDAC7", "HDAC1", "HDAC10", "SIRT7", "HDAC5", "HDAC4", "HDAC9", "SIRT3", "SIRT2", "HDAC11")
 log.kmt.hdac <- log.kmt.hdac[kmt.hdac.row.order, kmt.hdac.col.order]
 
