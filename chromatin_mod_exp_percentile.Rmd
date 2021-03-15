@@ -15,8 +15,10 @@ library(ComplexHeatmap)
 library("circlize")
 library("RColorBrewer")
 ```
+```{r read table}
+gtex <- read.delim("~/Downloads/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", header=FALSE, comment.char="#")
+```
 ```{r clean table}
-View(gtex)
 #remove first line of gtex
 gtex <- gtex[-c(1), ]
 colnames(gtex) <- gtex[1,]
@@ -51,10 +53,16 @@ gtex_rankdf <- data.frame(gtex_rank)
 ```
 ```{r add gene names to rankdf}
 gtex_rankdf$Description <- gene_id_to_name$Description
-gtex_rankdf <- gtex_rankdf[,c(55, 1:54)]
+# reorder columns: gtex_rankdf <- gtex_rankdf[,c(55, 1:54)]
 #replace NA with 0
 gtex_rankdf[is.na(gtex_rankdf)] <- 0
-
+#mean percentile for each tissue - percentile for each gene for that tissue
+gtex_ranknorm <- apply(as.matrix(gtex_rankdf[,c(2:55)], ncol= ncol(gtex_rankdf-1)), 2, as.numeric)
+rownames(gtex_ranknorm) <- gtex_rankdf$Description
+for(i in 1:ncol(gtex_ranknorm)){
+ gtex_ranknorm[,i] <- gtex_ranknorm[,i]-mean(gtex_ranknorm[,i])
+}
+gtex_ranknormdf <- data.frame(gtex_ranknorm)
 
 ```
 ```{r filter for modifiers}
@@ -70,4 +78,39 @@ kdm_rank <- filter(gtex_rankdf, Description %in% kdm)
 kat_rank <- filter(gtex_rankdf, Description %in% kat)
 hdac_rank <- filter(gtex_rankdf, Description %in% hdac)
 
+```
+```{r filter ranknorm}
+kmt_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kmt2))
+kdm_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kdm))
+kat_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kat))
+hdac_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% hdac))
+
+```
+```{r heatmap for kmt ranknorm}
+kmt_ranknorm_ro <- c("MECOM", "PRDM6", "PRDM16", "SMYD2", "SMYD1", "EZH2", "NSD2", "SUV39H1", "PRDM7", "PRDM9", "DOT1L", "SUV39H2", "PRDM8", "SETMAR", "SETD1B", "KMT5A", "SETD7", "SETDB1", "EHMT1", "SETDB2", "KMT2B", "SETD1A", "KMT2C", "SETD2", "NSD1", "KMT2D", "KMT5B", "SETD6", "EZH1", "KMT2A", "NSD3", "SETD5", "ASH1L", "PRDM2", "N6AMT1", "KMT5C", "EHMT2", "SMYD3")
+kmt_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Uterus", "Cervix...Endocervix", "Fallopian.Tube", "Cervix...Ectocervix", "Ovary", "Nerve...Tibial", "Thyroid", "Cells...EBV.transformed.lymphocytes", "Artery...Aorta", "Artery...Tibial", "Artery...Coronary", "Prostate", "Vagina", "Bladder", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Cells...Cultured.fibroblasts", "Pituitary", "Lung", "Adipose...Subcutaneous", "Breast...Mammary.Tissue", "Skin...Sun.Exposed..Lower.leg.","Skin...Not.Sun.Exposed..Suprapubic.", "Spleen", "Small.Intestine...Terminal.Ileum", "Minor.Salivary.Gland", "Colon...Transverse", "Adipose...Visceral..Omentum.", "Esophagus...Mucosa", "Adrenal.Gland", "Stomach", "Kidney...Medulla", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Spinal.cord..cervical.c.1.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Hypothalamus", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Heart...Atrial.Appendage", "Kidney...Cortex", "Pancreas", "Liver", "Whole.Blood", "Muscle...Skeletal", "Heart...Left.Ventricle")
+kmt_ranknorm <- kmt_ranknorm[kmt_ranknorm_ro, kmt_ranknorm_co]
+
+Heatmap(kmt_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+```
+```{r heatmap for kdm ranknorm}
+kdm_ranknorm_ro <- c("KDM7A", "KDM2A", "KDM6A", "KDM3A", "KDM5A", "KDM4A", "KDM2B", "KDM4B", "JMJD1C", "KDM4C", "PHF2", "KDM5C", "KDM3B", "RSBN1", "JMJD6", "KDM6B", "HR", "KDM1B", "RIOX2", "UTY", "KDM5D", "RIOX1", "KDM1A", "PHF8", "KDM4D", "KDM4F", "KDM5B", "KDM4E", "KDM8")
+kdm_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Ovary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Vagina", "Thyroid", "Cells...EBV.transformed.lymphocytes", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Nerve...Tibial", "Bladder", "Artery...Tibial", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Artery...Aorta", "Artery...Coronary", "Lung", "Spleen", "Prostate", "Pituitary", "Cells...Cultured.fibroblasts", "Esophagus...Mucosa", "Small.Intestine...Terminal.Ileum",  "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Minor.Salivary.Gland", "Adipose...Visceral..Omentum.", "Colon...Transverse",  "Adrenal.Gland", "Whole.Blood", "Stomach", "Kidney...Medulla", "Muscle...Skeletal", "Brain...Cortex", "Brain...Frontal.Cortex..BA9.","Brain...Spinal.cord..cervical.c.1.", "Pancreas", "Kidney...Cortex", "Brain...Hypothalamus", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Anterior.cingulate.cortex..BA24.",  "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Liver")
+kdm_ranknorm <- kdm_ranknorm[kdm_ranknorm_ro, kdm_ranknorm_co]
+
+Heatmap(kdm_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+```
+```{r heatmap for kat ranknorm}
+kat_ranknorm_ro <- c("KAT2B", "CDY1", "GTF3C4", "NCOA2", "MCM3AP", "TAF1", "CREBBP", "KAT5", "EP300", "KAT6B", "KAT6A", "NAT10", "NCOA3", "HAT1", "NAA50", "NAA10", "KAT2A", "KAT8", "CLOCK", "KAT7", "ATF2", "KAT14", "NCOA1", "NAA60", "CDY2A")
+kat_ranknorm_co <- c("Nerve...Tibial", "Ovary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Testis", "Cells...EBV.transformed.lymphocytes", "Artery...Tibial", "Thyroid", "Vagina", "Bladder", "Artery...Aorta", "Artery...Coronary", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Lung", "Adipose...Subcutaneous", "Breast...Mammary.Tissue", "Adipose...Visceral..Omentum.", "Prostate", "Pituitary",  "Spleen", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Small.Intestine...Terminal.Ileum", "Minor.Salivary.Gland", "Cells...Cultured.fibroblasts", "Muscle...Skeletal", "Colon...Transverse", "Stomach", "Adrenal.Gland", "Kidney...Medulla", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Spinal.cord..cervical.c.1.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Hypothalamus", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Whole.Blood", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Pancreas", "Kidney...Cortex", "Liver")
+kat_ranknorm <- kat_ranknorm[kat_ranknorm_ro, kat_ranknorm_co]
+
+Heatmap(kat_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+```
+```{r heatmap for hdac ranknorm}
+hdac_ranknorm_ro <- c("HDAC11", "SIRT2", "HDAC1", "HDAC7", "SIRT1", "HDAC2", "HDAC8", "HDAC3", "SIRT6", "HDAC10", "SIRT7", "HDAC5", "HDAC9", "HDAC4", "HDAC6", "SIRT3")
+hdac_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Pituitary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Ovary", "Nerve...Tibial", "Colon...Sigmoid", "Artery...Aorta", "Artery...Tibial", "Esophagus...Muscularis", "Esophagus...Gastroesophageal.Junction", "Cells...EBV.transformed.lymphocytes", "Spleen", "Thyroid", "Prostate", "Vagina", "Bladder", "Lung", "Cells...Cultured.fibroblasts", "Adrenal.Gland", "Artery...Coronary", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Adipose...Visceral..Omentum.", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Minor.Salivary.Gland", "Stomach", "Kidney...Medulla", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Brain...Spinal.cord..cervical.c.1.", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Amygdala", "Muscle...Skeletal", "Whole.Blood", "Kidney...Cortex", "Liver", "Heart...Atrial.Appendage", "Heart...Left.Ventricle", "Pancreas")
+hdac_ranknorm <- hdac_ranknorm[hdac_ranknorm_ro, hdac_ranknorm_co]
+
+Heatmap(hdac_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
 ```
