@@ -4,7 +4,6 @@ output: html_document
 ---
 
 ```{r libraries}
-install.packages("matrixStats")
 library(matrixStats)
 library(readr)
 library(dplyr)
@@ -72,10 +71,30 @@ kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
 hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
 
 
+
 kmt_rank <- filter(gtex_rankdf, Description %in% kmt2)
-kdm_rank <- filter(gtex_rankdf, Description %in% kdm)
-kat_rank <- filter(gtex_rankdf, Description %in% kat)
-hdac_rank <- filter(gtex_rankdf, Description %in% hdac)
+rownames(kmt_rank)<- kmt_rank[,1]
+kmt_rank <- kmt_rank[,-1]
+kmt_rankmx <- apply(as.matrix(kmt_rank, ncol=ncol(kmt_rank)), 2, as.numeric)
+rownames(kmt_rankmx)<- rownames(kmt_rank)
+
+kdm_rank <- as.matrix(filter(gtex_rankdf, Description %in% kdm))
+rownames(kdm_rank)<- kdm_rank[,1]
+kdm_rank <- kdm_rank[,-1]
+kdm_rankmx <- apply(as.matrix(kdm_rank, ncol=ncol(kdm_rank)), 2, as.numeric)
+rownames(kdm_rankmx)<- rownames(kdm_rank)
+
+kat_rank <- as.matrix(filter(gtex_rankdf, Description %in% kat))
+rownames(kat_rank)<- kat_rank[,1]
+kat_rank <- kat_rank[,-1]
+kat_rankmx <- apply(as.matrix(kat_rank, ncol=ncol(kat_rank)), 2, as.numeric)
+rownames(kat_rankmx)<- rownames(kat_rank)
+
+hdac_rank <- as.matrix(filter(gtex_rankdf, Description %in% hdac))
+rownames(hdac_rank)<- hdac_rank[,1]
+hdac_rank <- hdac_rank[,-1]
+hdac_rankmx <- apply(as.matrix(hdac_rank, ncol=ncol(hdac_rank)), 2, as.numeric)
+rownames(hdac_rankmx)<- rownames(hdac_rank)
 
 ```
 ```{r filter ranknorm}
@@ -84,6 +103,52 @@ kdm_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in%
 kat_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kat))
 hdac_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% hdac))
 
+```
+```{r heatmap for kmt percentile}
+kmt_ranknorm_ro <- c("MECOM", "PRDM6", "PRDM16", "SMYD2", "SMYD1", "EZH2", "NSD2", "SUV39H1", "PRDM7", "PRDM9", "DOT1L", "SUV39H2", "PRDM8", "SETMAR", "SETD1B", "KMT5A", "SETD7", "SETDB1", "EHMT1", "SETDB2", "KMT2B", "SETD1A", "KMT2C", "SETD2", "NSD1", "KMT2D", "KMT5B", "SETD6", "EZH1", "KMT2A", "NSD3", "SETD5", "ASH1L", "PRDM2", "N6AMT1", "KMT5C", "EHMT2", "SMYD3")
+kmt_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Uterus", "Cervix...Endocervix", "Fallopian.Tube", "Cervix...Ectocervix", "Ovary", "Nerve...Tibial", "Thyroid", "Cells...EBV.transformed.lymphocytes", "Artery...Aorta", "Artery...Tibial", "Artery...Coronary", "Prostate", "Vagina", "Bladder", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Cells...Cultured.fibroblasts", "Pituitary", "Lung", "Adipose...Subcutaneous", "Breast...Mammary.Tissue", "Skin...Sun.Exposed..Lower.leg.","Skin...Not.Sun.Exposed..Suprapubic.", "Spleen", "Small.Intestine...Terminal.Ileum", "Minor.Salivary.Gland", "Colon...Transverse", "Adipose...Visceral..Omentum.", "Esophagus...Mucosa", "Adrenal.Gland", "Stomach", "Kidney...Medulla", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Spinal.cord..cervical.c.1.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Hypothalamus", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Heart...Atrial.Appendage", "Kidney...Cortex", "Pancreas", "Liver", "Whole.Blood", "Muscle...Skeletal", "Heart...Left.Ventricle")
+kmt_rankmx <- kmt_rankmx[kmt_ranknorm_ro, kmt_ranknorm_co]
+
+# Open a pdf file
+pdf("kmt_rank.pdf", width=8, height=8) 
+# 2. Create a plot
+Heatmap(kmt_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+# Close the pdf file
+dev.off()
+```
+```{r heatmap for kdm rank}
+kdm_ranknorm_ro <- c("KDM7A", "KDM2A", "KDM6A", "KDM3A", "KDM5A", "KDM4A", "KDM2B", "KDM4B", "JMJD1C", "KDM4C", "PHF2", "KDM5C", "KDM3B", "RSBN1", "JMJD6", "KDM6B", "HR", "KDM1B", "RIOX2", "UTY", "KDM5D", "RIOX1", "KDM1A", "PHF8", "KDM4D", "KDM4F", "KDM5B", "KDM4E", "KDM8")
+kdm_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Ovary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Vagina", "Thyroid", "Cells...EBV.transformed.lymphocytes", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Nerve...Tibial", "Bladder", "Artery...Tibial", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Artery...Aorta", "Artery...Coronary", "Lung", "Spleen", "Prostate", "Pituitary", "Cells...Cultured.fibroblasts", "Esophagus...Mucosa", "Small.Intestine...Terminal.Ileum",  "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Minor.Salivary.Gland", "Adipose...Visceral..Omentum.", "Colon...Transverse",  "Adrenal.Gland", "Whole.Blood", "Stomach", "Kidney...Medulla", "Muscle...Skeletal", "Brain...Cortex", "Brain...Frontal.Cortex..BA9.","Brain...Spinal.cord..cervical.c.1.", "Pancreas", "Kidney...Cortex", "Brain...Hypothalamus", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Anterior.cingulate.cortex..BA24.",  "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Liver")
+kdm_rankmx <- kdm_rankmx[kdm_ranknorm_ro, kdm_ranknorm_co]
+
+
+# Open a pdf file
+pdf("kdm_rank.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kdm_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
+```
+```{r heatmap for kat ranknorm}
+kat_ranknorm_ro <- c("KAT2B", "CDY1", "GTF3C4", "NCOA2", "MCM3AP", "TAF1", "CREBBP", "KAT5", "EP300", "KAT6B", "KAT6A", "NAT10", "NCOA3", "HAT1", "NAA50", "NAA10", "KAT2A", "KAT8", "CLOCK", "KAT7", "ATF2", "KAT14", "NCOA1", "NAA60", "CDY2A")
+kat_ranknorm_co <- c("Nerve...Tibial", "Ovary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Testis", "Cells...EBV.transformed.lymphocytes", "Artery...Tibial", "Thyroid", "Vagina", "Bladder", "Artery...Aorta", "Artery...Coronary", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Lung", "Adipose...Subcutaneous", "Breast...Mammary.Tissue", "Adipose...Visceral..Omentum.", "Prostate", "Pituitary",  "Spleen", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Small.Intestine...Terminal.Ileum", "Minor.Salivary.Gland", "Cells...Cultured.fibroblasts", "Muscle...Skeletal", "Colon...Transverse", "Stomach", "Adrenal.Gland", "Kidney...Medulla", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Spinal.cord..cervical.c.1.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Hypothalamus", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Whole.Blood", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Pancreas", "Kidney...Cortex", "Liver")
+kat_rankmx <- kat_rankmx[kat_ranknorm_ro, kat_ranknorm_co]
+
+# Open a png file
+pdf("kat_rank.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kat_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(10, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
+```
+```{r heatmap for hdac ranknorm}
+hdac_ranknorm_ro <- c("HDAC11", "SIRT2", "HDAC1", "HDAC7", "SIRT1", "HDAC2", "HDAC8", "HDAC3", "SIRT6", "HDAC10", "SIRT7", "HDAC5", "HDAC9", "HDAC4", "HDAC6", "SIRT3")
+hdac_ranknorm_co <- c("Testis", "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Pituitary", "Uterus", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Ovary", "Nerve...Tibial", "Colon...Sigmoid", "Artery...Aorta", "Artery...Tibial", "Esophagus...Muscularis", "Esophagus...Gastroesophageal.Junction", "Cells...EBV.transformed.lymphocytes", "Spleen", "Thyroid", "Prostate", "Vagina", "Bladder", "Lung", "Cells...Cultured.fibroblasts", "Adrenal.Gland", "Artery...Coronary", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Adipose...Visceral..Omentum.", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Minor.Salivary.Gland", "Stomach", "Kidney...Medulla", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Brain...Spinal.cord..cervical.c.1.", "Brain...Frontal.Cortex..BA9.", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Brain...Substantia.nigra", "Brain...Hippocampus", "Brain...Amygdala", "Muscle...Skeletal", "Whole.Blood", "Kidney...Cortex", "Liver", "Heart...Atrial.Appendage", "Heart...Left.Ventricle", "Pancreas")
+hdac_rankmx <- hdac_rankmx[hdac_ranknorm_ro, hdac_ranknorm_co]
+
+# Open a pdf file
+pdf("hdac_rank.pdf", width=12, height=8) 
+# 2. Create a plot
+Heatmap(hdac_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(20, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
 ```
 ```{r heatmap for kmt ranknorm}
 kmt_ranknorm_ro <- c("MECOM", "PRDM6", "PRDM16", "SMYD2", "SMYD1", "EZH2", "NSD2", "SUV39H1", "PRDM7", "PRDM9", "DOT1L", "SUV39H2", "PRDM8", "SETMAR", "SETD1B", "KMT5A", "SETD7", "SETDB1", "EHMT1", "SETDB2", "KMT2B", "SETD1A", "KMT2C", "SETD2", "NSD1", "KMT2D", "KMT5B", "SETD6", "EZH1", "KMT2A", "NSD3", "SETD5", "ASH1L", "PRDM2", "N6AMT1", "KMT5C", "EHMT2", "SMYD3")
