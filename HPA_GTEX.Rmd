@@ -255,29 +255,53 @@ hdac_HPA[is.na(hdac_HPA)] <- 0
 ```{r correlate kmt}
 kmt.comp <- cor(kmt_HPA, kmt_gtex.mx, method= "pearson")
 kmt.comp[is.na(kmt.comp)] <- 0
+is.element(colnames(kmt.comp), rownames(kmt.comp))
+kmt.comp <- kmt.comp[,-c(1,8,13,15,16,20,24,28,35,36,38)]
+kmt.row.order <- c(colnames(kmt.comp))
+kmt.comp<- kmt.comp[kmt.row.order, ]
 kmt.comp.sq <- (kmt.comp)^2
-Heatmap(kmt.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+
+
+Heatmap(kmt.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 
 ```
 ```{r correlate kdm}
 kdm.comp <- cor(kdm_HPA, kdm_gtex.mx, method= "pearson")
 kdm.comp[is.na(kdm.comp)] <- 0
+is.element(colnames(kdm.comp), rownames(kdm.comp))
+kdm.comp <- kdm.comp[,-c(5,10,11,16,17,18,19,20,21,24,26,29)]
+kdm.row.order <- c(colnames(kdm.comp))
+kdm.comp<- kdm.comp[kdm.row.order, ]
 kdm.comp.sq <- (kdm.comp)^2
-Heatmap(kdm.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+
+
+Heatmap(kdm.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 
 ```
 ```{r correlate kat}
 kat.comp <- cor(kat_HPA, kat_gtex.mx, method= "pearson")
 kat.comp[is.na(kat.comp)] <- 0
+is.element(colnames(kat.comp), rownames(kat.comp))
+kat.comp <- kat.comp[,-c(8,9,15,16,18)]
+kat.row.order <- c(colnames(kat.comp))
+kat.comp<- kat.comp[kat.row.order, ]
 kat.comp.sq <- (kat.comp)^2
-Heatmap(kat.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+
+
+Heatmap(kat.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns= FALSE, cluster_rows= FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 
 ```
 ```{r correlate hdac}
 hdac.comp <- cor(hdac_HPA, hdac_gtex.mx, method= "pearson")
 hdac.comp[is.na(hdac.comp)] <- 0
+is.element(colnames(hdac.comp), rownames(hdac.comp))
+hdac.comp <- hdac.comp[,-c(3,9)]
+hdac.row.order <- c(colnames(hdac.comp))
+hdac.comp<- hdac.comp[hdac.row.order, ]
 hdac.comp.sq <- (hdac.comp)^2
-Heatmap(hdac.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+
+
+Heatmap(hdac.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 
 ```
 
