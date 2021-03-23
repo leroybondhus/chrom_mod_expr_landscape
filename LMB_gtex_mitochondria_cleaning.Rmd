@@ -1,0 +1,72 @@
+---
+title: "LMB_gtex_mitochondria_cleaning"
+output: html_document
+---
+
+
+```{r setup libraries}
+library("biomaRt")   ### biomaRt allows access to the biomart data repo  
+library("stringr")
+```
+
+```{r read gtex table}
+gtex <- read.csv(file="/home/leroy/Desktop/STABLE_DATA/Gtex/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", sep = "\t", skip = 2)
+```
+
+```{r access gene info from biomart}
+## for tutorial on using biomart see:
+## https://www.bioconductor.org/packages/release/bioc/vignettes/biomaRt/inst/doc/biomaRt.html
+
+
+## get ensembl gene information from biomart
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+filters <- listFilters(ensembl)
+#filters <- "ensembl_gene_id"
+attributes <- listAttributes(ensembl)
+attributes <- attributes[c(1,2,8,9,10,11,23,29),1] ## select subset of attributes desired
+all_genes <- getBM(attributes = attributes, mart = ensembl, useCache = F)  ## useCache necessary to work in older version of R (pre-4.0.0)
+
+
+### remove version id from gene ids
+gtex_genes <- str_split(gtex$Name , pattern="[.]")
+gtex_genes <- unlist(gtex_genes)
+gtex_genes <- gtex_genes[grep("ENS",gtex_genes)]
+
+## grab subsets without mitochondrial genes and including only protein coding genes
+which_gtex_subset <- which( is.element(gtex_genes, 
+                                       all_genes$ensembl_gene_id[which(is.element(all_genes$chromosome_name, c(1:22,"X", "Y")))]) 
+                             )
+
+which_gtex_subset_pc <- which( is.element(gtex_genes, 
+                                       all_genes$ensembl_gene_id[which(is.element(all_genes$chromosome_name, c(1:22,"X", "Y")))]) &
+                            is.element(gtex_genes, 
+                                       all_genes$ensembl_gene_id[which(all_genes$gene_biotype=="protein_coding")])
+                             )
+
+gtex_wo_MT <- gtex[which_gtex_subset,]
+gtex_wo_MT_pc <- gtex[which_gtex_subset_pc,]
+
+
+## check summary of change  
+summary(colSums(gtex[,3:ncol(gtex)]))
+summary(colSums(gtex_wo_MT[,3:ncol(gtex_wo_MT)]))
+summary(colSums(gtex_wo_MT_pc[,3:ncol(gtex_wo_MT_pc)]))
+
+adj_gtex_wo_MT <- gtex_wo_MT
+adj_gtex_wo_MT_pc <- gtex_wo_MT_pc
+
+## recalculate TPM values without MT genes and with only protein coding genes
+for(i in 3:ncol(gtex)){
+  adj_gtex_wo_MT[,i] <- adj_gtex_wo_MT[,i] * 1e6 / sum(adj_gtex_wo_MT[,i])
+  adj_gtex_wo_MT_pc[,i] <- adj_gtex_wo_MT_pc[,i] * 1e6 / sum(adj_gtex_wo_MT_pc[,i])
+}
+
+
+
+
+## write new tables to share
+## without mitochondrial
+write.csv(adj_gtex_wo_MT, "/home/leroy/Desktop/PROJECTS/Chromatin_Modifier_Transcriptional_Landscape/intermediate_data/gtex_medians_wo_MT.csv")
+## without mitochondrial and with only protein coding
+write.csv(adj_gtex_wo_MT_pc, "/home/leroy/Desktop/PROJECTS/Chromatin_Modifier_Transcriptional_Landscape/intermediate_data/gtex_medians_PC_only_wo_MT.csv")
+```
