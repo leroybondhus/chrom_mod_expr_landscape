@@ -1,0 +1,161 @@
+---
+title: "gtex_heatmap"
+output: html_document
+---
+```{r libraries}
+install.packages("readxl")
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+
+```
+```{r read table}
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+```
+```{r clean table}
+View(gtex)
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+View(gene_id_to_name)
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+#gives ensemble id of duplicated gene names
+gtex$V1[which(duplicated(gtex$V2))]
+
+```
+```{r names in gtex}
+#look for gene names in gtex
+kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+is.element(kmt2, gene_id_to_name$"Description")
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kdm <- kdm[,-c(29)]
+is.element(kdm, gene_id_to_name$"Description")
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+is.element(kat, gene_id_to_name$"Description")
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+is.element(hdac, gene_id_to_name$"Description")
+#extract ensembl ID's for table
+ensembl_kmt <- filter(gene_id_to_name, "Description" %in% kmt2) 
+ensembl_kmt <- ensembl_kmt$"Name"
+write.csv(ensembl_kmt,'KMT_gtex_ensemblID.csv')
+ensembl_kdm <- filter(gene_id_to_name, "Description" %in% kdm) 
+ensembl_kdm <- ensembl_kdm$"Name"
+write.csv(ensembl_kdm,'KDM_gtex_ensemblID.csv')
+ensembl_kat <- filter(gene_id_to_name, "Description" %in% kat) 
+ensembl_kat <- ensembl_kat$"Name"
+write.csv(ensembl_kat,'KAT_gtex_ensemblID.csv')
+ensembl_hdac <- filter(gene_id_to_name, "Description" %in% hdac) 
+ensembl_hdac <- ensembl_hdac$"Name"
+write.csv(ensembl_hdac,'HDAC_gtex_ensemblID.csv')
+
+```
+
+```{r specificity heatmap for kmt}
+
+kmt_index <- which(is.element(gene_id_to_name$"Description", kmt2))
+kmt_df <- apply(as.matrix(gtex[kmt_index, ], ncol= ncol(gtex)), 2, as.numeric)
+kmt_df <-kmt_df[,-c(1)]
+kmt_sd <- matrix(nrow= nrow(kmt_df), ncol= ncol(kmt_df))
+
+
+for(i in 1:nrow(kmt_df)){
+ kmt_sd[i,] <- (kmt_df[i,]- mean(kmt_df[i,]))/(sd(kmt_df[i,]))
+}
+colnames(kmt_sd) <- colnames(kmt_df)
+kmt_names <- filter(gene_id_to_name, Description %in% kmt2)
+kmt_names <- kmt_names[,-c(1)]
+rownames(kmt_sd) <- kmt_names
+# Open a pdf file
+pdf("kmt_tissue_spec_noMT.pdf", width= 8, height= 8) 
+# 2. Create a plot
+Heatmap(kmt_sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+
+
+```{r heatmap for KDM}
+kdm_index <- which(is.element(gene_id_to_name$"Description", kdm))
+kdm_df <- apply(as.matrix(gtex[kdm_index, ], ncol= ncol(gtex)), 2, as.numeric)
+kdm_df <-kdm_df[,-c(1)]
+kdm_sd <- matrix(nrow= nrow(kdm_df), ncol= ncol(kdm_df))
+
+for(i in 1:nrow(kdm_df)){
+ kdm_sd[i,] <- (kdm_df[i,]- mean(kdm_df[i,]))/(sd(kdm_df[i,]))
+}
+colnames(kdm_sd) <- colnames(kdm_df)
+kdm_names <- filter(gene_id_to_name, Description %in% kdm)
+kdm_names <- kdm_names[,-c(1)]
+rownames(kdm_sd) <- kdm_names
+# Open a pdf file
+pdf("kdm_tissue_spec_noMT.pdf", width= 12, height= 10) 
+# 2. Create a plot
+Heatmap(kdm_sd, name="SD", column_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"))
+# Close the pdf file
+dev.off() 
+```
+
+```{r heatmap for KAT}
+kat_index <- which(is.element(gene_id_to_name$"Description", kat))
+kat_df <- apply(as.matrix(gtex[kat_index, ], ncol= ncol(gtex)), 2, as.numeric)
+kat_df <-kat_df[,-c(1)]
+kat_sd <- matrix(nrow= nrow(kat_df), ncol= ncol(kat_df))
+
+for(i in 1:nrow(kat_df)){
+ kat_sd[i,] <- (kat_df[i,]- mean(kat_df[i,]))/(sd(kat_df[i,]))
+}
+colnames(kat_sd) <- colnames(kat_df)
+kat_names <- filter(gene_id_to_name, Description %in% kat)
+kat_names <- kat_names[,-c(1)]
+rownames(kat_sd) <- kat_names
+kat_sd[is.na(kat_sd)] <- 0
+# Open a pdf file
+pdf("kat_tissue_spec_noMT.pdf", width= 12, height= 10) 
+# 2. Create a plot
+Heatmap(kat_sd, name="SD", cluster_rows=TRUE, column_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(10, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r heatmap for HDAC}
+hdac_index <- which(is.element(gene_id_to_name$"Description", hdac))
+hdac_df <- apply(as.matrix(gtex[hdac_index, ], ncol= ncol(gtex)), 2, as.numeric)
+hdac_df <-hdac_df[,-c(1)]
+hdac_sd <- matrix(nrow= nrow(hdac_df), ncol= ncol(hdac_df))
+
+for(i in 1:nrow(hdac_df)){
+ hdac_sd[i,] <- (hdac_df[i,]- mean(hdac_df[i,]))/(sd(hdac_df[i,]))
+}
+colnames(hdac_sd) <- colnames(hdac_df)
+hdac_names <- filter(gene_id_to_name, Description %in% hdac)
+hdac_names <- hdac_names[,-c(1)]
+rownames(hdac_sd) <- hdac_names
+# Open a pdf file
+pdf("hdac_tissue_spec_noMT.pdf", width= 12, height= 8) 
+# 2. Create a plot
+Heatmap(hdac_sd, name="SD", column_names_gp = grid::gpar(fontsize = 9), width = unit(20, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+
+```
+```{r correlation matrices by z-score}
+kmt.kdm.zcor <- cor(t(kmt_sd), t(kdm_sd), method= "spearman")
+
+kmt.kdm.zhm <- Heatmap(kmt.kdm.zcor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.kdm.zhm
+
+```
+
+
+
+
+
