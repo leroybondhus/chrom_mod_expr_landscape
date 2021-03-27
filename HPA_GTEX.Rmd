@@ -91,6 +91,7 @@ HPA_mod$Level[i]=2
 HPA_mod$Level[i]=3
 } 
 }
+
 HPA_mod <- HPA_mod[,-c(1,4,6)]
 HPA_mod$Level <- as.numeric(HPA_mod$Level)
 ```
@@ -302,6 +303,100 @@ hdac.comp.sq <- (hdac.comp)^2
 
 
 Heatmap(hdac.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+
+```
+```{r correlate kmt HPA only}
+kmt.hpa.comp <- cor(kmt_HPA, method= "pearson")
+kmt.hpa.comp[is.na(kmt.hpa.comp)] <- 0
+
+
+Heatmap(kmt.hpa.comp, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=TRUE, cluster_rows=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.25, 0.5, 0.75, 1), brewer.pal(n=5, name="Blues")))
+
+```
+```{r correlate kdm HPA only}
+kdm.hpa.comp <- cor(kdm_HPA, method= "pearson")
+kdm.hpa.comp[is.na(kdm.hpa.comp)] <- 0
+
+
+Heatmap(kdm.hpa.comp, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=TRUE, cluster_rows=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.25, 0.5, 0.75, 1), brewer.pal(n=5, name="Blues")))
+
+```
+```{r correlate kat HPA only}
+kat.hpa.comp <- cor(kat_HPA, method= "pearson")
+kat.hpa.comp[is.na(kat.hpa.comp)] <- 0
+
+
+Heatmap(kat.hpa.comp, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=TRUE, cluster_rows=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.25, 0.5, 0.75, 1), brewer.pal(n=5, name="Blues")))
+
+```
+```{r correlate hdac HPA only}
+hdac.hpa.comp <- cor(hdac_HPA, method= "pearson")
+hdac.hpa.comp[is.na(hdac.hpa.comp)] <- 0
+
+
+Heatmap(hdac.hpa.comp, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=TRUE, cluster_rows=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.25, 0.5, 0.75, 1), brewer.pal(n=5, name="Blues")))
+
+```
+```{r specificity heatmap for hpa mod kmt}
+kmt.hpa.sd<- t(kmt_HPA)
+
+for(i in 1:nrow(kmt.hpa.sd)){
+ kmt.hpa.sd[i,] <- (kmt.hpa.sd[i,]- mean(kmt.hpa.sd[i,]))/(sd(kmt.hpa.sd[i,]))
+}
+kmt.hpa.sd[is.na(kmt.hpa.sd)] <- 0
+
+# Open a png file
+png("kmt_hpa_specificity.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kmt.hpa.sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpaMod kdm}
+kdm.hpa.sd<- t(kdm_HPA)
+
+for(i in 1:nrow(kdm.hpa.sd)){
+ kdm.hpa.sd[i,] <- (kdm.hpa.sd[i,]- mean(kdm.hpa.sd[i,]))/(sd(kdm.hpa.sd[i,]))
+}
+
+# Open a png file
+png("kdm_hpa_specificity.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kdm.hpa.sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpaMod kat}
+kat.hpa.sd<- t(kat_HPA)
+
+for(i in 1:nrow(kat.hpa.sd)){
+ kat.hpa.sd[i,] <- (kat.hpa.sd[i,]- mean(kat.hpa.sd[i,]))/(sd(kat.hpa.sd[i,]))
+}
+kat.hpa.sd[is.na(kat.hpa.sd)] <- 0
+
+# Open a png file
+png("kat_hpa_specificity.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kat.hpa.sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpaMod hdac}
+hdac.hpa.sd<- t(hdac_HPA)
+
+for(i in 1:nrow(hdac.hpa.sd)){
+ hdac.hpa.sd[i,] <- (hdac.hpa.sd[i,]- mean(hdac.hpa.sd[i,]))/(sd(hdac.hpa.sd[i,]))
+}
+
+# Open a png file
+png("hdac_hpa_specificity.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(hdac.hpa.sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
 
 ```
 

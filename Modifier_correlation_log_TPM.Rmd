@@ -210,19 +210,19 @@ dev.off()
 
 ```{r KAT correlation}
 #compare KATs with each other
-log.kat.cor <- cor(log_kat_mx, method= "spearman")
+log.kat.cor <- cor(log_kat_mx, method= "pearson")
 log.kat.cor[is.na(log.kat.cor)] <- 0
 
 kat.cor.order <- c("EP300", "KAT6B", "KAT7", "KAT5", "CREBBP", "CLOCK", "NAT10", "GTF3C4", "NCOA2", "MCM3AP", "TAF1", "KAT6A", "KAT8", "KAT2A", "ATF2", "KAT14", "NCOA1", "NAA10", "NCOA3", "HAT1", "NAA50", "NAA60", "KAT2B", "CDY2A", "CDY1")
 log.kat.cor <- log.kat.cor[kat.cor.order, kat.cor.order]
 
-log.kat.cor.hm <- Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+log.kat.cor.hm <- Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 log.kat.cor.hm
 
 # Open a png file
 png("log_kat_cor.png") 
 # 2. Create a plot
-Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+Heatmap(log.kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), cluster_rows=FALSE, cluster_columns=FALSE, col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 # Close the png file
 dev.off() 
 ```
