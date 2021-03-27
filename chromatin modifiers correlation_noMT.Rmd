@@ -1,0 +1,313 @@
+---
+title: "Chromatin Modifiers Correlation"
+output: html_document
+---
+
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+```
+```{r read table}
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+```
+```{r clean table}
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+```
+```{r filter for modifiers}
+#read in modifier lists
+kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+kmt_table <- filter(gtex, Description %in% kmt2)
+kdm_table <- filter(gtex, Description %in% kdm)
+kat_table <- filter(gtex, Description %in% kat)
+hdac_table <- filter(gtex, Description %in% hdac)
+#convert to matrices
+kmt_mx <- t(apply(as.matrix(kmt_table, ncol= ncol(kmt_table)), 2, as.numeric))
+colnames(kmt_mx) <- kmt_table$"Description"
+kmt_mx <- kmt_mx[-c(1),]
+kmt_mx[is.na(kmt_mx)] <- 0
+
+kdm_mx <- t(apply(as.matrix(kdm_table, ncol= ncol(kdm_table)), 2, as.numeric))
+colnames(kdm_mx) <- kdm_table$"Description"
+kdm_mx <- kdm_mx[-c(1),]
+kdm_mx[is.na(kdm_mx)] <- 0
+
+kat_mx <- t(apply(as.matrix(kat_table, ncol= ncol(kat_table)), 2, as.numeric))
+colnames(kat_mx) <- kat_table$"Description"
+kat_mx <- kat_mx[-c(1),]
+kat_mx[is.na(kat_mx)] <- 0
+
+hdac_mx <- t(apply(as.matrix(hdac_table, ncol= ncol(hdac_table)), 2, as.numeric))
+colnames(hdac_mx) <- hdac_table$"Description"
+hdac_mx <- hdac_mx[-c(1),]
+hdac_mx[is.na(hdac_mx)] <- 0
+
+
+```
+```{r p values}
+#Find p-values for each correlation
+#convert matrices to df
+kmt.frame <- data.frame(kmt_mx)
+kdm.frame <- data.frame(kdm_mx)
+kat.frame <- data.frame(kat_mx)
+hdac.frame <- data.frame(hdac_mx)
+#combine all df to one
+all.modifiers.df <- bind_cols(kmt.frame, kdm.frame, kat.frame, hdac.frame)
+# find p-values
+modifier.mx <- as.matrix(all.modifiers.df)
+modifier.cor<- cor(modifier.mx, method="spearman")
+modifiers.sig <- rcorr(as.matrix(modifier.mx, type= c("spearman")))
+
+modifiers.p <- data.frame(modifiers.sig$P)
+
+modifier.cor[is.na(modifier.cor)] <- 0
+
+all.mod.hm <- Heatmap(modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+all.mod.hm
+#cutoff correlations
+modifier.cor.cut <- modifier.cor
+
+for(row in 1:nrow(modifier.cor.cut)) {
+  for(col in 1:ncol(modifier.cor.cut)) {
+        if (modifier.cor.cut[row,col]<0.7) {
+modifier.cor.cut[row,col]=0
+} else {
+modifier.cor.cut[row,col]=1
+}
+}}
+#visualize only correlations>0.8, about 20% of all significant correlations
+
+cutoff.hm <- Heatmap(modifier.cor.cut, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="Blues")))
+cutoff.hm
+
+#histogram of correlation values
+all.modifier.vec <- unmatrix(modifier.cor)
+hist(all.modifier.vec)
+#histogram of correlation values with p<0.05
+h <- hist(modifiers.sig$r[modifiers.p <= 0.05], ylim=c(0,2000))
+h$density = h$counts/sum(h$counts)*100
+plot(h,freq=FALSE, ylim=c(0,20))
+
+# Open a png file
+png("all_cor_noMT.png", res=300, width=5000, height=5000) 
+# 2. Create a plot
+Heatmap(modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kmt and kdm}
+kmt.kdm <- cor(kmt_mx, kdm_mx, method= "spearman")
+kmt.kdm.hm <- Heatmap(kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+
+#histogram of correlation values
+kmt.kdm.hm
+kmt.kdm.vec <- unmatrix(kmt.kdm)
+hist(kmt.kdm.vec)
+#histogram of correlation values with p<0.05
+hist(kmt.kdm.vec[modifiers.p <= 0.05], ylim=c(0,200))
+
+# Open a png file
+png("kmt_kdm_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.kdm, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+
+```
+```{r correlate kat and hdac}
+kat.hdac <- cor(kat_mx, hdac_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kat.hdac[is.na(kat.hdac)] <- 0
+kat.hdac.hm <- Heatmap(kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kat.hdac.hm
+
+#histogram of correlation values
+kat.hdac.vec <- unmatrix(kat.hdac)
+hist(kat.hdac.vec)
+#histogram of correlation values with p<0.05
+hist(kat.hdac.vec[modifiers.p <= 0.05], xlim=c(-0.4, 1), ylim=c(0,80))
+
+# Open a png file
+png("kat_hdac_cor_noMT.png") 
+# 2. Create a plot
+Heatmap(kat.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kmt and kat}
+kmt.kat <- cor(kmt_mx, kat_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kmt.kat[is.na(kmt.kat)] <- 0
+kmt.kat.hm <- Heatmap(kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.kat.hm
+
+#histogram of correlation values
+kmt.kat.vec <- unmatrix(kmt.kat)
+hist(kmt.kat.vec)
+#histogram of correlation values with p<0.05
+hist(kmt.kat.vec[modifiers.p <= 0.05], ylim=c(0,200))
+
+
+# Open a png file
+png("kmt_kat_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kmt and hdac}
+kmt.hdac <- cor(kmt_mx, hdac_mx, method= "spearman")
+
+kmt.hdac.hm <- Heatmap(kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.hdac.hm
+
+#histogram of correlation values
+kmt.hdac.vec <- unmatrix(kmt.hdac)
+hist(kmt.hdac.vec)
+#histogram of correlation values with p<0.05
+hist(kmt.hdac.vec[modifiers.p <= 0.05], ylim=c(0,100))
+
+# Open a png file
+png("kmt_hdac_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kdm and kat}
+kdm.kat <- cor(kdm_mx, kat_mx, method= "spearman")
+#CDY1 not expressed anywhere, has NA correlation w all tissues; convert NA to 0
+kdm.kat[is.na(kdm.kat)] <- 0
+kdm.kat.hm <- Heatmap(kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.kat.hm
+
+#histogram of correlation values
+kdm.kat.vec <- unmatrix(kdm.kat)
+hist(kdm.kat.vec)
+#histogram of correlation values with p<0.05
+hist(kdm.kat.vec[modifiers.p <= 0.05], ylim=c(0,150))
+
+# Open a png file
+png("kdm_kat_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kdm.kat, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r correlate kdm and hdac}
+kdm.hdac <- cor(kdm_mx, hdac_mx, method= "spearman")
+
+kdm.hdac.hm <- Heatmap(kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.hdac.hm
+
+#histogram of correlation values
+kdm.hdac.vec <- unmatrix(kdm.hdac)
+hist(kdm.hdac.vec)
+#histogram of correlation values with p<0.05
+hist(kdm.hdac.vec[modifiers.p <= 0.05], ylim=c(0,80))
+
+# Open a png file
+png("kdm_hdac_cor_noMT.png") 
+# 2. Create a plot
+Heatmap(kdm.hdac, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r KMT correlation}
+#compare KMTs with each other
+kmt.cor <- cor(kmt_mx, method= "spearman")
+
+kmt.cor.hm <- Heatmap(kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.cor.hm
+
+#histogram of correlation values
+kmt.cor.vec <- unmatrix(kmt.cor)
+hist(kmt.cor.vec)
+#histogram of correlation values with p<0.05
+hist(kmt.cor.vec[modifiers.p <= 0.05], xlim=c(-0.4,1), ylim=c(0,250))
+
+# Open a png file
+png("kmt_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kmt.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+
+```{r KDM correlation}
+#compare KDMs with each other
+kdm.cor <- cor(kdm_mx, method= "spearman")
+
+kdm.cor.hm <- Heatmap(kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kdm.cor.hm
+
+#histogram of correlation values
+kdm.cor.vec <- unmatrix(kdm.cor)
+hist(kdm.cor.vec)
+#histogram of correlation values with p<0.05
+hist(kdm.cor.vec[modifiers.p <= 0.05], ylim=c(0,150))
+
+# Open a png file
+png("kdm_cor_noMT.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(kdm.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+
+```{r KAT correlation}
+#compare KATs with each other
+kat.cor <- cor(kat_mx, method= "spearman")
+kat.cor[is.na(kat.cor)] <- 0
+kat.cor.hm <- Heatmap(kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kat.cor.hm
+
+#histogram of correlation values
+kat.cor.vec <- unmatrix(kat.cor)
+hist(kat.cor.vec)
+#histogram of correlation values with p<0.05
+hist(kat.cor.vec[modifiers.p <= 0.05], ylim=c(0,150))
+
+# Open a png file
+png("kat_cor_noMT.png") 
+# 2. Create a plot
+Heatmap(kat.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```
+```{r HDAC correlation}
+#compare HDACs with each other
+hdac.cor <- cor(hdac_mx, method= "spearman")
+hdac.cor.hm <- Heatmap(hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+hdac.cor.hm
+
+#histogram of correlation values
+hdac.cor.vec <- unmatrix(hdac.cor)
+hist(hdac.cor.vec)
+#histogram of correlation values with p<0.05
+hist(hdac.cor.vec[modifiers.p <= 0.05], ylim=c(0,80))
+
+# Open a png file
+png("hdac_cor_noMT.png") 
+# 2. Create a plot
+Heatmap(hdac.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+```

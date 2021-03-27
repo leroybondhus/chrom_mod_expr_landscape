@@ -1,0 +1,198 @@
+---
+title: "chromatin_mod_exp_percentile"
+output: html_document
+---
+
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+```
+```{r read table}
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+```
+```{r clean table}
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+View(gene_id_to_name)
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+```
+```{r calculate percentiles for each gene in each tissue}
+
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx[is.na(gtex_mx)] <- 0
+gtex_mx[gtex_mx==0] <- NA
+
+gtex_rank <- matrix(nrow= nrow(gtex), ncol= ncol(gtex))
+colnames(gtex_rank) <- colnames(gtex)
+rownames(gtex_rank) <- rownames(gtex)
+
+
+for(i in 1:ncol(gtex_mx)){
+  gtex_rank[,i] <- percent_rank(gtex_mx[,i])
+}
+gtex_rankdf <- data.frame(gtex_rank)
+
+```
+```{r add gene names to rankdf}
+gtex_rankdf$Description <- gene_id_to_name$Description
+#replace NA with 0
+gtex_rankdf[is.na(gtex_rankdf)] <- 0
+#mean percentile for each tissue - percentile for each gene for that tissue
+gtex_ranknorm <- apply(as.matrix(gtex_rankdf[,c(2:55)], ncol= ncol(gtex_rankdf-1)), 2, as.numeric)
+rownames(gtex_ranknorm) <- gtex_rankdf$Description
+for(i in 1:ncol(gtex_ranknorm)){
+ gtex_ranknorm[,i] <- gtex_ranknorm[,i]-mean(gtex_ranknorm[,i])
+}
+gtex_ranknormdf <- data.frame(gtex_ranknorm)
+
+```
+```{r filter for modifiers}
+#read in modifier lists
+kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+
+
+kmt_rank <- filter(gtex_rankdf, Description %in% kmt2)
+rownames(kmt_rank)<- kmt_rank[,1]
+kmt_rank <- kmt_rank[,-1]
+kmt_rankmx <- apply(as.matrix(kmt_rank, ncol=ncol(kmt_rank)), 2, as.numeric)
+rownames(kmt_rankmx)<- rownames(kmt_rank)
+
+kdm_rank <- as.matrix(filter(gtex_rankdf, Description %in% kdm))
+rownames(kdm_rank)<- kdm_rank[,1]
+kdm_rank <- kdm_rank[,-1]
+kdm_rankmx <- apply(as.matrix(kdm_rank, ncol=ncol(kdm_rank)), 2, as.numeric)
+rownames(kdm_rankmx)<- rownames(kdm_rank)
+
+kat_rank <- as.matrix(filter(gtex_rankdf, Description %in% kat))
+rownames(kat_rank)<- kat_rank[,1]
+kat_rank <- kat_rank[,-1]
+kat_rankmx <- apply(as.matrix(kat_rank, ncol=ncol(kat_rank)), 2, as.numeric)
+rownames(kat_rankmx)<- rownames(kat_rank)
+
+hdac_rank <- as.matrix(filter(gtex_rankdf, Description %in% hdac))
+rownames(hdac_rank)<- hdac_rank[,1]
+hdac_rank <- hdac_rank[,-1]
+hdac_rankmx <- apply(as.matrix(hdac_rank, ncol=ncol(hdac_rank)), 2, as.numeric)
+rownames(hdac_rankmx)<- rownames(hdac_rank)
+
+```
+```{r filter ranknorm}
+kmt_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kmt2))
+kdm_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kdm))
+kat_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% kat))
+hdac_ranknorm <- as.matrix(filter(gtex_ranknormdf, rownames(gtex_ranknormdf) %in% hdac))
+
+```
+```{r heatmap for kmt percentile}
+kmt_ranknorm_ro <- c("SUV39H1","NSD2", "EZH2", "KMT2B", "SETD1A", "EHMT1", "SETDB1", "SETDB2", "SUV39H2", "DOT1L", "PRDM9", "PRDM7", "KMT2D", "KMT2C", "SETD2", "NSD1", "SETD5", "SETD6", "KMT5B", "KMT5C", "EHMT2", "SMYD3", "EZH1", "NSD3", "KMT2A", "ASH1L", "PRDM2", "SETD7", "SETD1B", "KMT5A", "PRDM8", "SETMAR", "N6AMT1", "PRDM16", "PRDM6", "MECOM", "SMYD1", "SMYD2")
+kmt_ranknorm_co <- c("Brain...Cerebellum", "Brain...Cerebellar.Hemisphere", "Testis", "Cells...EBV.transformed.lymphocytes", "Thyroid", "Uterus", "Prostate", "Cervix...Endocervix", "Fallopian.Tube", "Cervix...Ectocervix", "Bladder", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Nerve...Tibial", "Ovary", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Spleen", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Lung", "Skin...Not.Sun.Exposed..Suprapubic.", "Skin...Sun.Exposed..Lower.leg.", "Vagina", "Minor.Salivary.Gland", "Pituitary", "Adrenal.Gland", "Stomach", "Kidney...Medulla", "Kidney...Cortex", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Adipose...Visceral..Omentum.", "Brain...Cortex", "Brain...Frontal.Cortex..BA9.", "Brain...Hypothalamus", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Cells...Cultured.fibroblasts", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Esophagus...Mucosa", "Heart...Atrial.Appendage", "Heart...Left.Ventricle", "Muscle...Skeletal", "Liver", "Pancreas", "Whole.Blood")
+kmt_rankmx <- kmt_rankmx[kmt_ranknorm_ro, kmt_ranknorm_co]
+
+# Open a pdf file
+pdf("kmt_rank_noMT.pdf", width=8, height=8) 
+# 2. Create a plot
+Heatmap(kmt_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+# Close the pdf file
+dev.off()
+
+# Open a pdf file
+pdf("kmt_ranknorm_noMT.pdf", width=8, height=8) 
+# 2. Create a plot
+Heatmap(kmt_ranknorm, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+# Close the pdf file
+dev.off()
+```
+```{r heatmap for kdm rank}
+kdm_ranknorm_ro <- c("KDM8", "KDM4E", "PHF8", "KDM5B", "KDM4D", "KDM4F", "KDM1A", "RIOX1", "KDM1B", "RIOX2", "KDM3B", "PHF2", "RSBN1", "KDM5C", "KDM6B", "KDM2A", "KDM6A", "KDM4B", "KDM2B", "JMJD1C", "KDM4C", "KDM4A", "HR", "JMJD6", "KDM3A", "KDM5A", "KDM7A", "KDM5D", "UTY")
+kdm_ranknorm_co <- c("Testis", "Brain...Cerebellum", "Brain...Cerebellar.Hemisphere", "Thyroid", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Cells...EBV.transformed.lymphocytes", "Ovary", "Cervix...Endocervix", "Cervix...Ectocervix", "Uterus", "Fallopian.Tube", "Vagina", "Small.Intestine...Terminal.Ileum", "Spleen", "Bladder", "Colon...Transverse", "Lung", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Nerve...Tibial", "Minor.Salivary.Gland", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Prostate", "Pituitary", "Adrenal.Gland", "Liver", "Stomach", "Adipose...Visceral..Omentum.", "Kidney...Medulla", "Kidney...Cortex", "Esophagus...Mucosa", "Cells...Cultured.fibroblasts", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Frontal.Cortex..BA9.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Muscle...Skeletal", "Heart...Atrial.Appendage", "Heart...Left.Ventricle",  "Whole.Blood", "Pancreas")
+kdm_rankmx <- kdm_rankmx[kdm_ranknorm_ro, kdm_ranknorm_co]
+
+
+# Open a pdf file
+pdf("kdm_rank_noMT.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kdm_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
+```
+```{r heatmap for kat rank}
+kat_ranknorm_ro <- c("CDY2A", "HAT1", "NCOA3", "NAA50", "KAT5", "KAT6B", "CLOCK", "KAT7", "NCOA2", "MCM3AP", "TAF1", "CREBBP", "EP300", "KAT6A", "GTF3C4", "NAT10", "KAT8", "KAT2A", "KAT14", "NCOA1", "ATF2", "NAA60", "NAA10", "CDY1", "KAT2B")
+kat_ranknorm_co <- c( "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Uterus", "Cervix...Endocervix", "Thyroid", "Cervix...Ectocervix", "Fallopian.Tube", "Bladder", "Nerve...Tibial", "Ovary", "Testis", "Cells...EBV.transformed.lymphocytes", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Frontal.Cortex..BA9.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Hippocampus", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Prostate", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Colon...Sigmoid", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Lung", "Adipose...Visceral..Omentum.", "Vagina", "Minor.Salivary.Gland", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Spleen", "Adrenal.Gland", "Pituitary", "Stomach", "Kidney...Medulla", "Kidney...Cortex", "Esophagus...Mucosa", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Cells...Cultured.fibroblasts", "Muscle...Skeletal", "Liver", "Whole.Blood", "Pancreas")
+kat_rankmx <- kat_rankmx[kat_ranknorm_ro, kat_ranknorm_co]
+
+# Open a png file
+pdf("kat_rank_noMT.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kat_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(10, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
+```
+```{r heatmap for hdac rank}
+hdac_ranknorm_ro <- c("SIRT3", "HDAC11", "SIRT2", "HDAC5", "HDAC9", "HDAC4", "HDAC2", "SIRT1", "HDAC6", "HDAC8", "SIRT7", "HDAC3", "HDAC10", "SIRT6", "HDAC7", "HDAC1")
+hdac_ranknorm_co <- c("Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Testis", "Pituitary", "Prostate", "Thyroid", "Spleen", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Adrenal.Gland", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Bladder", "Ovary", "Kidney...Medulla", "Kidney...Cortex", "Vagina", "Stomach", "Minor.Salivary.Gland", "Lung", "Uterus", "Esophagus...Muscularis", "Esophagus...Gastroesophageal.Junction", "Nerve...Tibial", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Artery...Coronary", "Adipose...Visceral..Omentum.", "Artery...Aorta", "Artery...Tibial", "Cells...Cultured.fibroblasts", "Cells...EBV.transformed.lymphocytes", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Brain...Hypothalamus", "Brain...Cortex", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Frontal.Cortex..BA9.", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Putamen..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Spinal.cord..cervical.c.1.", "Colon...Sigmoid", "Muscle...Skeletal", "Heart...Left.Ventricle", "Heart...Atrial.Appendage", "Liver", "Whole.Blood", "Pancreas")
+hdac_rankmx <- hdac_rankmx[hdac_ranknorm_ro, hdac_ranknorm_co]
+
+# Open a pdf file
+pdf("hdac_rank_noMT.pdf", width=12, height=8) 
+# 2. Create a plot
+Heatmap(hdac_rankmx, name="Percentile", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(20, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0, 0.5, 0.75, 1), brewer.pal(n=4, name="Reds")))
+dev.off()
+```
+```{r heatmap for kmt ranknorm}
+kmt_ranknorm_ro <- c("SUV39H1","NSD2", "EZH2", "KMT2B", "SETD1A", "EHMT1", "SETDB1", "SETDB2", "SUV39H2", "DOT1L", "PRDM9", "PRDM7", "KMT2D", "KMT2C", "SETD2", "NSD1", "SETD5", "SETD6", "KMT5B", "KMT5C", "EHMT2", "SMYD3", "EZH1", "NSD3", "KMT2A", "ASH1L", "PRDM2", "SETD7", "SETD1B", "KMT5A", "PRDM8", "SETMAR", "N6AMT1", "PRDM16", "PRDM6", "MECOM", "SMYD1", "SMYD2")
+kmt_ranknorm_co <- c("Brain...Cerebellum", "Brain...Cerebellar.Hemisphere", "Testis", "Cells...EBV.transformed.lymphocytes", "Thyroid", "Uterus", "Prostate", "Cervix...Endocervix", "Fallopian.Tube", "Cervix...Ectocervix", "Bladder", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Nerve...Tibial", "Ovary", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Spleen", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Lung", "Skin...Not.Sun.Exposed..Suprapubic.", "Skin...Sun.Exposed..Lower.leg.", "Vagina", "Minor.Salivary.Gland", "Pituitary", "Adrenal.Gland", "Stomach", "Kidney...Medulla", "Kidney...Cortex", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Adipose...Visceral..Omentum.", "Brain...Cortex", "Brain...Frontal.Cortex..BA9.", "Brain...Hypothalamus", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Cells...Cultured.fibroblasts", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Esophagus...Mucosa", "Heart...Atrial.Appendage", "Heart...Left.Ventricle", "Muscle...Skeletal", "Liver", "Pancreas", "Whole.Blood")
+kmt_ranknorm <- kmt_ranknorm[kmt_ranknorm_ro, kmt_ranknorm_co]
+
+ 
+# Open a pdf file
+pdf("kmt_ranknorm_noMT.pdf", width=8, height=8) 
+# 2. Create a plot
+Heatmap(kmt_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+# Close the png file
+dev.off()
+```
+```{r heatmap for kdm ranknorm}
+kdm_ranknorm_ro <- c("KDM8", "KDM4E", "PHF8", "KDM5B", "KDM4D", "KDM4F", "KDM1A", "RIOX1", "KDM1B", "RIOX2", "KDM3B", "PHF2", "RSBN1", "KDM5C", "KDM6B", "KDM2A", "KDM6A", "KDM4B", "KDM2B", "JMJD1C", "KDM4C", "KDM4A", "HR", "JMJD6", "KDM3A", "KDM5A", "KDM7A", "KDM5D", "UTY")
+kdm_ranknorm_co <- c("Testis", "Brain...Cerebellum", "Brain...Cerebellar.Hemisphere", "Thyroid", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Cells...EBV.transformed.lymphocytes", "Ovary", "Cervix...Endocervix", "Cervix...Ectocervix", "Uterus", "Fallopian.Tube", "Vagina", "Small.Intestine...Terminal.Ileum", "Spleen", "Bladder", "Colon...Transverse", "Lung", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Nerve...Tibial", "Minor.Salivary.Gland", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Prostate", "Pituitary", "Adrenal.Gland", "Liver", "Stomach", "Adipose...Visceral..Omentum.", "Kidney...Medulla", "Kidney...Cortex", "Esophagus...Mucosa", "Cells...Cultured.fibroblasts", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Frontal.Cortex..BA9.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Hippocampus", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Muscle...Skeletal", "Heart...Atrial.Appendage", "Heart...Left.Ventricle",  "Whole.Blood", "Pancreas")
+kdm_ranknorm <- kdm_ranknorm[kdm_ranknorm_ro, kdm_ranknorm_co]
+
+# Open a pdf file
+pdf("kdm_ranknorm_noMT.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kdm_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(12, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+dev.off()
+```
+```{r heatmap for kat ranknorm}
+kat_ranknorm_ro <- c("CDY2A", "HAT1", "NCOA3", "NAA50", "KAT5", "KAT6B", "CLOCK", "KAT7", "NCOA2", "MCM3AP", "TAF1", "CREBBP", "EP300", "KAT6A", "GTF3C4", "NAT10", "KAT8", "KAT2A", "KAT14", "NCOA1", "ATF2", "NAA60", "NAA10", "CDY1", "KAT2B")
+kat_ranknorm_co <- c( "Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Uterus", "Cervix...Endocervix", "Thyroid", "Cervix...Ectocervix", "Fallopian.Tube", "Bladder", "Nerve...Tibial", "Ovary", "Testis", "Cells...EBV.transformed.lymphocytes", "Brain...Cortex", "Brain...Hypothalamus", "Brain...Frontal.Cortex..BA9.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Hippocampus", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Putamen..basal.ganglia.", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Spinal.cord..cervical.c.1.", "Prostate", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Colon...Sigmoid", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Lung", "Adipose...Visceral..Omentum.", "Vagina", "Minor.Salivary.Gland", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Spleen", "Adrenal.Gland", "Pituitary", "Stomach", "Kidney...Medulla", "Kidney...Cortex", "Esophagus...Mucosa", "Heart...Atrial.Appendage",  "Heart...Left.Ventricle", "Cells...Cultured.fibroblasts", "Muscle...Skeletal", "Liver", "Whole.Blood", "Pancreas")
+kat_ranknorm <- kat_ranknorm[kat_ranknorm_ro, kat_ranknorm_co]
+
+# Open a png file
+pdf("kat_ranknorm_noMT.pdf", width=12, height=10) 
+# 2. Create a plot
+Heatmap(kat_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(18, "cm"), height = unit(10, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+dev.off()
+```
+```{r heatmap for hdac ranknorm}
+hdac_ranknorm_ro <- c("SIRT3", "HDAC11", "SIRT2", "HDAC5", "HDAC9", "HDAC4", "HDAC2", "SIRT1", "HDAC6", "HDAC8", "SIRT7", "HDAC3", "HDAC10", "SIRT6", "HDAC7", "HDAC1")
+hdac_ranknorm_co <- c("Brain...Cerebellar.Hemisphere", "Brain...Cerebellum", "Testis", "Pituitary", "Prostate", "Thyroid", "Spleen", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Adrenal.Gland", "Cervix...Endocervix", "Cervix...Ectocervix", "Fallopian.Tube", "Bladder", "Ovary", "Kidney...Medulla", "Kidney...Cortex", "Vagina", "Stomach", "Minor.Salivary.Gland", "Lung", "Uterus", "Esophagus...Muscularis", "Esophagus...Gastroesophageal.Junction", "Nerve...Tibial", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Artery...Coronary", "Adipose...Visceral..Omentum.", "Artery...Aorta", "Artery...Tibial", "Cells...Cultured.fibroblasts", "Cells...EBV.transformed.lymphocytes", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Esophagus...Mucosa", "Brain...Hypothalamus", "Brain...Cortex", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Frontal.Cortex..BA9.", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Putamen..basal.ganglia.", "Brain...Caudate..basal.ganglia.", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Spinal.cord..cervical.c.1.", "Colon...Sigmoid", "Muscle...Skeletal", "Heart...Left.Ventricle", "Heart...Atrial.Appendage", "Liver", "Whole.Blood", "Pancreas")
+hdac_ranknorm <- hdac_ranknorm[hdac_ranknorm_ro, hdac_ranknorm_co]
+
+# Open a pdf file
+pdf("hdac_ranknorm_noMT.pdf", width=12, height=8) 
+# 2. Create a plot
+Heatmap(hdac_ranknorm, name="Normalized Rank", cluster_rows=FALSE, cluster_columns= FALSE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), width = unit(20, "cm"), height = unit(8, "cm"), col = colorRamp2(c(0.8, 0.5, 0, -0.5, -0.8), brewer.pal(n=5, name="RdBu")))
+dev.off()
+```
