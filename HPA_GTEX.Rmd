@@ -89,6 +89,7 @@ HPA_exp$Level[i]=3
 
 HPA_exp <- HPA_exp[,-c(1,4,6)]
 HPA_exp$Level <- as.numeric(HPA_exp$Level)
+hist(HPA_exp$Level)
 #remove unwanted tissues
 HPA_mod <- HPA_exp[HPA_exp$Tissue != "appendix" & HPA_exp$Tissue != "nasopharynx" & HPA_exp$Tissue != "placenta" & HPA_exp$Tissue != "gallbladder" & HPA_exp$Tissue != "oral mucosa" & HPA_exp$Tissue != "parathyroid gland" & HPA_exp$Tissue != "rectum" & HPA_exp$Tissue != "smooth muscle" & HPA_exp$Tissue != "soft tissue 1" & HPA_exp$Tissue != "soft tissue 2" & HPA_exp$Tissue != "tonsil" & HPA_exp$Tissue != "N/A" & HPA_exp$Tissue != "hair" & HPA_exp$Tissue != "retina" & HPA_exp$Tissue != "thymus" & HPA_exp$Tissue != "cartilage" & HPA_exp$Tissue != "eye" & HPA_exp$Tissue != "dorsal raphe" & HPA_exp$Tissue != "choroid plexus",]
 ```
@@ -262,14 +263,11 @@ kmt.row.order <- c(colnames(kmt.comp))
 kmt.comp<- kmt.comp[kmt.row.order, ]
 kmt.comp.sq <- (kmt.comp)^2
 
-<<<<<<< HEAD
 png("HPA_gtex_kmt.png", res=300, height=2000, width=2000)
 Heatmap(kmt.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 dev.off
-=======
 
 Heatmap(kmt.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
->>>>>>> e7d49e6c51dca5029e8b3cef1a0899a265a7bba0
 
 ```
 ```{r correlate kdm}
@@ -280,12 +278,9 @@ kdm.comp <- kdm.comp[,-c(5,10,11,16,17,18,19,20,21,24,26,29)]
 kdm.row.order <- c(colnames(kdm.comp))
 kdm.comp<- kdm.comp[kdm.row.order, ]
 kdm.comp.sq <- (kdm.comp)^2
-<<<<<<< HEAD
-=======
 
 
 Heatmap(kdm.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
->>>>>>> e7d49e6c51dca5029e8b3cef1a0899a265a7bba0
 
 png("HPA_gtex_kdm.png", res=300, height=2000, width=2000)
 Heatmap(kdm.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
@@ -299,12 +294,10 @@ kat.comp <- kat.comp[,-c(8,9,15,16,18)]
 kat.row.order <- c(colnames(kat.comp))
 kat.comp<- kat.comp[kat.row.order, ]
 kat.comp.sq <- (kat.comp)^2
-<<<<<<< HEAD
-=======
+
 
 
 Heatmap(kat.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns= FALSE, cluster_rows= FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
->>>>>>> e7d49e6c51dca5029e8b3cef1a0899a265a7bba0
 
 png("HPA_gtex_kat.png", res=300, height=2000, width=2000)
 Heatmap(kat.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns= FALSE, cluster_rows= FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
@@ -319,7 +312,6 @@ hdac.row.order <- c(colnames(hdac.comp))
 hdac.comp<- hdac.comp[hdac.row.order, ]
 hdac.comp.sq <- (hdac.comp)^2
 
-<<<<<<< HEAD
 png("HPA_gtex_hdac.png", res=300, height=2000, width=2000)
 Heatmap(hdac.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 dev.off()
