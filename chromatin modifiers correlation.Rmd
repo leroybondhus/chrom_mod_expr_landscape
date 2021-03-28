@@ -4,7 +4,6 @@ output: html_document
 ---
 
 ```{r libraries}
-install.packages("gdata")
 library(matrixStats)
 library(readr)
 library(dplyr)

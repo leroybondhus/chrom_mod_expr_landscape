@@ -151,6 +151,13 @@ dev.off()
 
 
 ```
+```{r correlation matrices by z-score}
+kmt.kdm.zcor <- cor(t(kmt_sd), t(kdm_sd), method= "spearman")
+
+kmt.kdm.zhm <- Heatmap(kmt.kdm.zcor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+kmt.kdm.zhm
+
+```
 
 
 
