@@ -1,0 +1,101 @@
+---
+title: "Tissue specificity comparison"
+output: html_document
+---
+
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+```
+```{r read table}
+gtex <- read.delim("~/Downloads/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct", header=FALSE, comment.char="#")
+gtex_noMT <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+
+
+```
+```{r clean gtex}
+#remove first line of gtex
+gtex <- gtex[-c(1), ]
+colnames(gtex) <- gtex[1,]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+rownames(gtex) <- gtex$Name
+gtex <- gtex[-c(1), ]
+#gives ensemble id of duplicated gene names
+gtex$V1[which(duplicated(gtex$V2))]
+#drop first column gtex
+gtex <- gtex[,-c(1)]
+#drop first line gene_id_to_name
+gene_id_to_name<- gene_id_to_name[-c(1),]
+
+```
+```{r clean gtex no MT}
+#remove first column of gtex
+gtex_noMT <- gtex_noMT[,-c(1)]
+#name+description table
+gene_id_to_name_noMT <- gtex_noMT[,c(1,2)]
+rownames(gtex_noMT) <- gtex_noMT$Name
+gtex_noMT <- gtex_noMT[,-c(1) ]
+```
+
+```{r filter for modifiers}
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+modifier_table <- filter(gtex, Description %in% kmt| Description %in% kdm|Description %in% kat|Description %in% hdac)
+
+modifier_table_noMT <- filter(gtex_noMT, Description %in% kmt| Description %in% kdm|Description %in% kat|Description %in% hdac)
+
+
+#convert to matrices
+modifier_mx <- apply(as.matrix(modifier_table, ncol= ncol(modifier_table)), 2, as.numeric)
+modifier_mx <- modifier_mx[,-c(1)]
+modifier_mx[is.na(modifier_mx)] <- 0
+
+
+modifier_mx_noMT <- apply(as.matrix(modifier_table_noMT, ncol= ncol(modifier_table_noMT)), 2, as.numeric)
+modifier_mx_noMT <- modifier_mx_noMT[,-c(1)]
+modifier_mx_noMT[is.na(modifier_mx_noMT)] <- 0
+
+```
+```{r generate z-score matrices}
+modifier_sd <- modifier_mx
+
+for(i in 1:nrow(modifier_mx)){
+ modifier_sd[i,] <- (modifier_mx[i,]- mean(modifier_mx[i,]))/(sd(modifier_mx[i,]))
+}
+modifier_sd[is.na(modifier_sd)] <- 0
+rownames(modifier_sd) <- modifier_table$Description
+
+
+modifier_sd_noMT <- modifier_mx_noMT
+
+for(i in 1:nrow(modifier_mx_noMT)){
+ modifier_sd_noMT[i,] <- (modifier_mx_noMT[i,]- mean(modifier_mx_noMT[i,]))/(sd(modifier_mx_noMT[i,]))
+}
+modifier_sd_noMT[is.na(modifier_sd_noMT)] <- 0
+rownames(modifier_sd_noMT) <- modifier_table_noMT$Description
+
+```
+```{r generate delta matrix}
+delta_mx <- modifier_sd_noMT - modifier_sd 
+
+png("specificity_delta_mx", res=300, width=2000, height=3500)
+Heatmap(delta_mx, name="noMT-MT", column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(20, "cm"))
+dev.off()
+
+```
+
+
