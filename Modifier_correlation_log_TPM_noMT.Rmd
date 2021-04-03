@@ -266,17 +266,20 @@ Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_den
 # Close the png file
 dev.off() 
 ```
-```{r network plot}
+```{r color palette}
 install.packages("igraph")
 library(igraph)
-#Remove lower correlations
-network.mx <- log.modifier.cor
-network.mx[network.mx<0.4] <- 0
+
 #color levels
 type.mod <- read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 6)
 type.mod <- type.mod[,c(2,3)]
 coul <- brewer.pal(nlevels(as.factor(type.mod$`Category`)), "Set2")
 my.color <- coul[as.numeric(as.factor(type.mod$Category))]
+```
+```{r network plot}
+#Remove lower correlations
+network.mx <- log.modifier.cor
+network.mx[network.mx<0.5] <- 0
 #igraph object from matrix
 network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
