@@ -70,6 +70,44 @@ modifier_mx_noMT <- modifier_mx_noMT[,-c(1)]
 modifier_mx_noMT[is.na(modifier_mx_noMT)] <- 0
 
 ```
+```{r kat6b plot}
+rownames(modifier_mx) <- modifier_table$Description
+rownames(modifier_mx_noMT) <- modifier_table_noMT$Description
+
+kat6b <- modifier_mx["KAT6B",]
+kat6b_noMT <- modifier_mx_noMT["KAT6B",]
+
+kat6b <- data.frame(kat6b)
+kat6b$Tissue <- rownames(kat6b)
+rownames(kat6b) <- c(1:54)
+colnames(kat6b) <- c("TPM", "Tissue") 
+dp <- ggplot(kat6b, aes(x= Tissue, y= TPM)) + geom_point()
+dp
+dp + theme(axis.text.x = element_text(angle =90, hjust= 0.95, vjust= 0.5)) + scale_y_continuous(breaks = seq(0, 25, by=2))
+
+kat6b_noMT <- data.frame(kat6b_noMT)
+kat6b_noMT$Tissue <- rownames(kat6b_noMT)
+rownames(kat6b_noMT) <- c(1:54)
+colnames(kat6b_noMT) <- c("TPM_noMT", "Tissue") 
+kat6b_noMT$log2 <- log2(kat6b_noMT$TPM_noMT) 
+
+png(filename= "KAT6B_log2TPM_noMT", res=300, width= 3000, height=2000)
+ggplot(kat6b_noMT, aes(x= Tissue, y= log2)) + geom_point() + theme(axis.text.x = element_text(angle =90, hjust= 0.95, vjust= 0.5)) + scale_y_continuous(breaks = seq(0, 10, by=0.5))
+dev.off()
+
+dp2 <- ggplot(kat6b_noMT, aes(x= Tissue, y= TPM_noMT)) + geom_point()
+dp2
+dp2 + theme(axis.text.x = element_text(angle =90, hjust= 0.95, vjust= 0.5)) + scale_y_continuous(breaks = seq(0, 25, by=2))
+
+png(filename= "KAT6B_TPM_gtex", res=300, width= 3000, height=2000)
+ggplot(kat6b, aes(x= Tissue, y= TPM)) + geom_point() + theme(axis.text.x = element_text(angle =90, hjust= 0.95, vjust= 0.5)) + scale_y_continuous(breaks = seq(0, 25, by=2))
+dev.off()
+
+png(filename= "KAT6B_TPM_gtex_PC_noMT", res=300, width= 3000, height=2000)
+ggplot(kat6b_noMT, aes(x= Tissue, y= TPM_noMT)) + geom_point() + theme(axis.text.x = element_text(angle =90, hjust= 0.95, vjust= 0.5)) + scale_y_continuous(breaks = seq(0, 25, by=2))
+dev.off()
+
+```
 ```{r generate z-score matrices}
 modifier_sd <- modifier_mx
 
