@@ -270,20 +270,30 @@ dev.off()
 install.packages("igraph")
 library(igraph)
 
-#color levels
-type.mod <- read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 6)
-type.mod <- type.mod[,c(2,3)]
-coul <- brewer.pal(nlevels(as.factor(type.mod$`Category`)), "Set2")
-my.color <- coul[as.numeric(as.factor(type.mod$Category))]
+#color pallette
+log.modifier.cor2 <- log.modifier.cor
+Type <- vector(length= ncol(log.modifier.cor2))
+log.modifier.cor2 <- rbind(log.modifier.cor, Type)
+
+for(i in 1:ncol(log.modifier.cor2)) {
+  if (colnames(log.modifier.cor2)[i] %in% kmt) {log.modifier.cor2["Type", i]= "KMT"}
+  else if (colnames(log.modifier.cor2)[i] %in% kdm) {log.modifier.cor2["Type", i]= "KDM"}
+  else if (colnames(log.modifier.cor2)[i] %in% kat) {log.modifier.cor2["Type", i]= "KAT"}
+  else {log.modifier.cor2["Type", i]= "HDAC"}
+}
+
+coul <- brewer.pal(nlevels(as.factor(log.modifier.cor2["Type",])), "Set2")
+my.color <- coul[as.numeric(as.factor(log.modifier.cor2["Type",]))]
 ```
 ```{r network plot}
 #Remove lower correlations
+
 network.mx <- log.modifier.cor
-network.mx[network.mx<0.5] <- 0
+network.mx[network.mx<0.9] <- 0
 #igraph object from matrix
 network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network1, vertex.size= 6, vertex.label.cex=0.4, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
 #legend
-legend(x=0.4, y=-0.2, legend=paste(levels(as.factor(type.mod$Category))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+legend(x=1.4, y=-0.4, legend=paste(levels(as.factor(log.modifier.cor2["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 ```

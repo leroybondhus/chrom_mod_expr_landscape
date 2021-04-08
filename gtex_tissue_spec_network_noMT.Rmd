@@ -93,7 +93,7 @@ network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network1, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
 #legend
-legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(type.mod$Category))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(modifier_sd2["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 ```
 ```{r png}
 png(filename= "network_binary_0.9.png", res=300, width=3000, height=3000)
@@ -101,7 +101,7 @@ network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network1, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
 #legend
-legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(type.mod$Category))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(modifier_sd2["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 dev.off()
 
 ```
