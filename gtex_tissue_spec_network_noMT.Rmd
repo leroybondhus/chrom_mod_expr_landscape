@@ -61,25 +61,33 @@ Heatmap(modifier_sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_
 
 ```
 ```{r create binary matrix}
+modifier_sd <- t(modifier_sd)
+Type <- vector(length= ncol(modifier_sd))
+modifier_sd2 <- rbind(modifier_sd, Type)
+
+for(i in 1:ncol(modifier_sd2)) {
+  if (colnames(modifier_sd2)[i] %in% kmt2) {modifier_sd2["Type", i]= "KMT"}
+  else if (colnames(modifier_sd2)[i] %in% kdm) {modifier_sd2["Type", i]= "KDM"}
+  else if (colnames(modifier_sd2)[i] %in% kat) {modifier_sd2["Type", i]= "KAT"}
+  else {modifier_sd2["Type", i]= "HDAC"}
+}
+
 binary <- modifier_sd
 binary[binary<2] <- 0
 binary[binary>=2] <- 1
-binary <- t(binary)
 binary.cor <- cor(binary, method= "pearson")
 binary.cor[is.na(binary.cor)] <- 0
 
 ```
 ```{r color palette}
 #color levels
-type.mod <- read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 6)
-type.mod <- type.mod[,c(2,3)]
-coul <- brewer.pal(nlevels(as.factor(type.mod$`Category`)), "Set2")
-my.color <- coul[as.numeric(as.factor(type.mod$Category))]
+coul <- brewer.pal(nlevels(as.factor(modifier_sd2["Type",])), "Set2")
+my.color <- coul[as.numeric(as.factor(modifier_sd2["Type",]))]
 ```
 ```{r network plot}
 #Remove lower correlations
 network.mx <- binary.cor
-network.mx[network.mx<0.8] <- 0
+network.mx[network.mx<0.9] <- 0
 #igraph object from matrix
 network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
@@ -88,10 +96,10 @@ plot(network1, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vert
 legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(type.mod$Category))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 ```
 ```{r png}
-png(filename= "network_binary_0.8.png", res=300, width=3000, height=3000)
+png(filename= "network_binary_0.9.png", res=300, width=3000, height=3000)
 network1 <- graph_from_adjacency_matrix(network.mx, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
-plot(network1, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+plot(network1, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
 #legend
 legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(type.mod$Category))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 dev.off()
