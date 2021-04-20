@@ -563,7 +563,7 @@ kmt.hpa.frame <- data.frame(kmt_expmx)
 kdm.hpa.frame <- data.frame(kdm_expmx)
 kat.hpa.frame <- data.frame(kat_expmx)
 hdac.hpa.frame <- data.frame(hdac_exp_mod)
-#combine all df to one
+#combine all df to one; this piece of code does not work. Likely need to make sure all rows are in the same order before binding columns
 all.hpa.df <- bind_cols(kmt.hpa.frame, kdm.hpa.frame, kat.hpa.frame, hdac.hpa.frame)
 # correlation matrix
 all.hpa.mx <- as.matrix(all.hpa.df)
