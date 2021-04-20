@@ -307,7 +307,7 @@ HPA_filter_cell <- filter(HPA_filter_cell, rownames(HPA_filter_cell) %in% kmt| r
 HPA_filter_cmx <- as.matrix(HPA_filter_cell)
 
 
-png(filename= "HPA_exp_levels_cell.png", res=300, width=2000, height=2500)
+png(filename= "HPA_exp_levels_cell.png", res=300, width=3000, height=3000)
 Heatmap(HPA_filter_cmx, name="Level", column_names_gp = grid::gpar(fontsize = 5), row_names_gp = grid::gpar(fontsize = 5), width = unit(15, "cm"), height = unit(12, "cm"))
 dev.off()
 ```
