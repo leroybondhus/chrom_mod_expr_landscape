@@ -49,6 +49,7 @@ HPA_exp$Level[i]=3
 } 
 }
 
+HPA_exp2 <- HPA_exp
 HPA_exp <- HPA_exp[,-c(1,4,6)]
 HPA_exp$Level <- as.numeric(HPA_exp$Level)
 hist(HPA_exp$Level)
@@ -286,5 +287,28 @@ Heatmap(hdac.hpa.z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_n
 # Close the pdf file
 dev.off() 
 
+```
+```{r hpa specificity}
+png(filename= "HPA_exp_levels.png", res=300, width=2000, height=2500)
+Heatmap(t(HPA_filter2), name="Level", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(10, "cm"), height = unit(12, "cm"))
+dev.off()
+
+HPA_exp3 <- HPA_exp2[,-c(1,3,6)]
+HPA_exp3$Level <- as.numeric(HPA_exp3$Level)
+
+HPA_filter_cell <- HPA_exp3 %>% group_by(Cell.type, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+HPA_filter_cell <- HPA_filter_cell %>% pivot_wider(names_from= Cell.type, values_from= Level)
+HPA_filter_cell <- data.frame(HPA_filter_cell)
+rownames(HPA_filter_cell) <- HPA_filter_cell$Gene.name
+HPA_filter_cell <- HPA_filter_cell[,-c(1)]
+HPA_filter_cell[is.na(HPA_filter_cell)] <- 0
+HPA_filter_cell <- filter(HPA_filter_cell, rownames(HPA_filter_cell) %in% kmt| rownames(HPA_filter_cell) %in% kdm| rownames(HPA_filter_cell) %in% kat| rownames(HPA_filter_cell) %in% hdac)
+
+HPA_filter_cmx <- as.matrix(HPA_filter_cell)
+
+
+png(filename= "HPA_exp_levels_cell.png", res=300, width=2000, height=2500)
+Heatmap(HPA_filter_cmx, name="Level", column_names_gp = grid::gpar(fontsize = 5), row_names_gp = grid::gpar(fontsize = 5), width = unit(15, "cm"), height = unit(12, "cm"))
+dev.off()
 ```
 
