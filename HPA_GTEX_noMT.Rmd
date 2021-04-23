@@ -50,6 +50,18 @@ tpm.vec10 <- log10(unmatrix(gtex_mx)+1)
 hist(tpm.vec, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
 hist(tpm.vec10, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
 
+png(filename="Gene_TPM_density_plot.png", res=300, width=2000, height=2000)
+hist(tpm.vec10, freq=FALSE, main= "GTEX TPM distribution", xlab= "Log(TPM+1)", breaks=45, xlim=c(0,6), xaxp=c(0,6,20), yaxp=c(0,2,20))
+dev.off()
+
+hist(tpm.vec10) -> hvec10 # do a histogram of y and assign its info to h
+hvec10$counts <- cumsum(hvec10$counts)/sum(hvec10$counts) # replace the cell freq.s by cumulative freq.s
+png(filename="GTEX_TPM_cum_freq.png", res=300, width=2000, height=2000)
+plot(hvec10, main= "GTEX TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,6), xaxp=c(0,6,30)) # plot a cumulative histogram of y
+dev.off()
+
+
+
 #right end of histogram
 hist(tpm.vec10[tpm.vec10 > 3], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
 hist(tpm.vec10[tpm.vec10 > 4], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
