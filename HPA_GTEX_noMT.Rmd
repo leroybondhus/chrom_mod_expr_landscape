@@ -44,6 +44,57 @@ gtex_mx[is.na(gtex_mx)] <- 0
 rownames(gtex_mx)<- gtex$Description
 gtex_mx <- gtex_mx[,-c(1)]
 ```
+```{r TPM distribution}
+tpm.vec <- unmatrix(gtex_mx)
+tpm.vec10 <- log10(unmatrix(gtex_mx)+1)
+hist(tpm.vec, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+hist(tpm.vec10, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+
+#right end of histogram
+hist(tpm.vec10[tpm.vec10 > 3], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+hist(tpm.vec10[tpm.vec10 > 4], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+
+gtex_modifiers <- data.frame(gtex_mx)
+gtex_modifiers <- filter(gtex_modifiers, rownames(gtex_modifiers) %in% kmt|rownames(gtex_modifiers) %in% kdm| rownames(gtex_modifiers) %in% kat| rownames(gtex_modifiers) %in% hdac)
+
+gtex_modifiers_mx <- apply(as.matrix(gtex_modifiers, ncol= ncol(gtex_modifiers)), 2, as.numeric)
+modifier.vec <- log10(unmatrix(gtex_modifiers_mx)+1)
+modifier.vec.raw <- unmatrix(gtex_modifiers_mx)
+
+hist(modifier.vec, main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
+hist(modifier.vec.raw[modifier.vec.raw <100], main= "GTEX Chromatin Modifiers TPM distribution", xlab= "TPM", breaks=20)
+
+quantile(modifier.vec.raw, c(.33, .66, 1))
+quantile(tpm.vec, c(.33, .66, 1))
+
+quantile(modifier.vec, c(.33, .66, 1))
+quantile(tpm.vec10, c(.33, .66, 1))
+
+
+
+png(filename= "Gtex_log_TPM_noMT.png", res=300, width=2000, height=2000)
+hist(tpm.vec10, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+png(filename= "Gtex_log_TPM_noMT_rt.png", res=300, width=2000, height=2000)
+hist(tpm.vec10[tpm.vec10 > 3], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+png(filename= "Gtex_log_TPM_noMT_tail.png", res=300, width=2000, height=2000)
+hist(tpm.vec10[tpm.vec10 > 4], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+png(filename= "Gtex_modifiers_noMT_TPM.png", res=300, width=2000, height=2000)
+hist(modifier.vec, main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+png(filename= "Gtex_modifiers_noMT_TPM_tail.png", res=300, width=2000, height=2000)
+hist(modifier.vec[modifier.vec > 2.25], main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+
+
+```
 ```{r  tissues in datsets}
 hpa_tissues <- write.csv(unique(HPA_tissue_exp$Tissue), "HPA_tissues.csv")
 gtex_tissues <- write.csv(colnames(gtex[2:55]), "gtex_tissues.csv")
@@ -247,6 +298,14 @@ hdac_HPA[is.na(hdac_HPA)] <- 0
 
 
 ```
+```{r tpm distribution gtex-mod}
+mod.tpm.vec <- log(unmatrix(gtex_mod)+1)
+hist(mod.tpm.vec, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+#right end of histogram
+hist(mod.tpm.vec[mod.tpm.vec > 9], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+hist(mod.tpm.vec[mod.tpm.vec > 7], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+
+```
 ```{r correlate kmt}
 kmt.comp <- cor(kmt_HPA, kmt_gtex.mx, method= "pearson")
 kmt.comp[is.na(kmt.comp)] <- 0
@@ -392,6 +451,36 @@ png("hdac_hpa_specificity.png", res=300, width=2000, height=2000)
 Heatmap(hdac.hpa.sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
 # Close the pdf file
 dev.off() 
+
+```
+```{r bin GTEX mod}
+gtex_bin <- gtex_mod
+#bin using 33rd and 66th percentile of chromatin modifiers' TPM. 0= 0, 1= 0th to 33rd percentile, 2= 33rd to 66th percentile, 3= 66th to 100th percentile
+for(row in 1:nrow(gtex_bin)) {
+  for(col in 1:ncol(gtex_bin)) {
+        if (0 < gtex_bin[row,col] & gtex_bin[row,col] <= 15.14129) {
+gtex_bin[row,col]=1
+        } 
+    else if (15.14129 < gtex_bin[row,col] & gtex_bin[row,col] <= 34.20566) {
+gtex_bin[row,col]=2
+    } 
+    else if (gtex_bin[row,col] > 34.20566) {
+gtex_bin[row,col]=3
+    } 
+    else {
+gtex_bin[row,col]=0
+} 
+}}
+
+for(row in 1:nrow(modifier.cor.cut)) {
+  for(col in 1:ncol(modifier.cor.cut)) {
+        if (modifier.cor.cut[row,col]<0.7) {
+modifier.cor.cut[row,col]=0
+} else {
+modifier.cor.cut[row,col]=1
+}
+}}
+
 
 ```
 
