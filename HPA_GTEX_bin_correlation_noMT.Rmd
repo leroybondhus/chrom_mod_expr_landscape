@@ -1,0 +1,224 @@
+---
+title: "HPA + GTEX"
+output: html_document
+---
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+library(igraph)
+
+```
+
+
+```{r read in data}
+HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+
+
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+
+```
+```{r clean gtex}
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx[is.na(gtex_mx)] <- 0
+rownames(gtex_mx)<- gtex$Description
+gtex_mx <- gtex_mx[,-c(1)]
+
+
+```
+```{r modify HPA}
+#convert detection levels to numbers
+HPA_exp <- HPA_tissue_exp
+for(i in 1:length(HPA_exp$Level)) {
+        if (HPA_exp$Level[i] == "Not detected") {
+HPA_exp$Level[i]=0
+        } 
+    else if (HPA_exp$Level[i]== "Low") {
+HPA_exp$Level[i]=1
+    } 
+    else if (HPA_exp$Level[i]== "Medium") {
+HPA_exp$Level[i]=2
+    } 
+    else {
+HPA_exp$Level[i]=3
+} 
+}
+
+HPA_exp$Level <- as.numeric(HPA_exp$Level)
+HPA_exp2 <- HPA_exp
+HPA_exp <- HPA_exp[,-c(1,4,6)]
+hist(HPA_exp$Level)
+
+```
+
+```{r combine gtex tissues}
+#Combine tissues in GTEX
+Adipose <- c(rowMeans(gtex_mx[,1:2]))
+Brain.Cerebellum <- c(rowMeans(gtex_mx[,11:12]))
+Cervix <- c(rowMeans(gtex_mx[,24:25]))
+Colon <- c(rowMeans(gtex_mx[,26:27]))
+Esophagus <- c(rowMeans(gtex_mx[,28:30]))
+Heart <- c(rowMeans(gtex_mx[,32:33]))
+Kidney <- c(rowMeans(gtex_mx[,34:35]))
+Skin <- c(rowMeans(gtex_mx[,45:46]))
+gtex_mod <- cbind(gtex_mx[,-c(1, 2, 11, 12, 24:30, 32:35, 45, 46)], Adipose, Brain.Cerebellum, Cervix, Colon, Esophagus, Heart, Kidney, Skin)
+#remove unmatched tissues from gtex mod
+gtex_mod <- gtex_mod[,-c(2:4, 6, 7, 10, 12:16, 18, 25, 28)]
+gtex_mod <- gtex_mod[,-c(7,23)]
+
+
+
+```
+```{r modify HPA}
+#remove unwanted tissues
+HPA_mod <- HPA_exp2[HPA_tissue_exp$Tissue != "appendix" & HPA_tissue_exp$Tissue != "nasopharynx" & HPA_tissue_exp$Tissue != "placenta" & HPA_tissue_exp$Tissue != "gallbladder" & HPA_tissue_exp$Tissue != "oral mucosa" & HPA_tissue_exp$Tissue != "parathyroid gland" & HPA_tissue_exp$Tissue != "rectum" & HPA_tissue_exp$Tissue != "smooth muscle" & HPA_tissue_exp$Tissue != "soft tissue 1" & HPA_tissue_exp$Tissue != "soft tissue 2" & HPA_tissue_exp$Tissue != "tonsil" & HPA_tissue_exp$Tissue != "N/A" & HPA_tissue_exp$Tissue != "hair" & HPA_tissue_exp$Tissue != "retina" & HPA_tissue_exp$Tissue != "thymus" & HPA_tissue_exp$Tissue != "cartilage" & HPA_tissue_exp$Tissue != "eye" & HPA_tissue_exp$Tissue != "dorsal raphe" & HPA_tissue_exp$Tissue != "choroid plexus" & HPA_tissue_exp$Tissue != "sole of foot" & HPA_tissue_exp$Tissue != "lactating breast" & HPA_tissue_exp$Tissue != "seminal vesicle" & HPA_tissue_exp$Tissue != "lymph node" & HPA_tissue_exp$Tissue != "epididymis" & HPA_tissue_exp$Tissue != "duodenum" & HPA_tissue_exp$Tissue != "bronchus" & HPA_tissue_exp$Tissue != "bone marrow",]
+```
+```{r filter for modifiers in HPA exp}
+
+HPA_filter <- filter(HPA_mod, Gene.name %in% kmt| Gene.name %in% kdm| Gene.name %in% kat| Gene.name %in% hdac)
+
+HPA_filter2 <- HPA_filter[,-c(1,4,6)]
+
+HPA_filter2 <- HPA_filter2 %>% group_by(Tissue, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+
+HPA_filter2 <- HPA_filter2 %>% pivot_wider(names_from= Tissue, values_from= Level)
+
+HPA_filter2 <- data.frame(HPA_filter2)
+rownames(HPA_filter2) <- HPA_filter2$Gene.name
+HPA_filter2 <- HPA_filter2[,-c(1)]
+HPA_filter2[is.na(HPA_filter2)] <- 0
+
+```
+```{r combine tissues in HPA}
+Endometrium <- c(rowMeans(HPA_filter2[,c(9,10)]))
+Skin <- c(rowMeans(HPA_filter2[,c(23,24)]))
+Stomach <- c(rowMeans(HPA_filter2[,c(27,28)]))
+
+
+HPA_filter2 <- cbind(HPA_filter2[,-c(9,10,23,24,27,28)], Endometrium, Skin, Stomach)
+
+
+```
+```{r change colnames}
+#gtex_mod
+colnames(gtex_mod) <- c("Adrenal.gland", "Bladder", "Brain.Caudate", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Fallopian.tube", "Liver", "Lung", "Salivary.gland", "Skeletal.muscle", "Ovary", "Pancreas", "Prostate", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina", "Adipose", "Brain.Cerebellum", "Cervix", "Colon", "Esophagus", "Heart", "Kidney", "Skin")
+
+#HPA
+colnames(HPA_filter2) <- c("Adipose", "Adrenal.gland", "Breast", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Brain.Hippocampus", "Kidney", "Liver", "Lung", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Small.intestine", "Spleen", "Testis", "Thyroid", "Bladder", "Vagina", "Uterus", "Skin", "Stomach")
+
+#reorder columns
+col_order <- c("Adipose", "Adrenal.gland", "Bladder", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Kidney", "Liver", "Lung", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Skin", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina")
+
+gtex_mod <- gtex_mod[, col_order]
+HPA_filter2 <- HPA_filter2[, col_order]
+
+gtex_mod <- data.frame(gtex_mod)
+gtex_filter <- filter(gtex_mod, rownames(gtex_mod) %in% kmt| rownames(gtex_mod) %in% kdm| rownames(gtex_mod) %in% kat| rownames(gtex_mod) %in% hdac)
+
+is.element(rownames(gtex_filter), rownames(HPA_filter2))
+gtex_filter2 <- gtex_filter[-c(1,13,18,20,28,30,31,41,42,45,46,48,58,60,61,63,64,66,68,70,73,75,79,86,87,89,90,97,99,106),]
+
+is.element(rownames(gtex_filter2), rownames(HPA_filter2))
+is.element(rownames(HPA_filter2), rownames(gtex_filter2))
+
+row_order <- c(rownames(HPA_filter2))
+gtex_filter2 <- gtex_filter2[row_order, ]
+
+
+
+
+
+```
+```{r indices}
+
+HPA_filter_mx <- apply(as.matrix(HPA_filter2, ncol= ncol(HPA_filter2)), 2, as.numeric)
+rownames(HPA_filter_mx) <- rownames(HPA_filter2)
+high_exp <- which(HPA_filter_mx >= 2.5)
+med_exp <- which(HPA_filter_mx < 2.5 & HPA_filter_mx >= 1.5)
+low_exp <- which(HPA_filter_mx < 1.5 & HPA_filter_mx >= 0.5)
+no_exp <- which(HPA_filter_mx == 0)
+
+highest_exp <- which(HPA_filter_mx == 3)
+
+
+gtex_filter_mx <- apply(as.matrix(gtex_filter2, ncol= ncol(gtex_filter2)), 2, as.numeric)
+rownames(gtex_filter_mx) <- rownames(gtex_filter2)
+gtex_filter_log <- log10(gtex_filter_mx +1)
+
+
+
+gtex_high <- gtex_filter_log[high_exp]
+gtex_med <- gtex_filter_log[med_exp]
+gtex_low <- gtex_filter_log[low_exp]
+gtex_none <- gtex_filter_log[no_exp]
+gtex_highest <- gtex_filter_log[highest_exp]
+
+
+
+```
+```{r histogram}
+hist(gtex_high)
+hist(gtex_med)
+hist(gtex_low)
+hist(gtex_none)
+hist(gtex_highest)
+
+t.test(gtex_high, gtex_med)
+#t = -1.2373, df = 684.08, p-value = 0.2164
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# -0.07228606  0.01640041
+##mean of x   mean of y 
+##1.461151    1.489094 
+t.test(gtex_med, gtex_low)
+#t = 2.0382, df = 1037.5, p-value = 0.04178
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.001601248 0.084296333
+#sample estimates:
+#mean of x   mean of y 
+# 1.489094    1.446146 
+t.test(gtex_low, gtex_none)
+#t = 12.605, df = 708.65, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.3767376 0.5157442
+#sample estimates:
+#mean of x   mean of y 
+#1.4461455   0.9999046 
+t.test(gtex_highest, gtex_med)
+#t = -1.1974, df = 624.1, p-value = 0.2316
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# -0.07342783  0.01780094
+#sample estimates:
+#mean of x      mean of y 
+# 1.461281       1.489094 
+
+
+
+
+
+```
+
+

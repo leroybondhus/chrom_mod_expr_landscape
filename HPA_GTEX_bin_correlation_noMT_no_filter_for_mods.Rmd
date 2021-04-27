@@ -1,0 +1,462 @@
+---
+title: "HPA + GTEX"
+output: html_document
+---
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+library(igraph)
+
+```
+
+
+```{r read in data}
+HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+
+
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+
+```
+```{r clean gtex}
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx[is.na(gtex_mx)] <- 0
+rownames(gtex_mx)<- gtex$Description
+gtex_mx <- gtex_mx[,-c(1)]
+
+
+```
+```{r modify HPA}
+#convert detection levels to numbers
+HPA_exp <- HPA_tissue_exp
+for(i in 1:length(HPA_exp$Level)) {
+        if (HPA_exp$Level[i] == "Not detected") {
+HPA_exp$Level[i]=0
+        } 
+    else if (HPA_exp$Level[i]== "Low") {
+HPA_exp$Level[i]=1
+    } 
+    else if (HPA_exp$Level[i]== "Medium") {
+HPA_exp$Level[i]=2
+    } 
+    else {
+HPA_exp$Level[i]=3
+} 
+}
+
+HPA_exp$Level <- as.numeric(HPA_exp$Level)
+HPA_exp2 <- HPA_exp
+HPA_exp <- HPA_exp[,-c(1,4,6)]
+hist(HPA_exp$Level)
+
+```
+
+```{r combine gtex tissues}
+#Combine tissues in GTEX
+Adipose <- c(rowMeans(gtex_mx[,1:2]))
+Brain.Cerebellum <- c(rowMeans(gtex_mx[,11:12]))
+Cervix <- c(rowMeans(gtex_mx[,24:25]))
+Colon <- c(rowMeans(gtex_mx[,26:27]))
+Esophagus <- c(rowMeans(gtex_mx[,28:30]))
+Heart <- c(rowMeans(gtex_mx[,32:33]))
+Kidney <- c(rowMeans(gtex_mx[,34:35]))
+Skin <- c(rowMeans(gtex_mx[,45:46]))
+gtex_mod <- cbind(gtex_mx[,-c(1, 2, 11, 12, 24:30, 32:35, 45, 46)], Adipose, Brain.Cerebellum, Cervix, Colon, Esophagus, Heart, Kidney, Skin)
+#remove unmatched tissues from gtex mod
+gtex_mod <- gtex_mod[,-c(2:4, 6, 7, 10, 12:16, 18, 25, 28)]
+gtex_mod <- gtex_mod[,-c(7,23)]
+
+
+
+```
+```{r modify HPA}
+#remove unwanted tissues
+HPA_mod <- HPA_exp2[HPA_tissue_exp$Tissue != "appendix" & HPA_tissue_exp$Tissue != "nasopharynx" & HPA_tissue_exp$Tissue != "placenta" & HPA_tissue_exp$Tissue != "gallbladder" & HPA_tissue_exp$Tissue != "oral mucosa" & HPA_tissue_exp$Tissue != "parathyroid gland" & HPA_tissue_exp$Tissue != "rectum" & HPA_tissue_exp$Tissue != "smooth muscle" & HPA_tissue_exp$Tissue != "soft tissue 1" & HPA_tissue_exp$Tissue != "soft tissue 2" & HPA_tissue_exp$Tissue != "tonsil" & HPA_tissue_exp$Tissue != "N/A" & HPA_tissue_exp$Tissue != "hair" & HPA_tissue_exp$Tissue != "retina" & HPA_tissue_exp$Tissue != "thymus" & HPA_tissue_exp$Tissue != "cartilage" & HPA_tissue_exp$Tissue != "eye" & HPA_tissue_exp$Tissue != "dorsal raphe" & HPA_tissue_exp$Tissue != "choroid plexus" & HPA_tissue_exp$Tissue != "sole of foot" & HPA_tissue_exp$Tissue != "lactating breast" & HPA_tissue_exp$Tissue != "seminal vesicle" & HPA_tissue_exp$Tissue != "lymph node" & HPA_tissue_exp$Tissue != "epididymis" & HPA_tissue_exp$Tissue != "duodenum" & HPA_tissue_exp$Tissue != "bronchus" & HPA_tissue_exp$Tissue != "bone marrow",]
+```
+```{r combine samples HPA exp}
+
+
+HPA_mod2 <- HPA_mod[,-c(1,4,6)]
+
+HPA_mod2 <- HPA_mod2 %>% group_by(Tissue, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+
+HPA_mod2 <- HPA_mod2 %>% pivot_wider(names_from= Tissue, values_from= Level)
+
+HPA_mod2 <- data.frame(HPA_mod2)
+rownames(HPA_mod2) <- HPA_mod2$Gene.name
+HPA_mod2 <- HPA_mod2[,-c(1)]
+HPA_mod2[is.na(HPA_mod2)] <- 0
+
+```
+```{r combine tissues in HPA}
+Endometrium <- c(rowMeans(HPA_mod2[,c(9,10)]))
+Skin <- c(rowMeans(HPA_mod2[,c(23,24)]))
+Stomach <- c(rowMeans(HPA_mod2[,c(27,28)]))
+
+
+HPA_mod2 <- cbind(HPA_mod2[,-c(9,10,23,24,27,28)], Endometrium, Skin, Stomach)
+
+
+```
+```{r change colnames}
+#gtex_mod
+colnames(gtex_mod) <- c("Adrenal.gland", "Bladder", "Brain.Caudate", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Fallopian.tube", "Liver", "Lung", "Salivary.gland", "Skeletal.muscle", "Ovary", "Pancreas", "Prostate", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina", "Adipose", "Brain.Cerebellum", "Cervix", "Colon", "Esophagus", "Heart", "Kidney", "Skin")
+
+#HPA
+colnames(HPA_mod2) <- c("Adipose", "Adrenal.gland", "Breast", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Brain.Hippocampus", "Kidney", "Liver", "Lung", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Small.intestine", "Spleen", "Testis", "Thyroid", "Bladder", "Vagina", "Uterus", "Skin", "Stomach")
+
+#reorder columns
+col_order <- c("Adipose", "Adrenal.gland", "Bladder", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Kidney", "Liver", "Lung", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Skin", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina")
+
+gtex_mod <- gtex_mod[, col_order]
+HPA_mod2 <- HPA_mod2[, col_order]
+
+gtex_mod <- data.frame(gtex_mod)
+
+gtex_mod2 <- gtex_mod[rownames(gtex_mod) %in% rownames(HPA_mod2), ]
+HPA_mod3 <- HPA_mod2[rownames(HPA_mod2) %in% rownames(gtex_mod2), ]
+
+
+row_order <- c(rownames(HPA_mod3))
+gtex_mod2 <- gtex_mod2[row_order, ]
+
+
+
+
+
+```
+```{r indices}
+
+HPA_mod_mx <- apply(as.matrix(HPA_mod3, ncol= ncol(HPA_mod3)), 2, as.numeric)
+rownames(HPA_mod_mx) <- rownames(HPA_mod3)
+high_exp <- which(HPA_mod_mx >= 2.5)
+med_exp <- which(HPA_mod_mx < 2.5 & HPA_mod_mx >= 1.5)
+low_exp <- which(HPA_mod_mx < 1.5 & HPA_mod_mx >= 0.5)
+no_exp <- which(HPA_mod_mx == 0)
+
+highest_exp <- which(HPA_mod_mx == 3)
+
+
+gtex_mod_mx <- apply(as.matrix(gtex_mod2, ncol= ncol(gtex_mod2)), 2, as.numeric)
+rownames(gtex_mod_mx) <- rownames(gtex_mod2)
+gtex_mod_log <- log10(gtex_mod_mx +1)
+
+
+
+gtex_high <- gtex_mod_log[high_exp]
+gtex_med <- gtex_mod_log[med_exp]
+gtex_low <- gtex_mod_log[low_exp]
+gtex_none <- gtex_mod_log[no_exp]
+gtex_highest <- gtex_mod_log[highest_exp]
+
+
+
+```
+```{r histogram}
+hist(gtex_high)
+hist(gtex_med)
+hist(gtex_low)
+hist(gtex_none)
+hist(gtex_highest)
+
+t.test(gtex_high, gtex_med)
+#t = 32.939, df = 58414, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.1155672 0.1301910
+#sample estimates:
+#mean of x    mean of y 
+# 1.598096     1.475217 
+t.test(gtex_med, gtex_low)
+#t = 36.75, df = 158602, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.1011935 0.1125955
+#sample estimates:
+#mean of x    mean of y 
+# 1.475217     1.368323 
+t.test(gtex_low, gtex_none)
+#t = 157.82, df = 180446, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.4537906 0.4652036
+#sample estimates:
+#mean of x    mean of y 
+#1.3683225    0.9088254 
+t.test(gtex_highest, gtex_high)
+#t = 3.2127, df = 55006, p-value = 0.001316
+#alternative hypothesis: true difference in means is not equal to 0
+#95 percent confidence interval:
+# 0.006154272 0.025412544
+#sample estimates:
+#mean of x     mean of y 
+# 1.613880      1.598096 
+
+
+
+
+
+```
+```{r correlation matrix}
+HPA_filter2 <- t(HPA_filter2)
+Type <- vector(length= ncol(HPA_filter2))
+HPA_filter3 <- rbind(HPA_filter2, Type)
+
+for(i in 1:ncol(HPA_filter3)) {
+  if (colnames(HPA_filter3)[i] %in% kmt) {HPA_filter3["Type", i]= "KMT"}
+  else if (colnames(HPA_filter3)[i] %in% kdm) {HPA_filter3["Type", i]= "KDM"}
+  else if (colnames(HPA_filter3)[i] %in% kat) {HPA_filter3["Type", i]= "KAT"}
+  else {HPA_filter3["Type", i]= "HDAC"}
+}
+
+
+
+HPA.cor <- cor(HPA_filter2, method="pearson")
+HPA.cor[is.na(HPA.cor)] <- 0
+```
+```{r heatmap}
+png("all_modifier_HPA_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(HPA.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+
+```
+```{r pairwise correlations}
+HPA_filter_df <- data.frame(t(HPA_filter2))
+
+kmt_hpa2 <- t(filter(HPA_filter_df, rownames(HPA_filter_df) %in% kmt))
+kdm_hpa2 <- t(filter(HPA_filter_df, rownames(HPA_filter_df) %in% kdm))
+kat_hpa2 <- t(filter(HPA_filter_df, rownames(HPA_filter_df) %in% kat))
+hdac_hpa2 <- t(filter(HPA_filter_df, rownames(HPA_filter_df) %in% hdac))
+
+kmt.hpa.cor <- cor(kmt_hpa2, method= "pearson")
+kmt.hpa.cor[is.na(kmt.hpa.cor)] <- 0
+
+kdm.hpa.cor <- cor(kdm_hpa2, method= "pearson")
+kdm.hpa.cor[is.na(kdm.hpa.cor)] <- 0
+
+kat.hpa.cor <- cor(kat_hpa2, method= "pearson")
+kat.hpa.cor[is.na(kat.hpa.cor)] <- 0
+
+hdac.hpa.cor <- cor(hdac_hpa2, method= "pearson")
+hdac.hpa.cor[is.na(hdac.hpa.cor)] <- 0
+
+kmt.kdm.cor <- cor(kmt_hpa2, kdm_hpa2, method= "pearson")
+kmt.kdm.cor[is.na(kmt.kdm.cor)] <- 0
+
+kmt.kat.cor <- cor(kmt_hpa2, kat_hpa2, method= "pearson")
+kmt.kat.cor[is.na(kmt.kat.cor)] <- 0
+
+kmt.hdac.cor <- cor(kmt_hpa2, hdac_hpa2, method= "pearson")
+kmt.hdac.cor[is.na(kmt.hdac.cor)] <- 0
+
+kdm.kat.cor <- cor(kdm_hpa2, kat_hpa2, method= "pearson")
+kdm.kat.cor[is.na(kdm.kat.cor)] <- 0
+
+kdm.hdac.cor <- cor(kdm_hpa2, hdac_hpa2, method= "pearson")
+kdm.hdac.cor[is.na(kdm.hdac.cor)] <- 0
+
+kat.hdac.cor <- cor(kat_hpa2, hdac_hpa2, method= "pearson")
+kat.hdac.cor[is.na(kat.hdac.cor)] <- 0
+
+
+```
+```{r png}
+png("kmt_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kmt.hpa.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+```
+```{r png}
+png("kdm_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kdm.hpa.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+```
+```{r png}
+png("kat_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kat.hpa.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("hdac_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(hdac.hpa.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 10), row_names_gp = grid::gpar(fontsize = 10), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+```
+```{r png}
+png("kmt_kdm_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kmt.kdm.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("kmt_kat_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kmt.kat.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("kmt_hdac_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kmt.hdac.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("kdm_kat_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kdm.kat.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("kdm_hdac_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kdm.hdac.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+png("kat_hdac_hpa_cor2.png", res=300, width= 3000, height=3000)
+Heatmap(kat.hdac.cor, name= "R", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 9), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
+
+```
+```{r color palette}
+#color levels
+coul <- brewer.pal(nlevels(as.factor(HPA_filter3["Type",])), "Set2")
+my.color <- coul[as.numeric(as.factor(HPA_filter3["Type",]))]
+```
+```{r network plot}
+#Remove lower correlations
+network.mx2 <- HPA.cor
+network.mx2[network.mx2<0.65] <- 0
+#igraph object from matrix
+network2 <- graph_from_adjacency_matrix(network.mx2, weighted=T, mode="undirected", diag=F)
+par(bg="grey13", mar=c(0,0,0,0))
+plot(network2, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+#legend
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+```
+```{r png}
+png(filename= "network_HPA_0.65.png", res=300, width=3000, height=3000)
+network2 <- graph_from_adjacency_matrix(network.mx2, weighted=T, mode="undirected", diag=F)
+par(bg="grey13", mar=c(0,0,0,0))
+plot(network2, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+#legend
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+dev.off()
+
+```
+
+
+```{r resolution}
+
+HPA_round <- round(HPA_filter2, digits=0)
+
+res <- table(c(col(HPA_round)), c(HPA_round))
+resm <- rbind(as.numeric(names(res)), res)
+rownames(resm) <- colnames(HPA_round)
+
+png(filename= "HPA_expression_counts", res=300, width= 1000, height=3000)
+Heatmap(resm, name= "count", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
+dev.off()
+
+
+```
+```{r specificity heatmap for hpa exp kmt}
+kmt.hpa.z <- t(kmt_hpa2)
+
+for(i in 1:nrow(kmt.hpa.z)){
+ kmt.hpa.z[i,] <- (kmt.hpa.z[i,]- mean(kmt.hpa.z[i,]))/(sd(kmt.hpa.z[i,]))
+}
+kmt.hpa.z[is.na(kmt.hpa.z)] <- 0
+
+# Open a png file
+png("kmt_hpa_z.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kmt.hpa.z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpa exp kdm}
+kdm.hpa.z <- t(kdm_hpa2)
+
+for(i in 1:nrow(kdm.hpa.z)){
+ kdm.hpa.z[i,] <- (kdm.hpa.z[i,]- mean(kdm.hpa.z[i,]))/(sd(kdm.hpa.z[i,]))
+}
+kdm.hpa.z[is.na(kdm.hpa.z)] <- 0
+
+# Open a png file
+png("kdm_hpa_z.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kdm.hpa.z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpa exp kat}
+kat.hpa.z <- t(kat_hpa2)
+
+for(i in 1:nrow(kat.hpa.z)){
+ kat.hpa.z[i,] <- (kat.hpa.z[i,]- mean(kat.hpa.z[i,]))/(sd(kat.hpa.z[i,]))
+}
+kat.hpa.z[is.na(kat.hpa.z)] <- 0
+
+# Open a png file
+png("kat_hpa_z.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(kat.hpa.z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r specificity heatmap for hpa exp hdac}
+hdac.hpa.z <- t(hdac_hpa2)
+
+for(i in 1:nrow(hdac.hpa.z)){
+ hdac.hpa.z[i,] <- (hdac.hpa.z[i,]- mean(hdac.hpa.z[i,]))/(sd(hdac.hpa.z[i,]))
+}
+hdac.hpa.z[is.na(hdac.hpa.z)] <- 0
+
+# Open a png file
+png("hdac_hpa_z.png", res=300, width=2000, height=2000) 
+# 2. Create a plot
+Heatmap(hdac.hpa.z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+```{r hpa specificity}
+png(filename= "HPA_exp_levels.png", res=300, width=2000, height=2500)
+Heatmap(t(HPA_filter2), name="Level", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(10, "cm"), height = unit(12, "cm"))
+dev.off()
+
+HPA_exp3 <- HPA_exp2[,-c(1,3,6)]
+HPA_exp3$Level <- as.numeric(HPA_exp3$Level)
+
+HPA_filter_cell <- HPA_exp3 %>% group_by(Cell.type, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+HPA_filter_cell <- HPA_filter_cell %>% pivot_wider(names_from= Cell.type, values_from= Level)
+HPA_filter_cell <- data.frame(HPA_filter_cell)
+rownames(HPA_filter_cell) <- HPA_filter_cell$Gene.name
+HPA_filter_cell <- HPA_filter_cell[,-c(1)]
+HPA_filter_cell[is.na(HPA_filter_cell)] <- 0
+HPA_filter_cell <- filter(HPA_filter_cell, rownames(HPA_filter_cell) %in% kmt| rownames(HPA_filter_cell) %in% kdm| rownames(HPA_filter_cell) %in% kat| rownames(HPA_filter_cell) %in% hdac)
+
+HPA_filter_cmx <- as.matrix(HPA_filter_cell)
+
+
+png(filename= "HPA_exp_levels_cell.png", res=300, width=3000, height=3000)
+Heatmap(HPA_filter_cmx, name="Level", column_names_gp = grid::gpar(fontsize = 5), row_names_gp = grid::gpar(fontsize = 5), width = unit(15, "cm"), height = unit(12, "cm"))
+dev.off()
+```
+
