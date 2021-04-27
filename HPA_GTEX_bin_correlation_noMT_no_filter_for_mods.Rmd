@@ -211,7 +211,16 @@ t.test(gtex_highest, gtex_high)
 #sample estimates:
 #mean of x     mean of y 
 # 1.613880      1.598096 
-
+f <- ecdf(unmatrix(gtex_mod_log))
+f(mean(gtex_high))
+#0.6811203. The mean is 68th percentile of all TPMs
+f(mean(gtex_med))
+#0.6038069. The mean is 60th percentile of all TPMs
+f(mean(gtex_low))
+#0.5368481. The mean is 54th percentile of all TPMs
+f(mean(gtex_none))
+# 0.312759. The mean is 31st percentile of all TPMs
+plot(f)
 
 hg_high <- hist(gtex_high, plot=FALSE)
 hg_med <- hist(gtex_med, plot=FALSE)
