@@ -222,6 +222,19 @@ f(mean(gtex_none))
 # 0.312759. The mean is 31st percentile of all TPMs
 plot(f)
 
+length(gtex_high)
+#33740
+#9.551958% of genes in both GTEX and HPA
+length(gtex_med)
+#91993
+#26.04367% of genes
+length(gtex_low)
+#76560
+#21.67451% of genes
+length(gtex_none)
+#150933
+#42.72987% of genes
+
 hg_high <- hist(gtex_high, plot=FALSE)
 hg_med <- hist(gtex_med, plot=FALSE)
 hg_low <- hist(gtex_low, plot=FALSE)
@@ -233,7 +246,7 @@ range(c(hg_high$breaks, hg_med$breaks, hg_low$breaks, hg_none$breaks)) # Get ran
 max(c(hg_high$count, hg_med$count, hg_low$count, hg_none$count)) # Get range for y-axis
 
 adjustcolor("orange", alpha.f = 0.2)
-adjustcolor("violet", alpha.f = 0.2)
+adjustcolor("blue", alpha.f = 0.2)
 adjustcolor("green", alpha.f = 0.2)
 
 
@@ -246,6 +259,23 @@ plot(hg_none, add = TRUE, col = "#F8766D33")
 bp_names <- c("High", "Med", "Low", "None")
 
 boxplot(gtex_high, gtex_med, gtex_low, gtex_none, names=bp_names, horizontal= TRUE, xlab= "Log(TPM+1)")
+
+sum(gtex_high == 0) 
+sum(gtex_med == 0) 
+sum(gtex_low == 0) 
+sum(gtex_none == 0) 
+
+
+sum(gtex_high == 0)/length(gtex_high) 
+sum(gtex_med == 0)/length(gtex_med) 
+sum(gtex_low == 0)/length(gtex_low) 
+sum(gtex_none == 0)/length(gtex_none) 
+
+
+
+
+
+
 
 
 
