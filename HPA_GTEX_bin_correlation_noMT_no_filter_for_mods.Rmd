@@ -213,6 +213,31 @@ t.test(gtex_highest, gtex_high)
 # 1.613880      1.598096 
 
 
+hg_high <- hist(gtex_high, plot=FALSE)
+hg_med <- hist(gtex_med, plot=FALSE)
+hg_low <- hist(gtex_low, plot=FALSE)
+hg_none <- hist(gtex_none, plot=FALSE)
+
+
+range(c(hg_high$breaks, hg_med$breaks, hg_low$breaks, hg_none$breaks)) # Get range for x-axis
+
+max(c(hg_high$count, hg_med$count, hg_low$count, hg_none$count)) # Get range for y-axis
+
+adjustcolor("orange", alpha.f = 0.2)
+adjustcolor("violet", alpha.f = 0.2)
+adjustcolor("green", alpha.f = 0.2)
+
+
+
+plot(hg_high, col = "#FFA50033", xlim = c(0, 6), ylim = c(0,40000))
+plot(hg_med, add = TRUE, col = "#0000FF33")
+plot(hg_low, add = TRUE, col = "#00FF0033")
+plot(hg_none, add = TRUE, col = "#F8766D33")
+
+bp_names <- c("High", "Med", "Low", "None")
+
+boxplot(gtex_high, gtex_med, gtex_low, gtex_none, names=bp_names, horizontal= TRUE, xlab= "Log(TPM+1)")
+
 
 
 
