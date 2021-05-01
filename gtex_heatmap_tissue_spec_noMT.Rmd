@@ -56,6 +56,26 @@ ensembl_hdac <- ensembl_hdac$"Name"
 write.csv(ensembl_hdac,'HDAC_gtex_ensemblID.csv')
 
 ```
+```{r specificity heatmap for all mods}
+gtex_filter <- filter(gtex, Description %in% kmt2| Description %in% kdm| Description %in% kat| Description %in% hdac)
+
+gtex_filter_mx <- apply(as.matrix(gtex_filter, ncol= ncol(gtex_filter)), 2, as.numeric)
+gtex_filter_mx[is.na(gtex_filter_mx)] <- 0
+gtex_filter_mx <- gtex_filter_mx[,-c(1)]
+rownames(gtex_filter_mx) <- gtex_filter$Description
+
+gtex_sd <- gtex_filter_mx
+
+for(i in 1:nrow(gtex_filter_mx)){
+ gtex_sd[i,] <- (gtex_filter_mx[i,]- mean(gtex_filter_mx[i,]))/(sd(gtex_filter_mx[i,]))
+}
+gtex_sd[is.na(gtex_sd)] <- 0
+
+png(filename= "Tissue_specificity_gtex_noMT.png", res=300, width=3000, height=3000)
+Heatmap(gtex_sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(12, "cm"), height = unit(15, "cm"))
+dev.off()
+
+```
 
 ```{r specificity heatmap for kmt}
 
