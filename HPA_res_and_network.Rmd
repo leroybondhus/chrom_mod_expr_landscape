@@ -49,9 +49,9 @@ HPA_exp$Level[i]=3
 } 
 }
 
+HPA_exp$Level <- as.numeric(HPA_exp$Level)
 HPA_exp2 <- HPA_exp
 HPA_exp <- HPA_exp[,-c(1,4,6)]
-HPA_exp$Level <- as.numeric(HPA_exp$Level)
 hist(HPA_exp$Level)
 
 ```
@@ -211,14 +211,29 @@ dev.off()
 
 
 ```{r resolution}
+HPA_round <- HPA_filter2
 
-HPA_round <- round(HPA_filter2, digits=0)
+for(row in 1:nrow(HPA_round)) {
+  for(col in 1:ncol(HPA_round)) {
+        if (HPA_round[row,col] >= 2.5) {
+HPA_round[row,col]=3
+} 
+    else if (HPA_round[row,col] < 2.5 & HPA_round[row,col] >= 1.5) {
+HPA_round[row,col]=2
+    } 
+    else if (HPA_round[row,col] < 1.5 & HPA_round[row,col] >= 0.5) {
+HPA_round[row,col]=1
+} 
+    else {
+HPA_round[row,col]=0
+}
+  }}
 
 res <- table(c(col(HPA_round)), c(HPA_round))
 resm <- rbind(as.numeric(names(res)), res)
 rownames(resm) <- colnames(HPA_round)
 
-png(filename= "HPA_expression_counts", res=300, width= 1000, height=3000)
+png(filename= "HPA_expression_counts2", res=300, width= 1000, height=3000)
 Heatmap(resm, name= "count", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
 dev.off()
 

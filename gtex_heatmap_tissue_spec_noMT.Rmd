@@ -72,6 +72,10 @@ for(i in 1:nrow(gtex_filter_mx)){
 gtex_sd[is.na(gtex_sd)] <- 0
 
 png(filename= "Tissue_specificity_gtex_noMT.png", res=300, width=3000, height=3000)
+Heatmap(gtex_sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(12, "cm"), height = unit(15, "cm"), col = colorRamp2(c(4, 2, 0, -2, -4), brewer.pal(n=5, name="RdBu")))
+dev.off()
+
+png(filename= "Tissue_specificity_gtex_dark_noMT.png", res=300, width=3000, height=3000)
 Heatmap(gtex_sd, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(12, "cm"), height = unit(15, "cm"))
 dev.off()
 
