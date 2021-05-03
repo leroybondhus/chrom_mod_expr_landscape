@@ -256,6 +256,32 @@ dev.off()
 
 ```
 
+
+```{r network plot for specificity}
+HPA.z.cor <- cor(t(HPA_filter_z), method="pearson")
+HPA.z.cor[is.na(HPA.z.cor)] <- 0
+
+#Remove lower correlations
+network.mx3 <- HPA.z.cor
+network.mx3[network.mx3<0.65] <- 0
+#igraph object from matrix
+network3 <- graph_from_adjacency_matrix(network.mx3, weighted=T, mode="undirected", diag=F)
+par(bg="grey13", mar=c(0,0,0,0))
+plot(network3, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+#legend
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+```
+```{r png}
+png(filename= "network_HPA_specificity_0.65.png", res=300, width=3000, height=3000)
+network3 <- graph_from_adjacency_matrix(network.mx3, weighted=T, mode="undirected", diag=F)
+par(bg="grey13", mar=c(0,0,0,0))
+plot(network3, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+#legend
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+dev.off()
+
+```
+
 ```{r specificity heatmap for hpa exp kmt}
 kmt.hpa.z <- t(kmt_hpa2)
 
