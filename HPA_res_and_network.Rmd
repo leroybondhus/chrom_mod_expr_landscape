@@ -239,6 +239,23 @@ dev.off()
 
 
 ```
+```{r specificity heatmap for all hpa}
+HPA_filter_z <- t(HPA_filter2)
+
+for(i in 1:nrow(HPA_filter_z)){
+ HPA_filter_z[i,] <- (HPA_filter_z[i,]- mean(HPA_filter_z[i,]))/(sd(HPA_filter_z[i,]))
+}
+HPA_filter_z[is.na(HPA_filter_z)] <- 0
+
+# Open a png file
+png("all_hpa_z.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(HPA_filter_z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+# Close the pdf file
+dev.off() 
+
+```
+
 ```{r specificity heatmap for hpa exp kmt}
 kmt.hpa.z <- t(kmt_hpa2)
 

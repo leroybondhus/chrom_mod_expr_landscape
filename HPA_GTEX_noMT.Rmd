@@ -153,6 +153,15 @@ HPA_mod <- HPA_mod[,-c(1,4,6)]
 HPA_mod$Level <- as.numeric(HPA_mod$Level)
 ```
 ```{r filter for modifiers}
+#filter for all mod
+all_HPA_mod <- filter(HPA_mod, Gene.name %in% kmt|Gene.name %in% kdm|Gene.name %in% kat|Gene.name %in% hdac)
+
+all_HPA_mod <- all_HPA_mod %>% group_by(Tissue, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+all_HPA_mod <- all_HPA_mod %>% pivot_wider(names_from= Tissue, values_from= Level)
+all_HPA_mod <- data.frame(all_HPA_mod)
+rownames(all_HPA_mod) <- all_HPA_mod$Gene.name
+all_HPA_mod <- all_HPA_mod[,-c(1)]
+
 #filter for kmt
 kmt_HPA <- filter(HPA_mod, Gene.name %in% kmt)
 kmt_HPA <- kmt_HPA %>% group_by(Tissue, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
@@ -213,6 +222,16 @@ rownames(kmt_HPA) <- kmt_HPA$Gene.name
 kmt_HPA <- kmt_HPA[,-c(1)]
 ```
 ```{r standardize names}
+#Combine tissues in all_HPA_mod
+Lung <- c(rowMeans(all_HPA_mod[,c(5,21)]))
+Small.intestine <- c(rowMeans(all_HPA_mod[,c(11,31)]))
+Uterus <- c(rowMeans(all_HPA_mod[,c(12:13)]))
+Testis <- c(rowMeans(all_HPA_mod[,c(14,27,35)]))
+Skin <- c(rowMeans(all_HPA_mod[,c(29,30)]))
+Stomach <- c(rowMeans(all_HPA_mod[,c(33,34)]))
+
+all_HPA_mod <- cbind(all_HPA_mod[,-c(5,21,11,31,12,13,14,27,35,29,30,33,34)], Lung, Small.intestine, Uterus, Testis, Stomach, Skin)
+
 #Combine tissues in kmt_HPA
 Lung <- c(rowMeans(kmt_HPA[,c(5,21)]))
 Small.intestine <- c(rowMeans(kmt_HPA[,c(11,31)]))
@@ -259,6 +278,8 @@ hdac_HPA <- cbind(hdac_HPA[,-c(5,21,11,31,12,13,14,27,35,29,30,33,34)], Lung, Sm
 colnames(gtex_mod) <- c("Adrenal.gland", "Bladder", "Brain.Caudate", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Lymphatic.tissue", "Fallopian.tube", "Liver", "Lung", "Salivary.gland", "Skeletal.muscle", "Ovary", "Pancreas", "Prostate", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina", "Blood", "Adipose", "Brain.Cerebellum", "Cervix", "Colon", "Esophagus", "Heart", "Kidney", "Skin")
 
 #HPA
+colnames(all_HPA_mod) <- c("Adipose", "Adrenal.gland", "Blood", "Breast", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Brain.Hippocampus", "Kidney", "Liver", "Lymphatic.tissue", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Spleen", "Thyroid", "Bladder", "Vagina", "Lung", "Small.intestine", "Uterus", "Testis", "Stomach", "Skin")
+
 chromatin_colnames <- c("Adipose", "Adrenal.gland", "Blood", "Breast", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Brain.Hippocampus", "Kidney", "Liver", "Lymphatic.tissue", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Spleen", "Thyroid", "Bladder", "Vagina", "Lung", "Small.intestine", "Uterus", "Testis", "Stomach", "Skin")
 colnames(kmt_HPA) <- chromatin_colnames
 colnames(kdm_HPA) <- chromatin_colnames
@@ -269,6 +290,9 @@ colnames(hdac_HPA) <- chromatin_colnames
 col_order <- c("Adipose", "Adrenal.gland", "Bladder", "Blood", "Brain.Caudate", "Brain.Cerebellum", "Brain.Cortex", "Brain.Hippocampus", "Breast", "Cervix", "Colon", "Esophagus", "Fallopian.tube", "Heart", "Kidney", "Liver", "Lung", "Lymphatic.tissue", "Ovary", "Pancreas", "Prostate", "Salivary.gland", "Skeletal.muscle", "Skin", "Small.intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina")
 
 gtex_mod <- gtex_mod[, col_order]
+all_HPA_mod <- all_HPA_mod[, col_order]
+
+
 kmt_HPA <- kmt_HPA[, col_order]
 kdm_HPA <- kdm_HPA[, col_order]
 kat_HPA <- kat_HPA[, col_order]
@@ -277,12 +301,17 @@ hdac_HPA <- hdac_HPA[, col_order]
 ```
 ```{r filter GTEX}
 gtex_mdf <- data.frame(gtex_mod)
+all_gtex_mod <- filter(gtex_mdf, rownames(gtex_mdf) %in% kmt|rownames(gtex_mdf) %in% kdm|rownames(gtex_mdf) %in% kat|rownames(gtex_mdf) %in% hdac)
+
 kmt_gtex <- filter(gtex_mdf, rownames(gtex_mdf) %in% kmt)
 kdm_gtex <- filter(gtex_mdf, rownames(gtex_mdf) %in% kdm)
 kat_gtex <- filter(gtex_mdf, rownames(gtex_mdf) %in% kat)
 hdac_gtex <- filter(gtex_mdf, rownames(gtex_mdf) %in% hdac)
 
 #convert to matrices
+all_gtexm_mx <- t(apply(as.matrix(all_gtex_mod, ncol= ncol(all_gtex_mod)), 2, as.numeric))
+colnames(all_gtexm_mx) <- rownames(all_gtex_mod)
+
 kmt_gtex.mx <- t(apply(as.matrix(kmt_gtex, ncol= ncol(kmt_gtex)), 2, as.numeric))
 colnames(kmt_gtex.mx) <- rownames(kmt_gtex)
 
@@ -296,6 +325,10 @@ hdac_gtex.mx <- t(apply(as.matrix(hdac_gtex, ncol= ncol(hdac_gtex)), 2, as.numer
 colnames(hdac_gtex.mx) <- rownames(hdac_gtex)
 # pivot HPA
 
+all_HPA_mod <- t(all_HPA_mod)
+all_HPA_mod[is.na(all_HPA_mod)] <- 0
+
+
 kmt_HPA <- t(kmt_HPA)
 kdm_HPA <- t(kdm_HPA)
 kat_HPA <- t(kat_HPA)
@@ -308,6 +341,22 @@ hdac_HPA[is.na(hdac_HPA)] <- 0
 
 
 
+
+```
+```{r correlate all mod}
+all.comp <- cor(all_HPA_mod, all_gtexm_mx, method= "pearson")
+all.comp[is.na(all.comp)] <- 0
+is.element(colnames(all.comp), rownames(all.comp))
+
+all.comp <- all.comp[,-c(1,13,18,20,27,29,30,40,41,44,46,56,58,60,61,63,65,67,69,71,75,82,83,85,86,93,95,101)]
+
+all.comp.order <- c(colnames(all.comp))
+all.comp<- all.comp[all.comp.order, ]
+all.comp.sq <- (all.comp)^2
+
+png("HPA_gtex_all_mod_noMT.png", res=300, height=3000, width=3000 )
+Heatmap(all.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+dev.off
 
 ```
 ```{r tpm distribution gtex-mod}
