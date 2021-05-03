@@ -250,7 +250,7 @@ HPA_filter_z[is.na(HPA_filter_z)] <- 0
 # Open a png file
 png("all_hpa_z.png", res=300, width=3000, height=3000) 
 # 2. Create a plot
-Heatmap(HPA_filter_z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(8, "cm"))
+Heatmap(HPA_filter_z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(15, "cm"))
 # Close the pdf file
 dev.off() 
 
