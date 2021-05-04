@@ -17,6 +17,10 @@ library(gdata)
 library(igraph)
 
 ```
+```{r file description}
+#Uses the second combination of tissues which is more constrictive and excludes a greater number of tissues from analyses
+
+```
 
 
 ```{r read in data}
@@ -152,7 +156,7 @@ rownames(HPA_mod_mx) <- rownames(HPA_mod3)
 high_exp <- which(HPA_mod_mx >= 2.5)
 med_exp <- which(HPA_mod_mx < 2.5 & HPA_mod_mx >= 1.5)
 low_exp <- which(HPA_mod_mx < 1.5 & HPA_mod_mx >= 0.5)
-no_exp <- which(HPA_mod_mx == 0)
+no_exp <- which(HPA_mod_mx < 0.5)
 
 highest_exp <- which(HPA_mod_mx == 3)
 
@@ -196,13 +200,13 @@ t.test(gtex_med, gtex_low)
 #mean of x    mean of y 
 # 1.475217     1.368323 
 t.test(gtex_low, gtex_none)
-#t = 157.82, df = 180446, p-value < 2.2e-16
+#t = 154.02, df = 179380, p-value < 2.2e-16
 #alternative hypothesis: true difference in means is not equal to 0
 #95 percent confidence interval:
-# 0.4537906 0.4652036
+# 0.4399612 0.4513032
 #sample estimates:
 #mean of x    mean of y 
-#1.3683225    0.9088254 
+#1.3683225    0.9226903 
 t.test(gtex_highest, gtex_high)
 #t = 3.2127, df = 55006, p-value = 0.001316
 #alternative hypothesis: true difference in means is not equal to 0
@@ -211,6 +215,46 @@ t.test(gtex_highest, gtex_high)
 #sample estimates:
 #mean of x     mean of y 
 # 1.613880      1.598096 
+
+
+
+
+#one-sided tests
+t.test(gtex_high, gtex_med, alternative="greater")
+#t = 32.939, df = 58414, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is greater than 0
+#95 percent confidence interval:
+# 0.1167428       Inf
+#sample estimates:
+#mean of x    mean of y 
+# 1.598096    1.475217 
+
+t.test(gtex_med, gtex_low, alternative="greater")
+#t = 36.75, df = 158602, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is greater than 0
+#95 percent confidence interval:
+# 0.1021101       Inf
+#sample estimates:
+#mean of x mean of y 
+# 1.475217  1.368323  
+t.test(gtex_low, gtex_none, alternative="greater")
+#t = 154.02, df = 179380, p-value < 2.2e-16
+#alternative hypothesis: true difference in means is greater than 0
+#95 percent confidence interval:
+# 0.4408729       Inf
+#sample estimates:
+#mean of x mean of y 
+#1.3683225 0.9226903 
+
+t.test(gtex_highest, gtex_high, alternative="greater")
+#t = 3.2127, df = 55006, p-value = 0.0006578
+#alternative hypothesis: true difference in means is greater than 0
+#95 percent confidence interval:
+# 0.007702424         Inf
+#sample estimates:
+#mean of x   mean of y 
+# 1.613880    1.598096  
+
 f <- ecdf(unmatrix(gtex_mod_log))
 f(mean(gtex_high))
 #0.6811203. The mean is 68th percentile of all TPMs
@@ -219,21 +263,21 @@ f(mean(gtex_med))
 f(mean(gtex_low))
 #0.5368481. The mean is 54th percentile of all TPMs
 f(mean(gtex_none))
-# 0.312759. The mean is 31st percentile of all TPMs
+# 0.3176461. The mean is 32nd percentile of all TPMs
 plot(f)
 
 length(gtex_high)
 #33740
-#9.551958% of genes in both GTEX and HPA
+#9.551958% of all protein expression scores recorded for genes in both GTEX and HPA
 length(gtex_med)
 #91993
-#26.04367% of genes
+#26.04367% of HPA scores
 length(gtex_low)
 #76560
-#21.67451% of genes
+#21.67451% of HPA scores
 length(gtex_none)
-#150933
-#42.72987% of genes
+#156002
+#43.5401% of HPA scores
 
 hg_high <- hist(gtex_high, plot=FALSE)
 hg_med <- hist(gtex_med, plot=FALSE)

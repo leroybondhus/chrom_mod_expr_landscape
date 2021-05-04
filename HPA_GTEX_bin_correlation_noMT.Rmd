@@ -18,6 +18,11 @@ library(igraph)
 
 ```
 
+```{r description}
+#This Rmd uses the second set of combined tissues which is more constrictive and excludes more tissues from analyses
+
+```
+
 
 ```{r read in data}
 HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
@@ -136,7 +141,7 @@ gtex_mod <- data.frame(gtex_mod)
 gtex_filter <- filter(gtex_mod, rownames(gtex_mod) %in% kmt| rownames(gtex_mod) %in% kdm| rownames(gtex_mod) %in% kat| rownames(gtex_mod) %in% hdac)
 
 is.element(rownames(gtex_filter), rownames(HPA_filter2))
-gtex_filter2 <- gtex_filter[-c(1,13,18,20,28,30,31,41,42,45,46,48,58,60,61,63,64,66,68,70,73,75,79,86,87,89,90,97,99,106),]
+gtex_filter2 <- gtex_filter[-c(1,13,18,20,27,29,30,40,41,44,46,56,58,60,61,63,65,67,69,71,75,82,83,85,86,93,95,101),]
 
 is.element(rownames(gtex_filter2), rownames(HPA_filter2))
 is.element(rownames(HPA_filter2), rownames(gtex_filter2))
@@ -156,7 +161,7 @@ rownames(HPA_filter_mx) <- rownames(HPA_filter2)
 high_exp <- which(HPA_filter_mx >= 2.5)
 med_exp <- which(HPA_filter_mx < 2.5 & HPA_filter_mx >= 1.5)
 low_exp <- which(HPA_filter_mx < 1.5 & HPA_filter_mx >= 0.5)
-no_exp <- which(HPA_filter_mx == 0)
+no_exp <- which(HPA_mod_mx < 0.5)
 
 highest_exp <- which(HPA_filter_mx == 3)
 
@@ -183,41 +188,39 @@ hist(gtex_low)
 hist(gtex_none)
 hist(gtex_highest)
 
-t.test(gtex_high, gtex_med)
-#t = -1.2373, df = 684.08, p-value = 0.2164
-#alternative hypothesis: true difference in means is not equal to 0
+t.test(gtex_high, gtex_med, alternative=c("greater"))
+#t = -1.5476, df = 883.66, p-value = 0.939
+#alternative hypothesis: true difference in means is greater than 0
 #95 percent confidence interval:
-# -0.07228606  0.01640041
-##mean of x   mean of y 
-##1.461151    1.489094 
-t.test(gtex_med, gtex_low)
-#t = 2.0382, df = 1037.5, p-value = 0.04178
-#alternative hypothesis: true difference in means is not equal to 0
-#95 percent confidence interval:
-# 0.001601248 0.084296333
-#sample estimates:
+# -0.06873442         Inf
 #mean of x   mean of y 
-# 1.489094    1.446146 
-t.test(gtex_low, gtex_none)
-#t = 12.605, df = 708.65, p-value < 2.2e-16
-#alternative hypothesis: true difference in means is not equal to 0
+# 1.440575   1.473877 
+
+t.test(gtex_med, gtex_low, alternative="greater")
+#t = 2.3273, df = 970.95, p-value = 0.01008
+#alternative hypothesis: true difference in means is greater than 0
 #95 percent confidence interval:
-# 0.3767376 0.5157442
-#sample estimates:
-#mean of x   mean of y 
-#1.4461455   0.9999046 
-t.test(gtex_highest, gtex_med)
-#t = -1.1974, df = 624.1, p-value = 0.2316
-#alternative hypothesis: true difference in means is not equal to 0
+# 0.01470789        Inf
+#mean of x    mean of y 
+# 1.473877     1.423603 
+t.test(gtex_low, gtex_none, alternative="greater")
+#t = 2.374, df = 1056.2, p-value = 0.008886
+#alternative hypothesis: true difference in means is greater than 0
 #95 percent confidence interval:
-# -0.07342783  0.01780094
-#sample estimates:
-#mean of x      mean of y 
-# 1.461281       1.489094 
+# 0.01580598        Inf
+#mean of x mean of y 
+# 1.423603  1.372041 
+t.test(gtex_highest, gtex_med, alternative="greater")
+#t = -0.81628, df = 609.75, p-value = 0.7927
+#alternative hypothesis: true difference in means is greater than 0
+#95 percent confidence interval:
+# -0.05823161         Inf
+#mean of x    mean of y 
+# 1.454583     1.473877
 
 
 
-
+plot(HPA_filter_mx, gtex_filter_log)
 
 ```
 
