@@ -28,10 +28,16 @@ gtex <- gtex[,-c(1) ]
 #log TPM (use log10(x+1))
 gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
 gtex_mx<- gtex_mx[,-c(1)]
+gtex_mx[is.na(gtex_mx)] <- 0
+
+
 gtex_log <- log10(gtex_mx + 1)
 rownames(gtex_log) <- gtex$"Description"
 gtex_log_df <- data.frame(gtex_log)
 
+gtex_ln <- log(gtex_mx + 1)
+rownames(gtex_ln) <- gtex$"Description"
+gtex_ln_df <- data.frame(gtex_ln)
 
 ```
 
@@ -44,6 +50,9 @@ kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
 hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
 
 log_all_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kmt|rownames(gtex_log_df) %in% kdm|rownames(gtex_log_df) %in% kat|rownames(gtex_log_df) %in% hdac)
+ln_all_table <- filter(gtex_ln_df, rownames(gtex_ln_df) %in% kmt|rownames(gtex_ln_df) %in% kdm|rownames(gtex_ln_df) %in% kat|rownames(gtex_ln_df) %in% hdac)
+
+
 log_kmt_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kmt)
 log_kdm_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kdm)
 log_kat_table <- filter(gtex_log_df, rownames(gtex_log_df) %in% kat)
@@ -67,6 +76,9 @@ colnames(log_hdac_mx) <- rownames(log_hdac_table)
 log_all_mx <- apply(as.matrix(log_all_table, ncol= ncol(log_all_table)), 2, as.numeric)
 rownames(log_all_mx)<- rownames(log_all_table)
 
+ln_all_mx <- apply(as.matrix(ln_all_table, ncol= ncol(ln_all_table)), 2, as.numeric)
+rownames(ln_all_mx)<- rownames(ln_all_table)
+
 all_row_order <- c("PRDM2", "HDAC5", "NCOA1", "EHMT2", "KAT14", "SIRT3", "ATF2", "SMYD3", "HDAC8", "SIRT2", "HDAC11", "KAT2B", "HDAC9", "PRDM8", "HDAC4", "SUV39H1", "NSD2", "EZH2", "NAT10", "HR", "KDM4E", "PHF8", "KDM1A", "SUV39H2", "RIOX1", "DOT1L", "PRDM7", "PRDM9", "KDM4F", "CDY2A", "KDM4D", "KDM5B", "MECOM", "SIRT7", "KDM6B", "KDM5D", "UTY", "RIOX2", "KDM1B", "SIRT1", "HDAC2", "KAT7", "CLOCK", "KAT2A", "N6AMT1", "SIRT6", "HDAC10", "KMT5C", "HDAC6", "SETD5", "RSBN1", "PHF2", "KMT5B", "EZH1", "KAT8", "KMT2A", "NSD3", "ASH1L", "JMJD1C", "KDM4C", "SETD6", "KDM4B", "KMT2B", "SETD1A", "KDM2A", "CREBBP", "SETD2", "EP300", "MCM3AP", "KMT2D", "KMT2C", "NSD1", "KAT6A", "TAF1", "KDM5C", "KDM2B", "GTF3C4", "KDM4A", "HDAC3", "SMYD2", "SMYD1", "KDM8", "PRDM6", "PRDM16", "HAT1", "NCOA3", "HDAC1", "SETDB2", "EHMT1", "SETDB1", "KDM5A", "KDM6A", "KDM3A", "KDM3B", "KAT5", "KAT6B", "SETD1B", "SETMAR", "HDAC7", "KMT5A", "CDY1", "SETD7", "KDM7A")
 all_col_order <- c("Testis", "Brain...Cerebellum", "Brain...Cerebellar.Hemisphere", "Cells...EBV.transformed.lymphocytes", "Thyroid", "Uterus", "Cervix...Endocervix", "Fallopian.Tube", "Cervix...Ectocervix", "Ovary", "Skin...Sun.Exposed..Lower.leg.", "Skin...Not.Sun.Exposed..Suprapubic.", "Bladder", "Nerve...Tibial", "Colon...Sigmoid", "Esophagus...Gastroesophageal.Junction", "Esophagus...Muscularis", "Vagina", "Minor.Salivary.Gland", "Breast...Mammary.Tissue", "Adipose...Subcutaneous", "Lung", "Adipose...Visceral..Omentum.", "Small.Intestine...Terminal.Ileum", "Colon...Transverse", "Spleen", "Prostate", "Pituitary", "Adrenal.Gland", "Artery...Tibial", "Artery...Coronary", "Artery...Aorta", "Cells...Cultured.fibroblasts", "Stomach", "Kidney...Medulla", "Kidney...Cortex", "Esophagus...Mucosa", "Heart...Atrial.Appendage", "Brain...Cortex", "Brain...Frontal.Cortex..BA9.", "Brain...Anterior.cingulate.cortex..BA24.", "Brain...Hypothalamus", "Brain...Hippocampus", "Brain...Amygdala", "Brain...Substantia.nigra", "Brain...Nucleus.accumbens..basal.ganglia.", "Brain...Caudate..basal.ganglia.","Brain...Putamen..basal.ganglia.", "Brain...Spinal.cord..cervical.c.1.", "Muscle...Skeletal", "Heart...Left.Ventricle", "Liver", "Whole.Blood", "Pancreas")
 
@@ -76,6 +88,7 @@ png(filename= "Modifier_Log_TPM.png", res=300, height=3000, width=2500 )
 Heatmap(log_all_mx, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(2.5, 2, 1.5, 0.75, 0), brewer.pal(n=5, name="RdBu")))
 dev.off()
 
+#png of non-clustered
 png(filename= "Modifier_Log_TPM_no_cluster.png", res=300, height=3000, width=2500 )
 Heatmap(log_all_mx, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(3, 2.5, 2, 1.5, 1, 0.5, 0), brewer.pal(n=7, name="RdBu")))
 dev.off()
@@ -87,6 +100,20 @@ dev.off()
 png(filename= "Modifier_Log_TPM_no_cluster_2.5.png", res=300, height=3000, width=2500 )
 Heatmap(log_all_mx, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15)
 dev.off()
+
+```
+```{r compare log vs ln correlation}
+log_corr <- cor(t(log_all_mx), method= "pearson")
+log_corr[is.na(log_corr)] <- 0
+
+ln_corr <- cor(t(ln_all_mx), method= "pearson")
+ln_corr[is.na(ln_corr)] <- 0
+
+
+Heatmap(log_corr, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(1,0.75,0.5,0.25,0,-0.5,-1), brewer.pal(n=7, name="RdBu")))
+
+Heatmap(ln_corr, name= "ln(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(1,0.75,0.5,0.25,0,-0.5,-1), brewer.pal(n=7, name="RdBu")))
+
 
 ```
 ```{r correlate kmt and kdm}
