@@ -15,6 +15,10 @@ library("circlize")
 library("RColorBrewer")
 library(gdata)
 ```
+```{r description}
+#This Rmd uses the first tissue combination, which includes more tissues from both gtex and HPA
+
+```
 
 
 ```{r read in data}
@@ -75,6 +79,13 @@ modifier.vec.raw <- unmatrix(gtex_modifiers_mx)
 
 hist(modifier.vec, main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
 hist(modifier.vec.raw[modifier.vec.raw <100], main= "GTEX Chromatin Modifiers TPM distribution", xlab= "TPM", breaks=20)
+
+# cumulative freq distribution for modifiers only
+hist(modifier.vec) -> hmod10 # do a histogram of y and assign its info to h
+hmod10$counts <- cumsum(hmod10$counts)/sum(hmod10$counts) # replace the cell freq.s by cumulative freq.s
+png(filename="GTEX_TPM_modifiers_cum_freq.png", res=300, width=2000, height=2000)
+plot(hmod10, main= "Chromatin Modifiers TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,3), xaxp=c(0,3,30)) # plot a cumulative histogram of y
+dev.off()
 
 quantile(modifier.vec.raw, c(.33, .66, 1))
 quantile(tpm.vec, c(.33, .66, 1))
