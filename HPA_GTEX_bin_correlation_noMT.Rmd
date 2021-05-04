@@ -218,6 +218,14 @@ t.test(gtex_highest, gtex_med, alternative="greater")
 #mean of x    mean of y 
 # 1.454583     1.473877
 
+length(gtex_high)
+#424
+length(gtex_med)
+#759
+length(gtex_low)
+#477
+length(gtex_none)
+#156002
 
 
 plot(HPA_filter_mx, gtex_filter_log)
