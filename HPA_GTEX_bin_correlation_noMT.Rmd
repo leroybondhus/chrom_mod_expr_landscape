@@ -231,5 +231,81 @@ length(gtex_none)
 plot(HPA_filter_mx, gtex_filter_log)
 
 ```
+```{r bin gtex TPMs}
+gtex_bin <- gtex_filter_log
 
+for(row in 1:nrow(gtex_bin)) {
+  for(col in 1:ncol(gtex_bin)) {
+        if (0 < gtex_bin[row,col] & gtex_bin[row,col] <= 0.5) {
+gtex_bin[row,col]=1
+        } 
+    else if (0.5 < gtex_bin[row,col] & gtex_bin[row,col] <= 1) {
+gtex_bin[row,col]=2
+    } 
+      else if (1 < gtex_bin[row,col] & gtex_bin[row,col] <= 1.5) {
+gtex_bin[row,col]=2
+      } 
+      else if (1.5 < gtex_bin[row,col] & gtex_bin[row,col] <= 2) {
+gtex_bin[row,col]=3
+    } 
+    else if (gtex_bin[row,col] > 2) {
+gtex_bin[row,col]=4
+    } 
+    else {
+gtex_bin[row,col]=0
+} 
+}}
+
+```
+```{r correlate HPA and gtex binned}
+rna.prot.cor <- cor(t(HPA_filter_mx), t(gtex_bin), method="pearson")
+#SD is 0 for HDAC10 in gtex and for N6AMT1 in HPA.
+rna.prot.cor[is.na(rna.prot.cor)] <- 0
+rna.prot.sq <- rna.prot.cor^2
+
+rna.prot.vec <- unmatrix(rna.prot.cor)
+rna.prot.sq.vec <- unmatrix(rna.prot.sq)
+
+hist(rna.prot.vec)
+hist(rna.prot.sq)
+
+Heatmap(rna.prot.cor, name= "R", row_names_side= "left", cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-0.25,-0.5,0,0.25,0.5,0.75,1), brewer.pal(n=7, name="RdBu")))
+Heatmap(rna.prot.sq, name= "R-sq", row_names_side= "left", cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(0,0.1,0.2,0.3,0.4,0.5,1), brewer.pal(n=7, name="Blues")))
+```
+```{r variance of modifiers in gtex}
+gtex_var <- matrix(nrow=nrow(gtex_filter_mx), ncol=1)
+rownames(gtex_var)<- rownames(gtex_filter_mx)
+colnames(gtex_var)<- c("Variance Across Tissues")
+
+for(row in 1:nrow(gtex_var)){
+ gtex_var[row,] <- var(gtex_filter_mx[row,])
+}
+
+```
+```{r correlation values}
+correlation <- matrix(nrow=nrow(gtex_filter_mx), ncol=1)
+rownames(correlation)<- rownames(gtex_filter_mx)
+colnames(correlation) <- c("R")
+
+for(row in 1:nrow(correlation)){
+  correlation[row,] <- cor(HPA_filter_mx[row,], gtex_filter_mx[row,])
+}
+
+
+
+```
+```{r combine and plot}
+cor.by.var <- cbind(correlation, gtex_var)
+cor.by.var <- data.frame(cor.by.var)
+plot(gtex_var, correlation)
+#same plot
+plot(cor.by.var$Variance.Across.Tissues, cor.by.var$R)
+
+
+rank(cor.by.var$Variance.Across.Tissues)
+cor.by.var$Rank <- 75-rank(cor.by.var$Variance.Across.Tissues)
+#rank 1 has highest variance; increase in rank means lower variance
+plot(cor.by.var$Rank, cor.by.var$R)
+
+```
 
