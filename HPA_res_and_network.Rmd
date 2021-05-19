@@ -2,6 +2,25 @@
 title: "HPA + GTEX"
 output: html_document
 ---
+
+```{r document}
+#Spearman correlation of HPA protein levels for modifiers (originally did Pearson's and got about the same correlations)
+
+#pairwise Pearson correlations for subcategories of modifiers (using original HPA tissues)
+
+#network plot for HPA correlations (Spearman, originally Pearson)
+
+#heatmap of distribution of protein levels by gene (resolution heatmap)
+
+#specificity heatmap for all modifiers in HPA
+
+#network plot for specificity (Spearman's correlation for protein specificity matrix, then network)
+
+#specificity heatmap for each modifier subcategory (using OG HPA tissues)
+
+#Heatmap of modifier protein levels when grouped by tissues and when grouped by cell type
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)
@@ -83,11 +102,11 @@ for(i in 1:ncol(HPA_filter3)) {
 
 
 
-HPA.cor <- cor(HPA_filter2, method="pearson")
+HPA.cor <- cor(HPA_filter2, method="spearman")
 HPA.cor[is.na(HPA.cor)] <- 0
 ```
 ```{r heatmap}
-png("all_modifier_HPA_cor2.png", res=300, width= 3000, height=3000)
+png("all_modifier_HPA_cor_sp.png", res=300, width= 3000, height=3000)
 Heatmap(HPA.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 dev.off()
 
@@ -199,7 +218,7 @@ plot(network2, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vert
 legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 ```
 ```{r png}
-png(filename= "network_HPA_0.65.png", res=300, width=3000, height=3000)
+png(filename= "network_HPA_0.65_sp.png", res=300, width=3000, height=3000)
 network2 <- graph_from_adjacency_matrix(network.mx2, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network2, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
@@ -234,7 +253,7 @@ resm <- rbind(as.numeric(names(res)), res)
 rownames(resm) <- colnames(HPA_round)
 
 png(filename= "HPA_expression_counts2", res=300, width= 1000, height=3000)
-Heatmap(resm, name= "count", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
+Heatmap(resm, name= "count", row_names_side= "right", row_dend_side= "left", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
 dev.off()
 
 
@@ -258,7 +277,7 @@ dev.off()
 
 
 ```{r network plot for specificity}
-HPA.z.cor <- cor(t(HPA_filter_z), method="pearson")
+HPA.z.cor <- cor(t(HPA_filter_z), method="spearman")
 HPA.z.cor[is.na(HPA.z.cor)] <- 0
 
 #Remove lower correlations
@@ -272,7 +291,7 @@ plot(network3, vertex.size= 5, vertex.label.cex=0.3, vertex.color=my.color, vert
 legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
 ```
 ```{r png}
-png(filename= "network_HPA_specificity_0.65.png", res=300, width=3000, height=3000)
+png(filename= "network_HPA_specificity_0.65_sp.png", res=300, width=3000, height=3000)
 network3 <- graph_from_adjacency_matrix(network.mx3, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network3, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")

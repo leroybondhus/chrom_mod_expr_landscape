@@ -1,0 +1,72 @@
+---
+title: "Explore_HPA"
+output: html_document
+---
+
+```{r document}
+#verify presence of each chromatin-modifying gene in HPA downloaded dataset
+
+```
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+```
+
+```{r read in data}
+HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
+
+bsp_columns <- read.csv("~/Downloads/brain_span_genes_matrix_csv/columns_metadata.csv")
+bsp_rows <- read.csv("~/Downloads/brain_span_genes_matrix_csv/rows_metadata.csv")
+bsp_num <- read.csv("~/Downloads/brain_span_genes_matrix_csv/expression_matrix.csv", header=FALSE)
+
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+bsp_num <- bsp_num[,-c(1)]
+colnames(bsp_num) <- bsp_columns$structure_acronym
+rownames(bsp_num) <- bsp_rows$ensembl_gene_id
+
+```
+```{r modifiers in HPA}
+#kmt
+is.element(kmt, HPA_tissue_exp$"Gene.name")
+is.element(c("KMT5A", "PR-Set7", "SET07", "SET8", "SETD8", "Set8b"), HPA_tissue_exp$"Gene.name")
+#kmt5a not in HPA dataset
+is.element(c("KMT2C", "HALR", "KIAA1506", "MLL3"), HPA_tissue_exp$"Gene.name")
+#kmt2c not in HPA dataset
+is.element(c("KMT2B", "CXXC10", "HRX2", "KIAA0304", "MLL1B", "MLL2", "MLL4", "TRX2", "WBP7"), HPA_tissue_exp$"Gene.name")
+is.element("ENSG00000272333", HPA_tissue_exp$Gene)
+#kmt2b not in HPA dataset
+is.element("ENSG00000110066", HPA_tissue_exp$Gene)
+#kmt5b not in dataset
+is.element(c("ENSG00000152784", "ENSG00000170364", "ENSG00000142611", "ENSG00000101945"), HPA_tissue_exp$Gene)
+#prdm8, setmar, prdm16, suv39h1 not in dataset
+
+#kdm
+is.element(kdm, HPA_tissue_exp$"Gene.name")
+is.element(c("ENSG00000073614", "ENSG00000126012", "ENSG00000012817", "ENSG00000127663", "ENSG00000107077", "ENSG00000115548", "ENSG00000089094", "ENSG00000168453", "ENSG00000170468", "ENSG00000235268", "ENSG00000255855"), HPA_tissue_exp$Gene)
+#KDM5A,KDM5C,KDM5D,KDM4B,KDM4C,KDM3A,KDM2B,HR,RIOX1,KDM4E,URLC2,KDM4F not in HPA dataset
+
+#kat
+is.element(kat, HPA_tissue_exp$"Gene.name")
+is.element(c("ENSG00000103510", "ENSG00000125484", "ENSG00000140396"), HPA_tissue_exp$Gene)
+#KAT8, NCOA2, GTF3C4 not in HPA dataset
+
+#hdac
+is.element(hdac, HPA_tissue_exp$"Gene.name")
+is.element(c("ENSG00000061273", "ENSG00000163517"), HPA_tissue_exp$Gene)
+#HDAC7, HDAC11 not in HPA dataset
+
+```

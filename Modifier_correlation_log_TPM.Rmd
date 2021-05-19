@@ -3,6 +3,14 @@ title: "Modifiers Correlation Log TPM"
 output: html_document
 ---
 
+```{r document}
+#This Rmd uses the original GTEx dataset
+#find ln(TPM+1) for all genes in GTEx
+#correlate modifiers by ln(TPM+1), pairwise and all modifiers, with p-values
+#row and column orders for non-clustered heatmaps need to be changed since list of modifiers has been revised
+
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)

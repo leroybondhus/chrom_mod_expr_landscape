@@ -2,6 +2,17 @@
 title: "HPA + GTEX"
 output: html_document
 ---
+```{r document}
+#This Rmd uses the second set of combined tissues which is more constrictive and excludes more tissues from analyses
+#group GTEx logTPMs by expression level in HPA, ie high expression are gene-tissue pairs that have a protein level of 3 in HPA, filtered for modifiers
+#histograms and boxplots of TPM distribution for each expression category, modifiers only
+#t.tests to look for significant differences in mean TPM for each expression category, modifiers only
+#bin GTEx TPMs by increments of 0.5 log(TPM+1) up to log(TPM+1)=2 is maximum bin category
+#correlate Pearson R and Rsq between binned TPMs and protein levels
+#Plot correlation values between RNA and protein by variance of the gene across all tissues
+
+```
+
 ```{r libraries}
 library(matrixStats)
 library(readr)
@@ -15,11 +26,6 @@ library("circlize")
 library("RColorBrewer")
 library(gdata)
 library(igraph)
-
-```
-
-```{r description}
-#This Rmd uses the second set of combined tissues which is more constrictive and excludes more tissues from analyses
 
 ```
 

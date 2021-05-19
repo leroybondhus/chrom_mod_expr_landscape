@@ -3,6 +3,14 @@ title: "Tissue specificity comparison"
 output: html_document
 ---
 
+```{r document}
+#this Rmd uses both the original GTEx dataset and the non-MT, PC GTEx dataset
+
+#KAT6B plot of TPMs (log2(TPM+1)) for non-MT dataset
+
+#delta matrix for tissue specificity score differences between MT and non-MT dataset
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)

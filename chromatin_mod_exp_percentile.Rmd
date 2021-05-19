@@ -3,6 +3,13 @@ title: "chromatin_mod_exp_percentile"
 output: html_document
 ---
 
+```{r document}
+#This Rmd uses the original GTEx dataset
+#percentile rank for each modifier gene in each tissue relative to all genes expressed in each tissue
+#calculate normalized rank using (mean percentile for each tissue - percentile for each modifier for that tissue)
+#row and column orders for non-clustered percentile heatmaps need to be changed since list of modifiers has been revised
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)

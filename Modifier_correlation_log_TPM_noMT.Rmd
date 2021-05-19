@@ -3,6 +3,16 @@ title: "Modifiers Correlation Log TPM"
 output: html_document
 ---
 
+```{r document}
+#non-MT GTEx dataset
+#distribution of log(TPMs+1) and ln(TPMs+1)
+#correlate chromatin modifiers by logTPM and lnTPM (looks the same), Pearson's correlation
+#calculate p values for each correlation
+#subset by modifier category
+#network plot (still messy)
+
+#row and column orders for non-clustered heatmaps need to be changed since list of modifiers has been revised
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)

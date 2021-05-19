@@ -3,6 +3,13 @@ title: "Chromatin Modifiers Correlation"
 output: html_document
 ---
 
+```{r document}
+#non-MT GTEx dataset
+#Spearman correlation for all modifiers by TPM w p-values
+#binary heatmap of correlations above a certain correlation coefficient (r) value
+#histogram showing distribution of all correlation coefficients and only correlation coefficients with a p-value less than or equal to 0.05
+#correlation matrices and r distributions for each pair of subcategory (ie KMT, KDM)
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)
@@ -92,7 +99,7 @@ modifier.cor.cut[row,col]=0
 modifier.cor.cut[row,col]=1
 }
 }}
-#visualize only correlations>0.8, about 20% of all significant correlations
+#visualize only correlations>0.7, about 20% of all significant correlations
 
 cutoff.hm <- Heatmap(modifier.cor.cut, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="Blues")))
 cutoff.hm

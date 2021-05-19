@@ -2,6 +2,15 @@
 title: "gtex_heatmap"
 output: html_document
 ---
+
+```{r document}
+#This Rmd uses the non-MT GTEx dataset
+#tissue specificity (z-score) matrix for all modifiers
+#create binary matrix and correlation of binary matrix using Pearson's
+#network plot for higher correlations in binary correlation matrix
+
+```
+
 ```{r libraries}
 library(readr)
 library(dplyr)

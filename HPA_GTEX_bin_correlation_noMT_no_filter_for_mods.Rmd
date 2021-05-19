@@ -2,6 +2,15 @@
 title: "HPA + GTEX"
 output: html_document
 ---
+
+```{r document}
+#Uses the second combination of tissues which is more constrictive and excludes a greater number of tissues from analyses
+#group GTEx logTPMs by expression level in HPA, ie high expression are gene-tissue pairs that have a protein level of 3 in HPA, no filter for modifiers
+#histograms and boxplots of TPM distribution for each expression category
+#t.tests to look for significant differences in mean TPM for each expression category
+#percentile rank with regard to entire GTEx TPM distribution for average TPM of each expression category
+```
+
 ```{r libraries}
 library(matrixStats)
 library(readr)
@@ -17,11 +26,6 @@ library(gdata)
 library(igraph)
 
 ```
-```{r file description}
-#Uses the second combination of tissues which is more constrictive and excludes a greater number of tissues from analyses
-
-```
-
 
 ```{r read in data}
 HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")

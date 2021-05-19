@@ -3,6 +3,14 @@ title: "Chromatin Modifiers Correlation"
 output: html_document
 ---
 
+```{r document}
+#uses the original GTEx dataset
+#Spearman correlation with p-values for all modifiers
+#binary cut-off correlation matrix with only higher correlation coefficients displayed
+#histogram of correlation values
+#pairwise Spearman correlation and histogram of correlation values for modifier subcategories
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)

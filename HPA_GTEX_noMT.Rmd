@@ -2,6 +2,27 @@
 title: "HPA + GTEX"
 output: html_document
 ---
+
+```{r document}
+#This Rmd uses the first tissue combination, which includes more tissues from both gtex and HPA
+#non-MT GTEx dataset
+
+#distribution of TPMs in entire nonMT GTEx dataset and for just modifiers, raw and log10. Density plot and histogram
+
+#Cumulative frequency distribution of all TPMs in nonMT GTEx dataset and for just modifiers
+
+#Pearson correlation R and R-sq between GTEx TPMs and HPA protein levels after combining tissues, all modifiers and pairwise
+
+#TPM distribution for GTEx with modified tissue groups
+
+#Pearson correlation for only data from HPA dataset after modifying tissue groups
+
+#specificity heatmaps for HPA dataset after modifying tissue groups, by subcategory only, no code for entire list of modifiers
+
+#code for binning GTEx TPMs by 0-33rd, 33rd-66th and 66th to 100th percentiles (not used)
+
+
+```
 ```{r libraries}
 library(matrixStats)
 library(readr)
@@ -15,11 +36,6 @@ library("circlize")
 library("RColorBrewer")
 library(gdata)
 ```
-```{r description}
-#This Rmd uses the first tissue combination, which includes more tissues from both gtex and HPA
-
-```
-
 
 ```{r read in data}
 HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
@@ -542,15 +558,6 @@ gtex_bin[row,col]=3
     else {
 gtex_bin[row,col]=0
 } 
-}}
-
-for(row in 1:nrow(modifier.cor.cut)) {
-  for(col in 1:ncol(modifier.cor.cut)) {
-        if (modifier.cor.cut[row,col]<0.7) {
-modifier.cor.cut[row,col]=0
-} else {
-modifier.cor.cut[row,col]=1
-}
 }}
 
 

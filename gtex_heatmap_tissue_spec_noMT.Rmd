@@ -2,6 +2,15 @@
 title: "gtex_heatmap"
 output: html_document
 ---
+
+```{r document}
+#non-MT GTEx dataset
+#determine whether genes in UniProtKB list are present in GTEx dataset
+#tissue specificity matrix for all chromatin-modifying genes and for each subcategory separately
+#test correlation of KMTs and KDMs by z-score instead of raw TPMs; no difference
+
+```
+
 ```{r libraries}
 install.packages("readxl")
 library(readr)

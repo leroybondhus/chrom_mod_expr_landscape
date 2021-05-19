@@ -2,6 +2,16 @@
 title: "HPA + GTEX"
 output: html_document
 ---
+```{r document}
+#This Rmd uses the first tissue combination, which includes more tissues from both gtex and HPA
+#this Rmd uses the original GTEx dataset
+#Pearson r and Rsq for protein-RNA expression
+#correlation matrices for HPA data only, before and after modifying tissue groups
+#specificity matrices for HPA data only, before and after modifying tissue groups
+#no correlation or specificity matrix for all modifiers together, only subcategories
+
+```
+
 ```{r libraries}
 library(matrixStats)
 library(readr)

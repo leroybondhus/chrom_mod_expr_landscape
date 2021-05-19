@@ -2,6 +2,13 @@
 title: "gtex_heatmap"
 output: html_document
 ---
+```{r document}
+#This Rmd uses the original GTEx dataset
+#specificity heatmap for each subcateogry of modifiers
+#correlation matrix by z-score for kMT-KDM as a test, looks the same as correalting by raw TPMs
+
+```
+
 ```{r libraries}
 install.packages("readxl")
 library(readr)
