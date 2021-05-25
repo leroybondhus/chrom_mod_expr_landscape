@@ -12,7 +12,6 @@ output: html_document
 ```
 
 ```{r libraries}
-install.packages("readxl")
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -44,7 +43,6 @@ gtex$V1[which(duplicated(gtex$V2))]
 kmt2 <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
 is.element(kmt2, gene_id_to_name$"Description")
 kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
-kdm <- kdm[,-c(29)]
 is.element(kdm, gene_id_to_name$"Description")
 kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
 is.element(kat, gene_id_to_name$"Description")

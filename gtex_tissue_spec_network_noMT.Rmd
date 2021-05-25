@@ -87,6 +87,8 @@ binary[binary>=2] <- 1
 binary.cor <- cor(binary, method= "pearson")
 binary.cor[is.na(binary.cor)] <- 0
 
+
+
 ```
 ```{r heatmap of binary}
 #plot of sd
