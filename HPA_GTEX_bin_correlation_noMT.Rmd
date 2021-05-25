@@ -167,7 +167,7 @@ rownames(HPA_filter_mx) <- rownames(HPA_filter2)
 high_exp <- which(HPA_filter_mx >= 2.5)
 med_exp <- which(HPA_filter_mx < 2.5 & HPA_filter_mx >= 1.5)
 low_exp <- which(HPA_filter_mx < 1.5 & HPA_filter_mx >= 0.5)
-no_exp <- which(HPA_mod_mx < 0.5)
+no_exp <- which(HPA_filter_mx < 0.5)
 
 highest_exp <- which(HPA_filter_mx == 3)
 
