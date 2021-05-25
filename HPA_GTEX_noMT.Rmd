@@ -139,8 +139,7 @@ hpa_tissues <- write.csv(unique(HPA_tissue_exp$Tissue), "HPA_tissues.csv")
 gtex_tissues <- write.csv(colnames(gtex[2:55]), "gtex_tissues.csv")
 ```
 ```{r compare tissues}
-#list of combined tissues
-tissues <- read_excel("~/Desktop/chromatin_modifier_transcriptome_landscape/HPA_gtex_tissues.xlsx", 3)
+
 #Combine tissues in GTEX
 Adipose <- c(rowMeans(gtex_mx[,1:2]))
 Brain.Cerebellum <- c(rowMeans(gtex_mx[,11:12]))
