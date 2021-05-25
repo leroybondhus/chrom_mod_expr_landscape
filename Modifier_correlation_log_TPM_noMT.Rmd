@@ -324,9 +324,16 @@ log.all.mod.hm <- Heatmap(log.modifier.cor, name= "Score", row_names_side= "left
 log.all.mod.hm
 
 # Open a png file
-png("log_all_cor_noMT.png", res=300, width=5000, height=5000) 
+png("log_all_cor_noMT_non_clustered.png", res=300, width=5000, height=5000) 
 # 2. Create a plot
 Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=FALSE, cluster_columns=FALSE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+
+# Open a png file
+png("log_all_cor_noMT.png", res=300, width=5000, height=5000) 
+# 2. Create a plot
+Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 # Close the png file
 dev.off() 
 ```
