@@ -11,6 +11,8 @@ output: html_document
 #correlate Pearson R and Rsq between binned TPMs and protein levels
 #Plot correlation values between RNA and protein by variance of the gene across all tissues
 
+#marginal distribution plots for binned TPMS, all genes and modifiers only
+
 ```
 
 ```{r libraries}
@@ -261,6 +263,50 @@ gtex_bin[row,col]=4
 gtex_bin[row,col]=0
 } 
 }}
+
+```
+```{r bin gtex TPMs, OG tissue set}
+
+log_gtex <- log10(gtex_mx + 1)
+gtex_bin_og <- log_gtex
+
+for(row in 1:nrow(gtex_bin_og)) {
+  for(col in 1:ncol(gtex_bin_og)) {
+        if (0 < gtex_bin_og[row,col] & gtex_bin_og[row,col] <= 0.5) {
+gtex_bin_og[row,col]=1
+        } 
+    else if (0.5 < gtex_bin_og[row,col] & gtex_bin_og[row,col] <= 1) {
+gtex_bin_og[row,col]=2
+    } 
+      else if (1 < gtex_bin_og[row,col] & gtex_bin_og[row,col] <= 1.5) {
+gtex_bin_og[row,col]=2
+      } 
+      else if (1.5 < gtex_bin_og[row,col] & gtex_bin_og[row,col] <= 2) {
+gtex_bin_og[row,col]=3
+    } 
+    else if (gtex_bin_og[row,col] > 2) {
+gtex_bin_og[row,col]=4
+    } 
+    else {
+gtex_bin_og[row,col]=0
+} 
+  }}
+
+gtex_bin_og <- t(gtex_bin_og)
+res_gtex <- table(gtex_bin_og)
+
+gtex_bin_df <- data.frame(t(gtex_bin_og))
+gtex_bin_f <- filter(gtex_bin_df, rownames(gtex_bin_df) %in% kmt|rownames(gtex_bin_df) %in% kdm|rownames(gtex_bin_df) %in% kat|rownames(gtex_bin_df) %in% hdac)
+
+res_gtex_f <- table(t(gtex_bin_f))
+
+barplot(res_gtex, ylim=c(0,450000), ylab="Frequency", xlab="RNA Expression Level")
+barplot(res_gtex_f, ylim=c(0,3500), ylab="Frequency", xlab="RNA Expression Level")
+
+
+
+
+
 
 ```
 ```{r correlate HPA and gtex binned}
