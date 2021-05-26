@@ -257,6 +257,7 @@ png(filename= "HPA_expression_counts2", res=300, width= 1000, height=3000)
 Heatmap(resm, name= "count", row_names_side= "right", row_dend_side= "left", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
 dev.off()
 
+
 resmdf <- data.frame(resm)
 zero <- sum(resmdf$X0)
 one <- sum(resmdf$X1)
@@ -265,7 +266,10 @@ three <- sum(resmdf$X3)
 
 counts <- cbind(zero, one, two, three)
 resm2 <- rbind(resm, counts)
-barplot(resm2[81,], ylab="Frequency", xlab="Protein Expression Level")
+
+png(filename= "HPA_marginal_distribution.png", res=300, width=1200, height=1000)
+barplot(resm2[81,], xlim= c(0, 1500), ylab="Protein Expression Level", xlab="Frequency", horiz=TRUE)
+dev.off()
 ```
 ```{r specificity heatmap for all hpa}
 HPA_filter_z <- t(HPA_filter2)
