@@ -5,7 +5,8 @@ output: html_document
 
 ```{r document}
 #This document uses the non-MT, PC-only GTEx data and HPA
-#distribution of average expression level across tissues for chromatin modifiers and non-modifiers
+#distribution of average expression level across tissues for chromatin modifiers and non-modifiers for gtex
+#across tissues and across cell type for HPA
 ```
 ```{r libraries}
 library(matrixStats)
