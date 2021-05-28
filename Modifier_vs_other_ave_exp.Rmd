@@ -1,0 +1,276 @@
+---
+title: "Modifier vs Other average expression"
+output: html_document
+---
+
+```{r document}
+#This document uses the non-MT, PC-only GTEx data and HPA
+#distribution of average expression level across tissues for chromatin modifiers and non-modifiers
+```
+```{r libraries}
+library(matrixStats)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readxl)
+library("Hmisc")
+library(ComplexHeatmap)
+library("circlize")
+library("RColorBrewer")
+library(gdata)
+library(igraph)
+
+```
+
+
+```{r read in data}
+HPA_tissue_exp <- read.delim("~/Downloads/HPA_tissue_exp.tsv")
+gtex <- read.csv("~/Downloads/gtex_medians_PC_only_wo_MT.csv", header=TRUE)
+
+
+#read in modifier lists
+kmt <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 2))
+kdm <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 3))
+kat <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 4))
+hdac <- t(read_excel("~/Desktop/GTEX/chromatin_modifiers_table.xlsx", 5))
+
+
+```
+```{r clean gtex}
+#remove first column of gtex
+gtex <- gtex[,-c(1)]
+#name+description table
+gene_id_to_name <- gtex[,c(1,2)]
+rownames(gtex) <- gtex$Name
+gtex <- gtex[,-c(1) ]
+gtex_mx <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_mx[is.na(gtex_mx)] <- 0
+rownames(gtex_mx)<- gtex$Description
+gtex_mx <- gtex_mx[,-c(1)]
+
+
+```
+```{r modify HPA}
+#convert detection levels to numbers
+HPA_exp <- HPA_tissue_exp
+for(i in 1:length(HPA_exp$Level)) {
+        if (HPA_exp$Level[i] == "Not detected") {
+HPA_exp$Level[i]=0
+        } 
+    else if (HPA_exp$Level[i]== "Low") {
+HPA_exp$Level[i]=1
+    } 
+    else if (HPA_exp$Level[i]== "Medium") {
+HPA_exp$Level[i]=2
+    } 
+    else {
+HPA_exp$Level[i]=3
+} 
+}
+
+HPA_exp$Level <- as.numeric(HPA_exp$Level)
+HPA_exp2 <- HPA_exp
+HPA_exp <- HPA_exp[,-c(1,4,6)]
+
+```
+```{r average across tissues for GTEx}
+#add column of average expression for each gene
+x <- data.frame(rowMeans(gtex_mx))
+gtex$Average <- x
+gtex_ave <- apply(as.matrix(gtex, ncol= ncol(gtex)), 2, as.numeric)
+gtex_ave[is.na(gtex_ave)] <- 0
+rownames(gtex_ave)<- gtex$Description
+gtex_ave <- gtex_ave[,-c(1)]
+
+#filter for modifiers only
+gtex_avedf <- data.frame(gtex_ave)
+gtex_mods <- filter(gtex_avedf, rownames(gtex_avedf) %in% kmt|rownames(gtex_avedf) %in% kdm|rownames(gtex_avedf) %in% kat|rownames(gtex_avedf) %in% hdac)
+
+#filter for all other genes
+modifier_list <- c(kmt, kdm, kat, hdac)
+gtex_other <- gtex_avedf[!(row.names(gtex_avedf) %in% modifier_list),]
+
+
+```
+```{r gtex ave distributions}
+plot(gtex_mods$Average)
+plot(gtex_other$Average)
+plot(gtex_other$Average, ylim=c(0,1000))
+plot(gtex_other$Average, ylim=c(0,200))
+
+
+boxplot(gtex_other$Average, horizontal = TRUE, ylim=c(0,200))
+points(mean(gtex_other$Average), 1, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+boxplot(gtex_mods$Average, horizontal = TRUE)
+points(mean(gtex_mods$Average), 1, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+bp_names <- c("Modifiers", "Non-modifiers")
+
+
+boxplot(gtex_mods$Average, gtex_other$Average, horizontal = TRUE, ylim=c(0,200), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average TPM")
+points(mean(gtex_mods$Average), 1, col = 2, pch = 19)
+points(mean(gtex_other$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+boxplot(gtex_other$Average, horizontal = TRUE, main= "Average expression of other genes", xlab= "Average TPM")
+
+
+summary(gtex_mods$Average)
+#Min.  1st Qu.  Median  Mean    3rd Qu.  Max. 
+#0.00   14.57   24.56   33.67   43.20  190.93 
+summary(gtex_other$Average)
+#Min.  1st Qu.   Median     Mean    3rd Qu.   Max. 
+#0.000  4.089   17.090     52.201   44.728   8081.602 
+
+```
+```{r distribution for lnTPM}
+gtex_log <- log(gtex_mx + 1)
+y <- data.frame(rowMeans(gtex_log))
+
+gtex2 <- gtex
+gtex2$Average <- y
+gtex_ave2 <- apply(as.matrix(gtex2, ncol= ncol(gtex2)), 2, as.numeric)
+gtex_ave2[is.na(gtex_ave2)] <- 0
+rownames(gtex_ave2)<- gtex2$Description
+gtex_ave2 <- gtex_ave2[,-c(1)]
+
+#filter for modifiers only
+gtex_ave2df <- data.frame(gtex_ave2)
+gtex_mods2 <- filter(gtex_ave2df, rownames(gtex_ave2df) %in% kmt|rownames(gtex_ave2df) %in% kdm|rownames(gtex_ave2df) %in% kat|rownames(gtex_ave2df) %in% hdac)
+
+#filter for all other genes
+gtex_other2 <- gtex_ave2df[!(row.names(gtex_ave2df) %in% modifier_list),]
+
+
+```
+```{r gtex log ave distributions}
+
+boxplot(gtex_mods2$Average, gtex_other2$Average, horizontal = TRUE, ylim=c(0,10), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average ln(TPM+1)")
+points(mean(gtex_mods2$Average), 1, col = 2, pch = 19)
+points(mean(gtex_other2$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+summary(gtex_mods2$Average)
+#Min.  1st Qu.  Median    Mean   3rd Qu.  Max. 
+#0.000   2.637   3.165   3.018   3.640   5.148   
+summary(gtex_other2$Average)
+#Min.    1st Qu.   Median     Mean    3rd Qu.   Max. 
+#0.0000  0.8779    2.4350    2.3361   3.5199  8.7921   
+
+```
+```{r png gtex boxplots}
+png(filename= "Average TPM Distribution cutoff.png", res=300, width=2000, height=1500)
+boxplot(gtex_mods$Average, gtex_other$Average, horizontal = TRUE, ylim=c(0,200), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average TPM")
+points(mean(gtex_mods$Average), 1, col = 2, pch = 19)
+points(mean(gtex_other$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+dev.off()
+
+png(filename= "Average TPM Distribution full nonmod.png", res=300, width=2000, height=1500)
+boxplot(gtex_other$Average, horizontal = TRUE, main= "Average expression of other genes", xlab= "Average TPM")
+points(mean(gtex_other$Average), 1, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+dev.off()
+
+png(filename= "Average ln(TPM+1) Distribution.png", res=300, width=2000, height=1500)
+boxplot(gtex_mods2$Average, gtex_other2$Average, horizontal = TRUE, ylim=c(0,10), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average ln(TPM+1)")
+points(mean(gtex_mods2$Average), 1, col = 2, pch = 19)
+points(mean(gtex_other2$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+dev.off()
+
+```
+
+```{r modify HPA}
+HPA_group <- HPA_exp %>% group_by(Tissue, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+HPA_group <- HPA_group %>% pivot_wider(names_from= Tissue, values_from= Level)
+
+HPA_group <- data.frame(HPA_group)
+rownames(HPA_group) <- HPA_group$Gene.name
+HPA_group <- HPA_group[,-c(1)]
+HPA_group[is.na(HPA_group)] <- 0
+
+a <- data.frame(rowMeans(HPA_group))
+HPA_group$Average <- a
+HPA_tave <- apply(as.matrix(HPA_group, ncol= ncol(HPA_group)), 2, as.numeric)
+HPA_tave[is.na(HPA_tave)] <- 0
+rownames(HPA_tave)<- rownames(HPA_group)
+
+#filter for modifiers only
+HPA_tavedf <- data.frame(HPA_tave)
+HPA_tmods <- filter(HPA_tavedf, rownames(HPA_tavedf) %in% kmt|rownames(HPA_tavedf) %in% kdm|rownames(HPA_tavedf) %in% kat|rownames(HPA_tavedf) %in% hdac)
+
+#filter for all other genes
+HPA_tother <- HPA_tavedf[!(row.names(HPA_tavedf) %in% modifier_list),]
+
+#redo grouping by cell instead of tissue
+HPA_exp3 <- HPA_exp2[,-c(1,3,6)]
+HPA_group_cell <- HPA_exp3 %>% group_by(Cell.type, Gene.name) %>% mutate(Level= mean(Level)) %>% unique()
+HPA_group_cell <- HPA_group_cell %>% pivot_wider(names_from= Cell.type, values_from= Level)
+
+HPA_group_cell <- data.frame(HPA_group_cell)
+rownames(HPA_group_cell) <- HPA_group_cell$Gene.name
+HPA_group_cell <- HPA_group_cell[,-c(1)]
+HPA_group_cell[is.na(HPA_group_cell)] <- 0
+
+b <- data.frame(rowMeans(HPA_group_cell))
+HPA_group_cell$Average <- b
+HPA_c_ave <- apply(as.matrix(HPA_group_cell, ncol= ncol(HPA_group_cell)), 2, as.numeric)
+HPA_c_ave[is.na(HPA_c_ave)] <- 0
+rownames(HPA_c_ave)<- rownames(HPA_group_cell)
+
+#filter for modifiers only
+HPA_c_avedf <- data.frame(HPA_c_ave)
+HPA_c_mods <- filter(HPA_c_avedf, rownames(HPA_c_avedf) %in% kmt|rownames(HPA_c_avedf) %in% kdm|rownames(HPA_c_avedf) %in% kat|rownames(HPA_c_avedf) %in% hdac)
+
+#filter for all other genes
+HPA_c_other <- HPA_c_avedf[!(row.names(HPA_c_avedf) %in% modifier_list),]
+
+```
+```{r HPA ave distributions}
+boxplot(HPA_tmods$Average, HPA_tother$Average, horizontal = TRUE, ylim=c(0,4), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average Protein Level Across Tissues")
+points(mean(HPA_tmods$Average), 1, col = 2, pch = 19)
+points(mean(HPA_tother$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+boxplot(HPA_c_mods$Average, HPA_c_other$Average, horizontal = TRUE, ylim=c(0,1.6), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average Protein Level Across Cell Types")
+points(mean(HPA_c_mods$Average), 1, col = 2, pch = 19)
+points(mean(HPA_c_other$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+
+summary(HPA_tmods$Average)
+# Min.   1st Qu. Median   Mean   3rd Qu.   Max. 
+#0.0000  0.6126  1.2006  1.0952  1.5378  2.1858 
+summary(HPA_tother$Average)
+#Min.    1st Qu.  Median    Mean   3rd Qu.   Max. 
+#0.0000  0.1005   0.7672   0.7735  1.2731  2.3214 
+summary(HPA_c_mods$Average)
+#Min.    1st Qu.  Median    Mean   3rd Qu.    Max. 
+#0.0000  0.2598   0.5106   0.5002  0.7019  1.1218 
+summary(HPA_c_other$Average)
+#Min.    1st Qu.  Median    Mean   3rd Qu.    Max. 
+#0.0000  0.0750   0.3041   0.3373  0.5408  1.2208 
+
+
+
+```
+```{r png hpa boxplots}
+png(filename= "Average Protein Level By Tissue.png", res=300, width=2000, height=1500)
+boxplot(HPA_tmods$Average, HPA_tother$Average, horizontal = TRUE, ylim=c(0,4), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average Protein Level Across Tissues")
+points(mean(HPA_tmods$Average), 1, col = 2, pch = 19)
+points(mean(HPA_tother$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+dev.off()
+
+png(filename= "Average Protein Level By Cell-type.png", res=300, width=2000, height=1500)
+boxplot(HPA_c_mods$Average, HPA_c_other$Average, horizontal = TRUE, ylim=c(0,1.6), main= "Average expression of chromatin modifiers and non-modifiers", names=bp_names, xlab= "Average Protein Level Across Cell Types")
+points(mean(HPA_c_mods$Average), 1, col = 2, pch = 19)
+points(mean(HPA_c_other$Average), 2, col = 2, pch = 19)
+par(mfrow = c(1, 1))
+dev.off()
+
+```
