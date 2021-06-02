@@ -319,6 +319,18 @@ barplot(res_gtex, xlim=c(0,350000), ylab="RNA Expression Level", xlab="Frequency
 dev.off()
 
 
+tiff(filename= "15. Heatmap of distribution of expression levels in GTEx after binning.tiff", res=300, width= 1000, height=3000)
+Heatmap(resmg, name= "count", row_names_side= "right", row_dend_side= "left", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
+dev.off()
+
+tiff(filename= "15b. Marginal distribution plot summing frequency of each expression level for HPA and GTEx (binned) for modifiers.tiff", res=300, width=1200, height=1000)
+barplot(res_gtex_f, xlim=c(0,2800), ylab="RNA Expression Level", xlab="Frequency", horiz=TRUE)
+dev.off()
+tiff(filename= "13. Distribution of TPMs in GTEx when binned, all genes.tiff", res=300, width=1200, height=1000)
+barplot(res_gtex, xlim=c(0,350000), ylab="RNA Expression Level", xlab="Frequency", horiz=TRUE)
+dev.off()
+
+
 ```
 ```{r correlate HPA and gtex binned}
 rna.prot.cor <- cor(t(HPA_filter_mx), t(gtex_bin), method="pearson")
@@ -362,13 +374,28 @@ cor.by.var <- cbind(correlation, gtex_var)
 cor.by.var <- data.frame(cor.by.var)
 plot(gtex_var, correlation)
 #same plot
-plot(cor.by.var$Variance.Across.Tissues, cor.by.var$R)
+
 
 
 rank(cor.by.var$Variance.Across.Tissues)
 cor.by.var$Rank <- 75-rank(cor.by.var$Variance.Across.Tissues)
 #rank 1 has highest variance; increase in rank means lower variance
 plot(cor.by.var$Rank, cor.by.var$R)
+
+png(filename="Protein-RNA correlation by TPM variance.png", res=300, width=2500, height=2500)
+plot(cor.by.var$Variance.Across.Tissues, cor.by.var$R)
+dev.off()
+
+tiff("Protein-RNA correlation by TPM variance.tiff", res=300, width=2500, height=2500)
+plot(cor.by.var$Variance.Across.Tissues, cor.by.var$R)
+dev.off()
+
+png(filename="Protein-RNA correlation by TPM variance rank.png", res=300, width=2500, height=2500)
+plot(cor.by.var$Rank, cor.by.var$R)
+dev.off()
+tiff(filename="Protein-RNA correlation by TPM variance rank.tiff", res=300, width=2500, height=2500)
+plot(cor.by.var$Rank, cor.by.var$R)
+dev.off()
 
 ```
 

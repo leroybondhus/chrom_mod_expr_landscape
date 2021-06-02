@@ -80,6 +80,10 @@ png(filename="GTEX_TPM_cum_freq.png", res=300, width=2000, height=2000)
 plot(hvec10, main= "GTEX TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,6), xaxp=c(0,6,30)) # plot a cumulative histogram of y
 dev.off()
 
+tiff(filename="2. GTEX_TPM_cum_freq.tiff", res=300, width=2000, height=2000)
+plot(hvec10, main= "GTEX TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,6), xaxp=c(0,6,30)) # plot a cumulative histogram of y
+dev.off()
+
 
 
 #right end of histogram
@@ -100,6 +104,10 @@ hist(modifier.vec.raw[modifier.vec.raw <100], main= "GTEX Chromatin Modifiers TP
 hist(modifier.vec) -> hmod10 # do a histogram of y and assign its info to h
 hmod10$counts <- cumsum(hmod10$counts)/sum(hmod10$counts) # replace the cell freq.s by cumulative freq.s
 png(filename="GTEX_TPM_modifiers_cum_freq.png", res=300, width=2000, height=2000)
+plot(hmod10, main= "Chromatin Modifiers TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,3), xaxp=c(0,3,30)) # plot a cumulative histogram of y
+dev.off()
+
+tiff(filename="3. GTEX_TPM_modifiers_cum_freq.tiff", res=300, width=2000, height=2000)
 plot(hmod10, main= "Chromatin Modifiers TPM Cumulative frequency", xlab= "Log(TPM+1)", xlim=c(0,3), xaxp=c(0,3,30)) # plot a cumulative histogram of y
 dev.off()
 
@@ -128,6 +136,29 @@ hist(modifier.vec, main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log
 dev.off()
 
 png(filename= "Gtex_modifiers_noMT_TPM_tail.png", res=300, width=2000, height=2000)
+hist(modifier.vec[modifier.vec > 2.25], main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+
+
+
+tiff(filename= "2. Gtex_log_TPM_distribution_noMT.tiff", res=300, width=2000, height=2000)
+hist(tpm.vec10, main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+tiff(filename= "2. Gtex_log_TPM_noMT_zoom.tiff", res=300, width=2000, height=2000)
+hist(tpm.vec10[tpm.vec10 > 3], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+tiff(filename= "2. Gtex_log_TPM_noMT_tail.tiff", res=300, width=2000, height=2000)
+hist(tpm.vec10[tpm.vec10 > 4], main= "GTEX TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+tiff(filename= "3. Gtex_modifiers_logTPM_distribution_noMT.tiff", res=300, width=2000, height=2000)
+hist(modifier.vec, main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
+dev.off()
+
+tiff(filename= "3. Gtex_modifiers_logTPM_distribution_tail_noMT.tiff", res=300, width=2000, height=2000)
 hist(modifier.vec[modifier.vec > 2.25], main= "GTEX Chromatin Modifiers TPM distribution", xlab= "Log(TPM+1)")
 dev.off()
 
@@ -381,6 +412,10 @@ all.comp<- all.comp[all.comp.order, ]
 all.comp.sq <- (all.comp)^2
 
 png("HPA_gtex_all_mod_noMT.png", res=300, height=3000, width=3000 )
+Heatmap(all.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
+dev.off
+
+tiff("9. Correlation heatmap of expression on protein VS RNA level (TPMs on x VS protein level on y).tiff", res=300, height=3000, width=3000 )
 Heatmap(all.comp.sq, name= "R sq", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_columns=FALSE, cluster_rows=FALSE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 8), col = colorRamp2(c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 1), brewer.pal(n=7, name="Blues")))
 dev.off
 

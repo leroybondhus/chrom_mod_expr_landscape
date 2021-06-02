@@ -111,6 +111,10 @@ png("all_modifier_HPA_cor.png", res=300, width= 3000, height=3000)
 Heatmap(HPA.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 dev.off()
 
+tiff("Pearson’s correlation of HPA protein levels for modifiers.tiff", res=300, width= 3000, height=3000)
+Heatmap(HPA.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+dev.off()
+
 
 ```
 ```{r pairwise correlations}
@@ -256,6 +260,9 @@ rownames(resm) <- colnames(HPA_round)
 png(filename= "HPA_expression_counts2", res=300, width= 1000, height=3000)
 Heatmap(resm, name= "count", row_names_side= "right", row_dend_side= "left", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
 dev.off()
+tiff(filename= "11. Heatmap of distribution of expression levels in HPA.tiff", res=300, width= 1000, height=3000)
+Heatmap(resm, name= "count", row_names_side= "right", row_dend_side= "left", cluster_columns= FALSE, row_names_gp = grid::gpar(fontsize = 6), col = colorRamp2(c(0,10,20,30,40,50), brewer.pal(n=6, name="Blues")))
+dev.off()
 
 
 resmdf <- data.frame(resm)
@@ -270,6 +277,9 @@ resm2 <- rbind(resm, counts)
 png(filename= "HPA_marginal_distribution.png", res=300, width=1200, height=1000)
 barplot(resm2[81,], xlim= c(0, 1500), ylab="Protein Expression Level", xlab="Frequency", horiz=TRUE)
 dev.off()
+tiff(filename= "11b. Marginal distribution plot summing frequency of each expression level for HPA for modifiers.tiff", res=300, width=1200, height=1000)
+barplot(resm2[81,], xlim= c(0, 1500), ylab="Protein Expression Level", xlab="Frequency", horiz=TRUE)
+dev.off()
 ```
 ```{r specificity heatmap for all hpa}
 HPA_filter_z <- t(HPA_filter2)
@@ -281,6 +291,12 @@ HPA_filter_z[is.na(HPA_filter_z)] <- 0
 
 # Open a png file
 png("all_hpa_z.png", res=300, width=3000, height=3000) 
+# 2. Create a plot
+Heatmap(HPA_filter_z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(15, "cm"))
+# Close the pdf file
+dev.off() 
+
+tiff("10. Specificity heatmap for all chromatin modifiers in HPA.tiff", res=300, width=3000, height=3000) 
 # 2. Create a plot
 Heatmap(HPA_filter_z, name="SD", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 6), width = unit(12, "cm"), height = unit(15, "cm"))
 # Close the pdf file
@@ -305,6 +321,15 @@ legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col
 ```
 ```{r png}
 png(filename= "network_HPA_specificity_0.65.png", res=300, width=3000, height=3000)
+network3 <- graph_from_adjacency_matrix(network.mx3, weighted=T, mode="undirected", diag=F)
+par(bg="grey13", mar=c(0,0,0,0))
+plot(network3, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
+#legend
+legend(x=1.2, y=-0.4, legend=paste(levels(as.factor(HPA_filter3["Type",]))), col = coul, bty = "n", pch=20 , pt.cex = 2, cex=1, text.col="white", horiz = F)
+dev.off()
+
+
+tiff(filename= "12. Network plot of linked modifiers based on correlation by protein expression specificity, r > 0.65, Pearson’s.tiff", res=300, width=3000, height=3000)
 network3 <- graph_from_adjacency_matrix(network.mx3, weighted=T, mode="undirected", diag=F)
 par(bg="grey13", mar=c(0,0,0,0))
 plot(network3, vertex.size= 5, vertex.label.cex=0.35, vertex.color=my.color, vertex.label.color="white", vertex.frame.color="transparent")
@@ -382,6 +407,9 @@ dev.off()
 png(filename= "HPA_exp_levels.png", res=300, width=2000, height=2500)
 Heatmap(t(HPA_filter2), name="Level", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(10, "cm"), height = unit(12, "cm"))
 dev.off()
+tiff(filename= "HPA_exp_levels.tiff", res=300, width=2000, height=2500)
+Heatmap(t(HPA_filter2), name="Level", column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 5), width = unit(10, "cm"), height = unit(12, "cm"))
+dev.off()
 
 HPA_exp3 <- HPA_exp2[,-c(1,3,6)]
 HPA_exp3$Level <- as.numeric(HPA_exp3$Level)
@@ -398,6 +426,9 @@ HPA_filter_cmx <- as.matrix(HPA_filter_cell)
 
 
 png(filename= "HPA_exp_levels_cell.png", res=300, width=3000, height=3000)
+Heatmap(HPA_filter_cmx, name="Level", column_names_gp = grid::gpar(fontsize = 5), row_names_gp = grid::gpar(fontsize = 5), width = unit(15, "cm"), height = unit(12, "cm"))
+dev.off()
+tiff(filename= "HPA_exp_levels_cell.tiff", res=300, width=3000, height=3000)
 Heatmap(HPA_filter_cmx, name="Level", column_names_gp = grid::gpar(fontsize = 5), row_names_gp = grid::gpar(fontsize = 5), width = unit(15, "cm"), height = unit(12, "cm"))
 dev.off()
 ```

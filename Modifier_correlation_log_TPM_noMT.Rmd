@@ -97,6 +97,9 @@ log_all_mx <- log_all_mx[all_row_order, all_col_order]
 png(filename= "Modifier_Log_TPM.png", res=300, height=3000, width=2500 )
 Heatmap(log_all_mx, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(2.5, 2, 1.5, 0.75, 0), brewer.pal(n=5, name="RdBu")))
 dev.off()
+tiff(filename="5. log(TPM+1) distribution heatmap for all chromatin modifiers in GTEx.tiff", res=300, height=3000, width=2500 )
+Heatmap(log_all_mx, name= "log(TPM+1)", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 8), row_names_gp = grid::gpar(fontsize = 5), height= 20, width=15, col = colorRamp2(c(2.5, 2, 1.5, 0.75, 0), brewer.pal(n=5, name="RdBu")))
+dev.off()
 
 #png of non-clustered
 png(filename= "Modifier_Log_TPM_no_cluster.png", res=300, height=3000, width=2500 )
@@ -332,6 +335,12 @@ dev.off()
 
 # Open a png file
 png("log_all_cor_noMT.png", res=300, width=5000, height=5000) 
+# 2. Create a plot
+Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
+# Close the png file
+dev.off() 
+
+tiff("6. Correlation heatmap for all chromatin modifiers based on log(TPM+1), Pearson’s.tiff", res=300, width=5000, height=5000)
 # 2. Create a plot
 Heatmap(log.modifier.cor, name= "Score", row_names_side= "left", show_column_dend= TRUE, show_row_dend= TRUE, cluster_rows=TRUE, cluster_columns=TRUE, column_names_gp = grid::gpar(fontsize = 7), row_names_gp = grid::gpar(fontsize = 7), col = colorRamp2(c(-1, -0.8, -0.5, 0, 0.5, 0.8, 1), brewer.pal(n=7, name="PRGn")))
 # Close the png file

@@ -142,6 +142,10 @@ png("specificity_delta_mx", res=300, width=2000, height=3500)
 Heatmap(delta_mx, name="noMT-MT", column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(20, "cm"))
 dev.off()
 
+tiff("1. Differences in specificity scores between original and corrected GTEx dataset.tiff", res=300, width=2000, height=3500)
+Heatmap(delta_mx, name="noMT-MT", column_names_gp = grid::gpar(fontsize = 9), row_names_gp = grid::gpar(fontsize = 7), width = unit(12, "cm"), height = unit(20, "cm"))
+dev.off()
+
 ```
 
 
