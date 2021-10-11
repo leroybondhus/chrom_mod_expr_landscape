@@ -195,14 +195,14 @@ spec_mat_flat  <- calc_weighted_zscore_matrix(exp_mat, flat)
 #### End: Code lifted from gene_specificity project: specificity_paper_main.Rmd ####
 
 chromatin_modifier_table <- read.csv("chromatin_modifier_table_shortened.csv")
-chromatin_modifier_vector <- as.vector(chromatin_modifier_table$ï..ENSG)
-chromatin_modifier_vector <- str_extract(chromatin_modifier_vector, pattern)
-
-modified_gtex_id <- str_extract(gtex, pattern)
 
 pattern <- "[a-zA-Z0-9_]+"
+
+chromatin_modifier_vector <- str_extract(chromatin_modifier_table[,1], pattern)
+
 index <- c()
 
+#subset to find corresponding ENSEMBL ID 
 for(i in 1:length(chromatin_modifier_vector)){
   temp <- which(str_extract(rownames(gtex), pattern) == chromatin_modifier_vector[i])
   index <- c(temp, index)
@@ -215,11 +215,21 @@ log_of_chromatin_modifier_vector <- log10(gtex_subset+1)
 ####### MODIFIED CHROMATIN MODIFIER VECTOR
 
 ## dot similarity from initial Z scores
+
 dot_sim <- similarity_func(log_of_chromatin_modifier_vector)
-heatmap(dot_sim)
+
+dot_sim_matrix <- as.matrix(scale(dot_sim))
+
+png("dot_sim.png", width = 1000, height = 1000)
+Heatmap(dot_sim_matrix,show_row_dend = FALSE, show_column_dend = FALSE)
+dev.off()
+
 sim_tree <- cluster_func(dot_sim)
+
 ## plot similarity tree with weights
+
 sim_tree %>% set("nodes_pch",19) %>% set("nodes_cex", 2.2*sqrt(get_nodes_attr(sim_tree,"weight"))) %>% plot
+
 ## take a look at the weights
 weights <- get_weights(sim_tree, colnames(exp_mat))
 ggplot( data.frame(names=names(weights), weights=weights),aes(x=names, y=weights))+
@@ -230,12 +240,17 @@ flat <- weights; flat[1:length(flat)] <- 1
 spec_mat_flat  <- calc_weighted_zscore_matrix(log_of_chromatin_modifier_vector, flat)
 
 #NaN produced
-temp <- as.matrix(spec_mat_weighted[which(!is.nan(spec_mat_weighted[,1])),])
-heatmap(temp, scale = "none")
+weighted_remove_na_n <- as.matrix(spec_mat_weighted[which(!is.nan(spec_mat_weighted[,1])),])
+
+png("weighted_scaled.png", width = 1300, height = 1300)
+Heatmap(weighted_remove_na_n, show_row_dend = FALSE, show_column_dend = FALSE)
+dev.off()
 
 hist(spec_mat_weighted, breaks = 100)
 
-##et the scale, which values are color legends, do not need dendograms
+##Adjust the scale, which values are color legends, do not need dendograms
 # unweighted - weighted
 # push a file to github
-#
+# human phenotype ontology - what omen is? inheritance?
+
+## Don't understand human phenotype ontology and difference between OMIM - online medelian inheritance in man
