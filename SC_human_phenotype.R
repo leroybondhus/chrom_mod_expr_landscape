@@ -1,61 +1,49 @@
 #load libraries
 
 library(dplyr)
+library(stringr)
+library(data.table)
 omim_dataset <-  tempfile()
 download.file("https://www.omim.org/static/omim/data/mim2gene.txt", omim_dataset)
 
-omim <- read.csv(omim_dataset, fill = TRUE, header = TRUE)
-
-#extracts omim ids with corresponding gene ID's
-omim_ensg <-  str_extract(omim[,1],"ENSG\\d+")
-omim_id <- str_extract(omim[,1],"\\d+")
-
-omim_cleaned <- data.frame(cbind("OMIM_ID" = omim_id, "OMIM_ENSG" = omim_ensg))
-# remove NA's
-
-omim_cleaned <- omim_cleaned[!is.na(omim_cleaned$OMIM_ID) & !is.na(omim_cleaned$OMIM_ENSG), ]
+omim <- read.table(omim_dataset, fill = TRUE, header = TRUE, sep= "\t")
+#extracting column with GENE ENSEMBLE and OMIM ID
+omim <- omim[,c(1,5)]
+#removing rows without corresponding GENE ENSEMBL ID
+row_no_ensembl_id <- omim$X.2!=""
+omim <- omim[row_no_ensembl_id, ]
 
 
-gene_and_omim_temp <- tempfile()
-download.file("http://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt", gene_and_omim_temp)
-gene_and_omim_id <- read.table(gene_and_omim_temp, fill = TRUE, row.names = NULL, sep = "\t")
-#eliminate first column because that is entrez
-gene_and_omim_id <- gene_and_omim_id[,-1]
 
-#combine the first three columns into one
 
-gene_and_omim_id <- unite(gene_and_omim_id, "text", c(1,2,3))[,1]
+### Reading in file with OMIM and HP
+hp_and_omim_temp <- tempfile()
+download.file("https://ci.monarchinitiative.org/view/hpo/job/hpo.annotations/lastSuccessfulBuild/artifact/rare-diseases/util/annotation/genes_to_phenotype.txt", hp_and_omim_temp)
+hp_and_omim_id <- fread(hp_and_omim_temp, sep = "\t")
 
-#for each row extract HP and OMIM term
+### extract the number for respective OMIM ID for each row
+omim_id_respective <- as.character(str_extract(hp_and_omim_id[,9],"\\d+"))
 
-hp_id <- str_extract(gene_and_omim_id,"HP:\\d+")
-#extracts only digits portion
-hp_id <- str_extract(hp_id, "\\d+")
-omim_id <- str_extract(gene_and_omim_id, "OMIM:\\d+")
-#extract only digits portion
-omim_id <- str_extract(omim_id, "\\d+")
 
-hp_and_omim_combined <- data.frame(cbind("HP" = hp_id, "OMIM" = omim_id))
-hp_and_omim_combined <- hp_and_omim_combined[(!is.na(hp_and_omim_combined$HP) & !is.na(hp_and_omim_combined$OMIM)),]
-hp_and_omim_combined <- unique(hp_and_omim_combined)
-colnames(hp_and_omim_combined) <- c("HP","OMIM")
+### creates a new column to attach respective ENSG ID's to hp_and_omim_id dataframe
 
-# create a new data frame called gene_hp_omim to add corresponding HP terms to each OMIM ID
+hp_and_omim_id <- data.frame(cbind(hp_and_omim_id, "ENSG" = rep(0,nrow(hp_and_omim_id))))
 
-gene_hp_omim <- data.frame(cbind(omim_cleaned,"HP" = rep("0",nrow(omim_cleaned)))) #last column for matching HP terms
+#### for each omim id find corresponding ENSG ID
 
-## creating an object called temp_stored to store the HP terms
-
-for(i in 1:nrow(gene_hp_omim)){
-  temp_stored <- "0"
-  if(any(hp_and_omim_combined$OMIM ==gene_hp_omim$OMIM_ID[i])){
-    index <- which(hp_and_omim_combined$OMIM ==gene_hp_omim$OMIM_ID[i])
-    temp_stored <- hp_and_omim_combined[(index[1]),"HP"]
-    if(length(index) > 1){
-      for(j in 2:length(index)){
-        temp_stored <- paste(temp_stored, hp_and_omim_combined[(index[j]),"HP"])
-      }
+for(i in 1:length(omim_id_respective)){
+  if(any(as.character(omim$X100050)==omim_id_respective[i])){
+    similar_index <- which(as.character(omim$X100050) == omim_id_respective[i])
+    if(length(similar_index)>1){
+      temp <- paste(omim$X.2[similar_index], sep = ",")
+      correspondent_ensg <- c(correspondent_ensg, temp)
+      hp_and_omim_id[i,"ENSG"] <- correspondent_ensg
+    } else {
+      correspondent_ensg <- omim$X.2[similar_index]
+      hp_and_omim_id[i,"ENSG"] <- correspondent_ensg
     }
   }
-  gene_hp_omim[i,"HP"] <- temp_stored
 }
+
+#renaming dataframe
+colnames(hp_and_omim_id) <- c("Entrez-gene-id","Entrez-gene-symbol","HPO Term ID","HPO Term Name","Frequency-Raw","Frequency-HPO","Additional Info from GD Source","GD Source","Disease ID for link","Gene Ensemble ID")
