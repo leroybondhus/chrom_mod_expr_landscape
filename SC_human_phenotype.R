@@ -42,7 +42,7 @@ current_item_in_list <- 0 # initializing
 temp_is_a <- 0 # initializing
 
 
-for(i in 1:1000){
+for(i in 1:length(hpo_file)){
  
   temp_line <- hpo_file[i]
   
@@ -57,44 +57,68 @@ for(i in 1:1000){
     temp_is_a <- 1 #so the first is_a parent will be stored in first element of list "relationship"
   }
   if(str_detect(temp_line,"^id")){
-    temp_list_structure$Id <- temp_line
+    temp_list_structure$Id <- str_match(temp_line, "id: (.+)")[2]
   }
   if(str_detect(temp_line,"name")){
     temp_list_structure$name <- temp_line
   }
   if(str_detect(temp_line, "is_a")){
-    temp_list_structure$parent[[temp_is_a]] <- temp_line
+    temp_list_structure$parent[[temp_is_a]] <- str_match(temp_line, "is_a: (HP:\\d+).+")[2]
     temp_is_a <- temp_is_a + 1
   }
 }
 
-#getting rid of first element of hpo_list
-hpo_list <- hpo_list[-1]
+### Here we write code to compute the information content
 
+#construct dataframe as storage site
+hp_terms <- unique(hp_and_omim_id$`HPO Term ID`)
+hp_freq <- numeric((length(hp_terms)))
+hp_information_content <- data.frame(cbind("hp_terms" = hp_terms, "hp_freq" = hp_freq))
 
-# l = list(left = list(), right = list())
+for(i in 1:length(unique(hp_and_omim_id$`OMIM ID Numerical only`))){
+  #for row which contains OMIM ID
+  #Then finding the hpo term ID
+  # Go back to hp_freq vector and increment it by one
+  # For each unique OMIM ID
+  omim_id_num <- unique(hp_and_omim_id$`OMIM ID Numerical only`)[i]
+  # Find the rows that have the OMIM ID and find the HPO Terms
+  hpo_terms <- hp_and_omim_id$`HPO Term ID`[which(hp_and_omim_id$`OMIM ID Numerical only`==omim_id_num)]
+  for(j in 1:length(hpo_terms)){
+    target_hpo <- hpo_terms[i]
+    #increment by one
+    hp_information_content[which(hp_information_content$hp_terms==target_hpo), "hp_freq"] <- hp_information_content[which(hp_information_content$hp_terms==target_hpo), "hp_freq"] + 1
+    # find all parents
+  }
+}
 
-#for in in length of list, check if ID is A, if not go to next node
-# if that node has a child, check the list of all the child nodes
-# find (id no node)
+#helper function that finds parents of a node
 
-#To find ID of node
-# function: find -id = function(node = full tree)
-# check if its ID = ID you are searching for and node you are searching for again
-# if it does, return the node and you are done, if not, check if node has any children
-# check if the node is present in the children (for (i in length of children nodes, find ID of child node))
-#if none children match, return -1 (to have some control)
-# if thing = -1, proceed in a loop, if its a list, return that list
-#on working hpo_list, call function on every single node that exists, should return ID on every node that exists
-
-findId <- function(ID_name, tree){
-  for(i in 1:length(tree)){
-    if(ID_name==tree[i]){
-      return(tree[i])
-    } 
-    else if(ID_name!=tree[i]){
-      findId(ID_name, tree$children)
+## Added a vector_to_store argument to keep cocatenating, if we create a new vector inside the function it will keep 'emptying' the parent nodes everytime the function is called recursively
+find_parent <- function(node, node_list, vector_to_store = c()){
+  #find all parents of node
+  parents_of_current_node <- as.vector(unlist(node$parent))
+  #adding parents to return vector
+  vector_to_store <- c(vector_to_store, parents_of_current_node)
+  if(length(node$parent)==0){
+    #condition where root node is the desired node
+    return(vector_to_store)
+  }
+  for(i in 1:length(parents_of_current_node)){
+    for(j in 1:length(node_list)){
+      if(node_list[[j]]$Id == parents_of_current_node[i]){
+        #find the node in hpo list that is the node of the parent of the current node
+        if(node_list[[j]]$Id=="HP:0000001"){
+          #if we hit root node than return the vector_to_store result
+          print(vector_to_store) # IF you change this to return(vector_to_store) doesn't return anything
+        }
+        find_parent(node_list[[j]],hpo_list, vector_to_store)
+        
+      }
     }
   }
-  return(i)
 }
+
+find_parent(hpo_list[[113]],hpo_list)
+
+
+
