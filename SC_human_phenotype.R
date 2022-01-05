@@ -70,55 +70,108 @@ for(i in 1:length(hpo_file)){
 
 ### Here we write code to compute the information content
 
-#construct dataframe as storage site
-hp_terms <- unique(hp_and_omim_id$`HPO Term ID`)
-hp_freq <- numeric((length(hp_terms)))
-hp_information_content <- data.frame(cbind("hp_terms" = hp_terms, "hp_freq" = hp_freq))
-
-for(i in 1:length(unique(hp_and_omim_id$`OMIM ID Numerical only`))){
-  #for row which contains OMIM ID
-  #Then finding the hpo term ID
-  # Go back to hp_freq vector and increment it by one
-  # For each unique OMIM ID
-  omim_id_num <- unique(hp_and_omim_id$`OMIM ID Numerical only`)[i]
-  # Find the rows that have the OMIM ID and find the HPO Terms
-  hpo_terms <- hp_and_omim_id$`HPO Term ID`[which(hp_and_omim_id$`OMIM ID Numerical only`==omim_id_num)]
-  for(j in 1:length(hpo_terms)){
-    target_hpo <- hpo_terms[i]
-    #increment by one
-    hp_information_content[which(hp_information_content$hp_terms==target_hpo), "hp_freq"] <- hp_information_content[which(hp_information_content$hp_terms==target_hpo), "hp_freq"] + 1
-    # find all parents
-  }
-}
 
 #helper function that finds parents of a node
 
 ## Added a vector_to_store argument to keep cocatenating, if we create a new vector inside the function it will keep 'emptying' the parent nodes everytime the function is called recursively
-find_parent <- function(node, node_list, vector_to_store = c()){
-  #find all parents of node
-  parents_of_current_node <- as.vector(unlist(node$parent))
-  #adding parents to return vector
-  vector_to_store <- c(vector_to_store, parents_of_current_node)
+find_ancestors <- function(node, node_list, vector_to_store = c()){
   if(length(node$parent)==0){
     #condition where root node is the desired node
     return(vector_to_store)
   }
+  #find all parents of node
+  parents_of_current_node <- as.vector(unlist(node$parent))
+  #adding parents to return vector
+  vector_to_store <- c(vector_to_store, parents_of_current_node)
+  
   for(i in 1:length(parents_of_current_node)){
     for(j in 1:length(node_list)){
+      
       if(node_list[[j]]$Id == parents_of_current_node[i]){
         #find the node in hpo list that is the node of the parent of the current node
         if(node_list[[j]]$Id=="HP:0000001"){
           #if we hit root node than return the vector_to_store result
-          print(vector_to_store) # IF you change this to return(vector_to_store) doesn't return anything
         }
-        find_parent(node_list[[j]],hpo_list, vector_to_store)
-        
+        vector_to_store <- c(find_ancestors(node_list[[j]],hpo_list), vector_to_store)
       }
     }
   }
+  return(unique(vector_to_store))
 }
 
-find_parent(hpo_list[[113]],hpo_list)
+find_ancestors(hpo_list[[113]],hpo_list)
 
 
 
+##### LOG FREQUENCY
+
+
+## Extract all ID's in vector form from hpo_list for use later on
+
+#extract all hpo_list ID's
+all_hpo_list_id <- c()
+
+for(i in 1:length(hpo_list)){
+  all_hpo_list_id <- c(hpo_list[[i]]$Id, hpo_list_id)
+}
+
+#only subsets hpo_list that are present in the OMIM ID terms
+overlap <- c()
+for(i in 1:length(all_hpo_list_id)){
+  if(any(hp_and_omim_id$`HPO Term ID`==all_hpo_list_id[i]))
+    overlap <- c(overlap, i)
+}
+#only find overlaps
+hpo_list_overlaps <- hpo_list[c(overlap)]
+
+##extract hpo_list ID's of all overlaps
+hpo_list_overlap_ids <- c()
+for(i in 1:length(hpo_list_overlaps)){
+  hpo_list_overlap_ids <- c(hpo_list_overlaps[[i]]$Id, hpo_list_overlap_ids)
+}
+
+
+diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
+phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
+#disease_phenotype_df = count number of diseases each phenotype appears in (table form)
+disease_phenotype_df <- data.frame(cbind("phenotype" = phenotypes, "number_of_diseases_appeared" = rep(0, length(phenotypes))))
+
+
+
+diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
+phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
+#disease_phenotype_df = count number of diseases each phenotype appears in (table form)
+disease_phenotype_df <- data.frame(cbind("phenotype" = phenotypes, "number_of_diseases_appeared" = rep(0, length(phenotypes))))
+
+
+for(i in 1:length(diseases)){
+  #For each diseases, finding the corresponding phenotypes
+  #Find all indexes in the hp_and_omim_id that have the corresponding diseases ID
+  indexes_disease <- which(hp_and_omim_id$`OMIM ID Numerical only`==diseases[i])
+  #For each indexes, find (1) the corresponding HP Terms and (2) its associated parents
+  current_hpo_ids <- c()
+  for(j in indexes_disease){
+    current_hpo_ids <- c(current_hpo_ids,hp_and_omim_id$`HPO Term ID`[j]) #find all HPO terms
+  }
+  #Find all ancestors of current_hpo_ids
+  ancestors <- c()
+  for(k in current_hpo_ids){
+    #Find corresponding index in HPO list 
+    index_in_hpo_list <- which(hpo_list_overlap_ids == current_hpo_ids[k])
+    index_in_hpo_list <- index_in_hpo_list[1] # in case there is more than one match
+    #for all current_hpo_ids, find ancestors than cocatenante everything in one big vector
+    temp <- find_ancestors(hpo_list_overlaps[index_in_hpo_list],hpo_list_overlaps)
+    ancestors <- c(temp, ancestors)
+  }
+  #cocatenating ancestors + child and applying unique function to prevent overlaps
+  ancestors_and_child <- c(current_hpo_ids, ancestors)
+  ancestors_and_child <- unique(ancestors_and_child)
+  
+  for(m in 1:length(ancestors_and_child)){
+    item_id <- which(disease_phenotype_df$phenotype==ancestors_and_child[m])
+    new_count <- as.numeric(disease_phenotype_df[item_id,"number_of_diseases_appeared"])+1
+    disease_phenotype_df[item_id, "number_of_diseases_appeared"] <- new_count
+  }
+}
+
+disease_phenotype_df$number_of_diseases_appeared <- as.numeric(disease_phenotype_df$number_of_diseases_appeared)
