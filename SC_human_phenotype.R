@@ -32,7 +32,10 @@ final_df <- merge(hp_and_omim_id, omim, by.x = "Entrez-gene-id",by.y = "Entrez G
 ##reading in line by line, readlines function cannot read in file directly from connection 
 #download to computer
 
+{##!## Start: cannot access file on my system ##!##
+##!## should add lines to download file locally if possible ##!##
 hpo_file <- readLines("hpo_obo.txt", n= -10)
+}##!## Stop  ##!##
 
 hpo_list <- list()
 
@@ -108,6 +111,9 @@ find_ancestors(hpo_list[[113]],hpo_list)
 
 ## Extract all ID's in vector form from hpo_list for use later on
 
+
+{##!## Start: this will work, but looping here is inefficient ##!##
+
 #extract all hpo_list ID's
 all_hpo_list_id <- c()
 
@@ -115,6 +121,21 @@ for(i in 1:length(hpo_list)){
   all_hpo_list_id <- c(hpo_list[[i]]$Id, hpo_list_id)
 }
 
+# temp <- c() 
+# for(i in 1:length(obj)){ temp <- c(obj$thing[i],temp) } ##!##
+## what happens is every time "temp <- c(obj$thing[i], temp) is run
+## a new vector is created and temp is copies to it
+## better to begin by declaring 
+# temp <- character(length = length(object)) ## and then loop
+# for(i in 1:length(obj)){ temp[i] <- c(obj$thing[i], temp)}
+}##!## Stop ##!##
+
+
+
+{##!## Start: ##!##
+## I think this loop can be replaced with a one liner using the "is.element" function
+## e.g. overlap <- which(is.element(all_hpo_list_id,hp_and_omim_id$`HPO Term ID`))
+    
 #only subsets hpo_list that are present in the OMIM ID terms
 overlap <- c()
 for(i in 1:length(all_hpo_list_id)){
@@ -123,6 +144,10 @@ for(i in 1:length(all_hpo_list_id)){
 }
 #only find overlaps
 hpo_list_overlaps <- hpo_list[c(overlap)]
+
+
+}##!## Stop: ##!##
+
 
 ##extract hpo_list ID's of all overlaps
 hpo_list_overlap_ids <- c()
