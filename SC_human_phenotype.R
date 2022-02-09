@@ -78,6 +78,7 @@ for(i in 1:length(hpo_file)){
 
 ## Added a vector_to_store argument to keep cocatenating, if we create a new vector inside the function it will keep 'emptying' the parent nodes everytime the function is called recursively
 find_ancestors <- function(node, node_list, vector_to_store = c()){
+  ### ASSUMPTION: node is not an ancestor of itself
   if(length(node$parent)==0){
     #condition where root node is the desired node
     return(vector_to_store)
@@ -93,7 +94,8 @@ find_ancestors <- function(node, node_list, vector_to_store = c()){
       if(node_list[[j]]$Id == parents_of_current_node[i]){
         #find the node in hpo list that is the node of the parent of the current node
         if(node_list[[j]]$Id=="HP:0000001"){
-          #if we hit root node than return the vector_to_store result
+          #if we hit root node than return the root node
+          return(vector_to_store)
         }
         vector_to_store <- c(find_ancestors(node_list[[j]],hpo_list), vector_to_store)
       }
@@ -102,71 +104,39 @@ find_ancestors <- function(node, node_list, vector_to_store = c()){
   return(unique(vector_to_store))
 }
 
-find_ancestors(hpo_list[[113]],hpo_list)
+find_ancestors(hpo_list[[1187]],hpo_list)
 
 
 
 ##### LOG FREQUENCY
 
-
 ## Extract all ID's in vector form from hpo_list for use later on
-
-
-{##!## Start: this will work, but looping here is inefficient ##!##
 
 #extract all hpo_list ID's
 all_hpo_list_id <- c()
 
 for(i in 1:length(hpo_list)){
-  all_hpo_list_id <- c(hpo_list[[i]]$Id, hpo_list_id)
+  all_hpo_list_id[i] <- hpo_list[[i]]$Id
 }
 
-# temp <- c() 
-# for(i in 1:length(obj)){ temp <- c(obj$thing[i],temp) } ##!##
-## what happens is every time "temp <- c(obj$thing[i], temp) is run
-## a new vector is created and temp is copies to it
-## better to begin by declaring 
-# temp <- character(length = length(object)) ## and then loop
-# for(i in 1:length(obj)){ temp[i] <- c(obj$thing[i], temp)}
-}##!## Stop ##!##
+phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
+diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
 
+#finds overlap between two dataframes
+all(phenotypes %in% all_hpo_list_id)
+#hence phenotypes is a subset of HPO_LIST
 
+hpo_list_overlaps <- hpo_list[(which(is.element(all_hpo_list_id, phenotypes)))]
 
-{##!## Start: ##!##
-## I think this loop can be replaced with a one liner using the "is.element" function
-## e.g. overlap <- which(is.element(all_hpo_list_id,hp_and_omim_id$`HPO Term ID`))
-    
-#only subsets hpo_list that are present in the OMIM ID terms
-overlap <- c()
-for(i in 1:length(all_hpo_list_id)){
-  if(any(hp_and_omim_id$`HPO Term ID`==all_hpo_list_id[i]))
-    overlap <- c(overlap, i)
-}
-#only find overlaps
-hpo_list_overlaps <- hpo_list[c(overlap)]
-
-
-}##!## Stop: ##!##
-
-
-##extract hpo_list ID's of all overlaps
+#extract HPO ID's in order (order matters in subsetting)
 hpo_list_overlap_ids <- c()
 for(i in 1:length(hpo_list_overlaps)){
-  hpo_list_overlap_ids <- c(hpo_list_overlaps[[i]]$Id, hpo_list_overlap_ids)
+  hpo_list_overlap_ids[i] <- hpo_list_overlaps[[i]]$Id
 }
 
 
-diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
-phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
 #disease_phenotype_df = count number of diseases each phenotype appears in (table form)
-disease_phenotype_df <- data.frame(cbind("phenotype" = phenotypes, "number_of_diseases_appeared" = rep(0, length(phenotypes))))
-
-
-
-diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
-phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
-#disease_phenotype_df = count number of diseases each phenotype appears in (table form)
-disease_phenotype_df <- data.frame(cbind("phenotype" = phenotypes, "number_of_diseases_appeared" = rep(0, length(phenotypes))))
+disease_phenotype_df <- data.frame(cbind("phenotype" = all_hpo_list_id, "number_of_diseases_appeared" = rep(0,length(all_hpo_list_id))))
 
 
 for(i in 1:length(diseases)){
@@ -182,10 +152,10 @@ for(i in 1:length(diseases)){
   ancestors <- c()
   for(k in current_hpo_ids){
     #Find corresponding index in HPO list 
-    index_in_hpo_list <- which(hpo_list_overlap_ids == current_hpo_ids[k])
+    index_in_hpo_list <- which(all_hpo_list_id == current_hpo_ids[k])
     index_in_hpo_list <- index_in_hpo_list[1] # in case there is more than one match
     #for all current_hpo_ids, find ancestors than cocatenante everything in one big vector
-    temp <- find_ancestors(hpo_list_overlaps[index_in_hpo_list],hpo_list_overlaps)
+    temp <- find_ancestors(hpo_list[index_in_hpo_list],hpo_list)
     ancestors <- c(temp, ancestors)
   }
   #cocatenating ancestors + child and applying unique function to prevent overlaps
@@ -200,3 +170,118 @@ for(i in 1:length(diseases)){
 }
 
 disease_phenotype_df$number_of_diseases_appeared <- as.numeric(disease_phenotype_df$number_of_diseases_appeared)
+
+### Creating log frequency table
+log_freq_table <- data.frame(cbind("phenotype" = all_hpo_list_id, "freq" = as.numeric(rep(0,length(all_hpo_list_id)))))
+
+## function log_freq that calculates log frequency
+
+log_freq <- function(x){
+  x <- x + 1 #in case x is 0 
+  result <- -1*log((x/length(diseases)))
+  result
+}
+
+for(j in 1:nrow(disease_phenotype_df)){
+  log_freq_table[j,2] <- log_freq(as.numeric(disease_phenotype_df[j,2]))
+}
+
+log_freq_table$freq <- as.numeric(log_freq_table$freq) #technically, it is log freq + 1 (to account for log (0) case)
+
+
+### write a function called least_common_ancestor that finds least common parent amongst two HPO phenotypes
+
+least_common_ancestor <- function(hpo_1, hpo_2){
+  
+  #the way the find_ancestors works is that the input needs to correspond to respective position in hpo_list
+  #so need to find the "index" that HPO terms 1 and 2 appear in 
+  n1 <- which(all_hpo_list_id==hpo_1)
+  n2 <- which(all_hpo_list_id==hpo_2)
+  
+  parents_of_hpo_one <- find_ancestors(hpo_list[[n1]], hpo_list)
+  parents_of_hpo_two <- find_ancestors(hpo_list[[n2]], hpo_list)
+  common_parents <- intersect(parents_of_hpo_one, parents_of_hpo_two)
+  
+  max_num_parents <- -1 
+  max_num_parents_identity <- common_parents[1]
+  
+  for(i in 1:length(common_parents)){
+    index <- which(all_hpo_list_id==common_parents[i])
+    temp_num_parents <- length(find_ancestors(hpo_list[[index]],hpo_list))
+    if(temp_num_parents > max_num_parents){
+      max_num_parents <- temp_num_parents
+      max_num_parents_identity <- common_parents[i]
+    }
+  }
+  return(max_num_parents_identity)
+}
+
+
+
+find_hpo_similarity <- function(hpo_1, hpo_2){
+  least_common_parent <- least_common_ancestor(hpo_1,hpo_2)
+  hpo_similarity <-log_freq_table$freq[which(log_freq_table$phenotype==least_common_parent)]
+  as.numeric(hpo_similarity)
+  
+}
+
+### Find OMIM similarity
+
+find_omim_similarity <- function(omim_1, omim_2){
+  
+  omim_1_hpos <- hp_and_omim_id$`HPO Term ID`[which(hp_and_omim_id$`OMIM ID Numerical only`==omim_1)]
+  omim_2_hpos <- hp_and_omim_id$`HPO Term ID`[which(hp_and_omim_id$`OMIM ID Numerical only`==omim_2)]
+  sum_1 <- 0 
+  
+  for(i in 1:length(omim_1_hpos)){
+    max_1 <- 0 
+    for(j in 1:length(omim_2_hpos)){
+      temp_1 <- find_hpo_similarity(omim_1_hpos[i], omim_2_hpos[j])
+      if(temp_1 > max_1){
+        max_1 <- temp_1
+      }
+      sum_1 <- sum_1 + max_1
+    }
+  }
+  
+  sum_2 <- 0 
+  
+  for(k in 1:length(omim_2_hpos)){
+    max_2 <- 0 #goes to zero every time you hit loop
+    for(m in 1:length(omim_1_hpos)){
+      temp_2 <- find_hpo_similarity(omim_2_hpos[k], omim_1_hpos[m])
+      if(temp_2 > max_2){
+        max_2 <- temp_2
+      }
+      sum_2 <- sum_2 + max_2
+    }
+  }
+  
+  omim_similarity <- (sum_1 + sum_2)/2
+  omim_similarity
+}
+
+#reading in chromatin modifier file b/c we are only interested in diseases related to chromatin modifier
+
+chromatin_modifier_disease <- read.csv("chromatin_modifier_disease.csv")
+library(stringr)
+chromatin_omim_ids <- c()
+for(i in 1:nrow(chromatin_modifier_disease)){
+  chromatin_omim_ids <- c(chromatin_omim_ids,str_extract_all(chromatin_modifier_disease$OMIM.ID[i], pattern = "(\\d+)")[[1]])
+}
+
+chromatin_omim_ids <- chromatin_omim_ids[!is.na(chromatin_omim_ids)]
+chromatin_omim_ids <- intersect(chromatin_omim_ids,hp_and_omim_id$`OMIM ID Numerical only`)
+n <- length(chromatin_omim_ids)
+
+##### Creating a Table with these results:
+
+omim_similarity_table <- matrix(rep(0,n*n), nrow = n, ncol = n)
+rownames(omim_similarity_table) <- chromatin_omim_ids
+colnames(omim_similarity_table) <- chromatin_omim_ids
+for(i in 1:n){
+  for(j in 1:n){
+    omim_similarity_table[i,j] <- find_omim_similarity(chromatin_omim_ids[i], chromatin_omim_ids[j])
+  }
+}
+
