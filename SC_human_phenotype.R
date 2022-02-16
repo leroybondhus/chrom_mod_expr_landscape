@@ -77,7 +77,7 @@ for(i in 1:length(hpo_file)){
 #helper function that finds parents of a node
 
 ## Added a vector_to_store argument to keep cocatenating, if we create a new vector inside the function it will keep 'emptying' the parent nodes everytime the function is called recursively
-find_ancestors <- function(node, node_list, vector_to_store = c()){
+find_ancestors <- function(node, tree, vector_to_store = c()){
   ### ASSUMPTION: node is not an ancestor of itself
   if(length(node$parent)==0){
     #condition where root node is the desired node
@@ -89,22 +89,15 @@ find_ancestors <- function(node, node_list, vector_to_store = c()){
   vector_to_store <- c(vector_to_store, parents_of_current_node)
   
   for(i in 1:length(parents_of_current_node)){
-    for(j in 1:length(node_list)){
-      
-      if(node_list[[j]]$Id == parents_of_current_node[i]){
-        #find the node in hpo list that is the node of the parent of the current node
-        if(node_list[[j]]$Id=="HP:0000001"){
-          #if we hit root node than return the root node
-          return(vector_to_store)
-        }
-        vector_to_store <- c(find_ancestors(node_list[[j]],hpo_list), vector_to_store)
-      }
-    }
+    parent_node <- get_node(parents_of_current_node[i], tree)
+    vector_to_store <- c(find_ancestors(parent_node,tree), vector_to_store)
+  
   }
   return(unique(vector_to_store))
 }
 
-find_ancestors(hpo_list[[1187]],hpo_list)
+test_node <- get_node("HP:5000044",hpo_tree)
+find_ancestors(test_node, hpo_tree)
 
 
 
@@ -152,10 +145,9 @@ for(i in 1:length(diseases)){
   ancestors <- c()
   for(k in current_hpo_ids){
     #Find corresponding index in HPO list 
-    index_in_hpo_list <- which(all_hpo_list_id == current_hpo_ids[k])
-    index_in_hpo_list <- index_in_hpo_list[1] # in case there is more than one match
+    current_node <- get_node(k,hpo_tree)
     #for all current_hpo_ids, find ancestors than cocatenante everything in one big vector
-    temp <- find_ancestors(hpo_list[index_in_hpo_list],hpo_list)
+    temp <- find_ancestors(current_node,hpo_tree)
     ancestors <- c(temp, ancestors)
   }
   #cocatenating ancestors + child and applying unique function to prevent overlaps
@@ -177,9 +169,8 @@ log_freq_table <- data.frame(cbind("phenotype" = all_hpo_list_id, "freq" = as.nu
 ## function log_freq that calculates log frequency
 
 log_freq <- function(x){
-  x <- x + 1 #in case x is 0 
-  result <- -1*log((x/length(diseases)))
-  result
+   frequency <- (x+1)/length(diseases)
+   -1*log(frequency) ###** ASK: what if we hit the case where HP:00001, so log freq of 1 = 0?
 }
 
 for(j in 1:nrow(disease_phenotype_df)){
@@ -191,39 +182,49 @@ log_freq_table$freq <- as.numeric(log_freq_table$freq) #technically, it is log f
 
 ### write a function called least_common_ancestor that finds least common parent amongst two HPO phenotypes
 
-least_common_ancestor <- function(hpo_1, hpo_2){
+least_common_ancestor <- function(hpo_1, hpo_2, log_freq_object = log_freq_table){
+  #log_freq_table uses colnames: freq and phenotype
+  node_one <- get_node(hpo_1,hpo_tree)
+  node_two <- get_node(hpo_2,hpo_tree)
   
-  #the way the find_ancestors works is that the input needs to correspond to respective position in hpo_list
-  #so need to find the "index" that HPO terms 1 and 2 appear in 
-  n1 <- which(all_hpo_list_id==hpo_1)
-  n2 <- which(all_hpo_list_id==hpo_2)
-  
-  parents_of_hpo_one <- find_ancestors(hpo_list[[n1]], hpo_list)
-  parents_of_hpo_two <- find_ancestors(hpo_list[[n2]], hpo_list)
+  parents_of_hpo_one <- find_ancestors(node_one, hpo_tree)
+  parents_of_hpo_two <- find_ancestors(node_two, hpo_tree)
   common_parents <- intersect(parents_of_hpo_one, parents_of_hpo_two)
   
-  max_num_parents <- -1 
-  max_num_parents_identity <- common_parents[1]
+  #find the indices of common_parents so we can find their log frequency
   
-  for(i in 1:length(common_parents)){
-    index <- which(all_hpo_list_id==common_parents[i])
-    temp_num_parents <- length(find_ancestors(hpo_list[[index]],hpo_list))
-    if(temp_num_parents > max_num_parents){
-      max_num_parents <- temp_num_parents
-      max_num_parents_identity <- common_parents[i]
+  current_maximum_frequency<- 0 #sets index
+  current_least_common_ancestor <- c()
+  for(k in 1:length(common_parents)){
+    temp_log_frequency <- log_freq_object$freq[which(log_freq_object$phenotype==common_parents[k])]
+    if(temp_log_frequency >= current_maximum_frequency){ ###** ASK: equal because what is we hit HP:0001, log freq = 0?
+      current_maximum_frequency <- temp_log_frequency
+      current_least_common_ancestor <- common_parents[k]
     }
   }
-  return(max_num_parents_identity)
+  
+  return(current_least_common_ancestor)
+  #if there is a tie, return one element
 }
 
+#testing this function
+least_common_ancestor(phenotypes[43],phenotypes[45], log_freq_table)
+least_common_ancestor(phenotypes[56],phenotypes[77], log_freq_table)
+least_common_ancestor(phenotypes[5],phenotypes[7], log_freq_table) # HP: 0000001
+least_common_ancestor(phenotypes[5500],phenotypes[67], log_freq_table)
+least_common_ancestor(phenotypes[5690],phenotypes[7670], log_freq_table) #All HP: 000002
 
 
 find_hpo_similarity <- function(hpo_1, hpo_2){
-  least_common_parent <- least_common_ancestor(hpo_1,hpo_2)
+  #specify log freq table
+  least_common_parent <- least_common_ancestor(hpo_1,hpo_2, log_freq_table)
   hpo_similarity <-log_freq_table$freq[which(log_freq_table$phenotype==least_common_parent)]
   as.numeric(hpo_similarity)
   
 }
+
+find_hpo_similarity(phenotypes[2],phenotypes[4])
+find_hpo_similarity(phenotypes[45],phenotypes[56])
 
 ### Find OMIM similarity
 
@@ -236,12 +237,12 @@ find_omim_similarity <- function(omim_1, omim_2){
   for(i in 1:length(omim_1_hpos)){
     max_1 <- 0 
     for(j in 1:length(omim_2_hpos)){
-      temp_1 <- find_hpo_similarity(omim_1_hpos[i], omim_2_hpos[j])
+      temp_1 <- as.numeric(find_hpo_similarity(omim_1_hpos[i], omim_2_hpos[j]))
       if(temp_1 > max_1){
         max_1 <- temp_1
       }
-      sum_1 <- sum_1 + max_1
     }
+    sum_1 <- sum_1 + max_1
   }
   
   sum_2 <- 0 
@@ -249,17 +250,22 @@ find_omim_similarity <- function(omim_1, omim_2){
   for(k in 1:length(omim_2_hpos)){
     max_2 <- 0 #goes to zero every time you hit loop
     for(m in 1:length(omim_1_hpos)){
-      temp_2 <- find_hpo_similarity(omim_2_hpos[k], omim_1_hpos[m])
+      temp_2 <- as.numeric(find_hpo_similarity(omim_2_hpos[k], omim_1_hpos[m]))
       if(temp_2 > max_2){
         max_2 <- temp_2
       }
-      sum_2 <- sum_2 + max_2
     }
+    sum_2 <- sum_2 + max_2
   }
   
   omim_similarity <- (sum_1 + sum_2)/2
   omim_similarity
 }
+
+#testing the function
+find_omim_similarity(diseases[23],diseases[45])
+find_omim_similarity(diseases[34], diseases[56])
+find_omim_similarity(diseases[3442], diseases[5000])
 
 #reading in chromatin modifier file b/c we are only interested in diseases related to chromatin modifier
 
@@ -279,9 +285,15 @@ n <- length(chromatin_omim_ids)
 omim_similarity_table <- matrix(rep(0,n*n), nrow = n, ncol = n)
 rownames(omim_similarity_table) <- chromatin_omim_ids
 colnames(omim_similarity_table) <- chromatin_omim_ids
+
 for(i in 1:n){
+  
+  print(i)
   for(j in 1:n){
+    print(j)
     omim_similarity_table[i,j] <- find_omim_similarity(chromatin_omim_ids[i], chromatin_omim_ids[j])
+   
+    #Error: temp_1 > max_1 ==> did not account for when the two diseases are equal
   }
 }
 
