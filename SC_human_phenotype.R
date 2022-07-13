@@ -280,20 +280,36 @@ chromatin_omim_ids <- chromatin_omim_ids[!is.na(chromatin_omim_ids)]
 chromatin_omim_ids <- intersect(chromatin_omim_ids,hp_and_omim_id$`OMIM ID Numerical only`)
 n <- length(chromatin_omim_ids)
 
-##### Creating a Table with these results:
+#extracting disease names from chromatin ID's
+gene_names <- c()
 
-omim_similarity_table <- matrix(rep(0,n*n), nrow = n, ncol = n)
-rownames(omim_similarity_table) <- chromatin_omim_ids
-colnames(omim_similarity_table) <- chromatin_omim_ids
-
-for(i in 1:n){
-  
-  print(i)
-  for(j in 1:n){
-    print(j)
-    omim_similarity_table[i,j] <- find_omim_similarity(chromatin_omim_ids[i], chromatin_omim_ids[j])
-   
-    #Error: temp_1 > max_1 ==> did not account for when the two diseases are equal
+for(i in 1:length(chromatin_omim_ids)){
+  for(j in 1:nrow(chromatin_modifier_disease)){
+    if(!is.na(chromatin_modifier_disease$OMIM.ID[j])){
+      if(str_detect(as.character(as.character(chromatin_modifier_disease$OMIM.ID[j])),chromatin_omim_ids[i])){
+        #if more than one match gene, select one for display of data
+        gene_names[i] <- chromatin_modifier_disease$Gene.Name[j]
+      }
+    }
   }
 }
 
+##### Creating a Table with these results:
+
+omim_similarity_table <- matrix(rep(0,n*n), nrow = n, ncol = n)
+
+
+for(i in 1:n){
+  
+  for(j in 1:n){
+   
+  temp <- (find_omim_similarity(chromatin_omim_ids[i], chromatin_omim_ids[j]))/(max(find_omim_similarity(chromatin_omim_ids[i],chromatin_omim_ids[i]), find_omim_similarity(chromatin_omim_ids[j], chromatin_omim_ids[j])))
+  omim_similarity_table[i,j] <- temp
+   
+  }
+}
+
+rownames(omim_similarity_table) <- gene_names
+colnames(omim_similarity_table) <- gene_names
+diag(omim_similarity_table) <- NA
+heatmap(omim_similarity_table, scale = "none")
