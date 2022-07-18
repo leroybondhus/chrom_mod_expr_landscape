@@ -32,13 +32,10 @@ final_df <- merge(hp_and_omim_id, omim, by.x = "Entrez-gene-id",by.y = "Entrez G
 ##reading in line by line, readlines function cannot read in file directly from connection 
 #download to computer
 
-{##!## Start: cannot access file on my system ##!##
-##!## should add lines to download file locally if possible ##!##
-hpo_file <- readLines("hpo_obo.txt", n= -10)
-}##!## Stop  ##!##
+
+hpo_file <- readLines("hpo_obo.txt")
 
 hpo_list <- list()
-
 
 relationship <- 0 #initializing
 current_item_in_list <- 0 # initializing
@@ -70,6 +67,77 @@ for(i in 1:length(hpo_file)){
     temp_is_a <- temp_is_a + 1
   }
 }
+
+###creating get_node function for more efficient ordering
+
+library(stringr)
+
+### to ensure efficient ordering, make sure to add nodes to tree randomly
+set.seed(123)
+rand_seq <- sample(1:length(hpo_list))
+hpo_tree <- list()
+
+### initialize hpo_tree with first node and add left and right children
+hpo_tree <- hpo_list[[(rand_seq[1])]]
+hpo_tree$left <- NA
+hpo_tree$right <- NA
+###now loop through adding each node
+for(i in 1:length(rand_seq)){
+  hpo_tree <- add_to_tree(hpo_list[[rand_seq[i]]], hpo_tree) #hpo_tree? 
+}
+#### add_to_tree function to use
+add_to_tree <- function(node, tree){
+  if(node$Id < tree$Id){ #PROBLEM: if we replace tree$Id with HPO Id, what is "tree" in calling the add_tree, because there is a tree$left and a tree$right, you need it to be some sort of a node
+    if(all(is.na(tree$left))){
+      node$left <- NA
+      node$right <- NA
+      tree$left <- node
+      return(tree)
+    } else {
+      tree$left <- add_to_tree(node, tree$left)
+      return(tree) 
+    }
+  } else {
+    if(all(is.na(tree$right))){
+      node$left <- NA
+      node$right <- NA
+      tree$right <- node
+      return(tree)
+    } else {
+      tree$right <- add_to_tree(node, tree$right)
+      return(tree)
+    }
+  }
+}
+
+get_node <- function(node_id,tree){ 
+  #gets node of HPO term from the hpo_tree
+  #check if tree_id == node_id 
+  #(tree left = NULL, tree right = NULL)
+  #if equal --> create a new node called return node, which we set as equal to the tree 
+  #return (tree)
+  #if not the case
+  #if hpo_id < tree_id
+  #get_node(node_id, tree$left)
+  #else get_node(node_id, tree$right)
+  
+  if(node_id == tree$Id){
+    tree$left <- NULL
+    tree$right <- NULL
+    return(tree)
+  } else {
+    if(node_id < tree$Id){
+      get_node(node_id, tree$left)
+    } else {
+      get_node(node_id, tree$right)
+    }
+  }
+  
+}
+
+### testing get_node
+get_node("HP:5000044",hpo_tree)
+
 
 ### Here we write code to compute the information content
 
@@ -112,7 +180,7 @@ for(i in 1:length(hpo_list)){
   all_hpo_list_id[i] <- hpo_list[[i]]$Id
 }
 
-phenotypes <- unique(hp_and_omim_id$`HPO Term ID`)
+phenotypes <- unique(hp_and_omim_id$`HPO Term ID`) ## phenotypes from hp_and_omim_id df & all_hpo_list from HPO database
 diseases <- unique(hp_and_omim_id$`OMIM ID Numerical only`)
 
 #finds overlap between two dataframes
@@ -203,6 +271,7 @@ least_common_ancestor <- function(hpo_1, hpo_2, log_freq_object = log_freq_table
     }
   }
   
+##### **** NOTE: basing least common ancestor out of maximum log frequency, is this accurate? ****
   return(current_least_common_ancestor)
   #if there is a tie, return one element
 }
@@ -219,6 +288,9 @@ find_hpo_similarity <- function(hpo_1, hpo_2){
   #specify log freq table
   least_common_parent <- least_common_ancestor(hpo_1,hpo_2, log_freq_table)
   hpo_similarity <-log_freq_table$freq[which(log_freq_table$phenotype==least_common_parent)]
+  ### find log frequency of the least common parent
+  #### **** I have been calling this log freq, just double checking its information content. **
+  
   as.numeric(hpo_similarity)
   
 }
@@ -260,6 +332,7 @@ find_omim_similarity <- function(omim_1, omim_2){
   
   omim_similarity <- (sum_1 + sum_2)/2
   omim_similarity
+  ### CHECK WITH LEROY, normalization
 }
 
 #testing the function
