@@ -386,3 +386,56 @@ rownames(omim_similarity_table) <- gene_names
 colnames(omim_similarity_table) <- gene_names
 diag(omim_similarity_table) <- NA
 heatmap(omim_similarity_table, scale = "none")
+
+
+
+
+node_distance <- function(node_1, node_2){ ## switch order for two nodes to get the other node
+  lcm <- least_common_ancestor(node_1,node_2)
+  tracker <- 1
+  parent <- get_node(node_1, hpo_tree)$parent[[1]]
+  while(as.character(parent)!= as.character(lcm)){
+    tracker <- tracker + 1
+    parent <- get_node(parent, hpo_tree)$parent[[1]]
+  }
+  tracker
+}
+
+node_distance("HP:5000046", "HP:5000023") + node_distance("HP:5000023", "HP:5000046") #3
+node_distance("HP:0030057", "HP:0011017") + node_distance("HP:0011017", "HP:0030057") #6
+node_distance("HP:4000042","HP:5000005") + node_distance("HP:5000005","HP:4000042") #8
+
+### Pseudocode
+list_of_hpos_test <- c("HP:5000046", "HP:5000023", "HP:0030057")
+distance_between_two_nodes <- 0
+for(i in 1:length(list_of_hpos_test)){
+ if(i==1){
+   node_1 <- list_of_hpos_test[i]
+   if(i+1 <= length(list_of_hpos_test)){
+     node_2 <- list_of_hpos_test[i+1]
+     distance_between_two_nodes[i]<- node_distance(node_1, node_2) + node_distance(node_2, node_1)
+   }
+ } else {
+   node_1 <- list_of_hpos_test[i]
+   if(i-1 >=1){ #match with hpo term before it, matching to the left
+     node_2 <- list_of_hpos_test[i-1]
+     distance_between_two_nodes[i]<- node_distance(node_1, node_2) + node_distance(node_2, node_1)
+   } else { #matching to the right
+     if(i+1 <= length(list_of_hpos_test)){
+       node_2 <- list_of_hpos_test[i+1]
+       distance_between_two_nodes[i]<- node_distance(node_1, node_2) + node_distance(node_2, node_1)
+    }
+     
+   }
+ }
+average <- sum(distance_between_two_nodes)/length(list_of_hpos_test)
+average
+}
+
+list_of_hpos_test <- c("HP:5000046", "HP:5000023", "HP:0030057")
+
+one <- node_distance("HP:5000046", "HP:5000023") + node_distance("HP:5000023","HP:5000046") 
+two <- node_distance("HP:5000046","HP:0030057") + node_distance("HP:0030057","HP:5000046")
+three <- node_distance("HP:5000023","HP:0030057") + node_distance("HP:0030057","HP:5000023")
+
+one + two + three/3 ## shows function works using toy example, does this work efficiently?
