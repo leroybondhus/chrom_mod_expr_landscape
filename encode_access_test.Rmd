@@ -1,0 +1,22 @@
+---
+title: "encoded_access_test"
+output: html_document
+---
+
+
+```{r}
+GET
+library(jsonlite)
+library(httr)
+test <- GET("https://www.encodeproject.org/ENCBS000AAA/?format=json")
+status_code(test)
+str(content(test))
+
+
+test2 <- content(test, "text", encoding = "UTF-8")
+test3 <- fromJSON(test2, flatten = TRUE)
+data_mm_rna <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json"
+data_mm_rna <- GET(data_mm_rna)
+data_mm_rna2 <- content(data_mm_rna , "text")
+data_mm_rna3 <- fromJSON(data_mm_rna2, flatten = )
+```
