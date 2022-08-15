@@ -5,21 +5,59 @@ output: html_document
 
 
 ```{r}
-
 library(jsonlite)
 library(httr)
-test <- GET("https://www.encodeproject.org/ENCBS000AAA/?format=json")
-status_code(test)
-str(content(test))
+library(stringr)
+```
+
+```{r}
+## get ENCODE search results : mouse epigenome reference RNAseq
+search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+query_result <- GET(search_query)
+query_result <- content(query_result , "text", encoding = "UTF-8")
+query_result <- fromJSON(query_result, flatten = T)
+query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
+
+##
+for(i in 1:nrow(query_table)){
+  target <- paste0("https://www.encodeproject.org/",
+                          query_table$accession[i],
+                          "/?frame=embedded&format=json")
+  target <- GET(target)
+  target_result <- content(target, "text", encoding = "UTF-8")
+  target_result <- fromJSON(target_result, flatten = TRUE)
+  
+  which <- which(target_result$files$file_format=="tsv" &
+                 target_result$files$output_type=="gene quantifications" &
+                 grepl(max(as.numeric(str_remove_all(target_result$files$genome_annotation,"[a-zA-Z]")),na.rm = T),
+                       target_result$files$genome_annotation) &
+                 target_result$files$status == "released")
+  which_cols <- c("accession", "href","biosample_ontology",
+                "biological_replicates", "technical_replicates",
+                "biological_replicates_formatted", "donors",
+                "dataset")
+  gene_quant_files <- target_result$files[which,which_cols]
+  
+  target_metadata <- cbind(query_table[i,], gene_quant_files)
+  
+  for(j in 1:nrow(target_metadata)){
+    temp <- tempfile()
+    download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
+    temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+  }
+  
+  
+}
 
 
-test2 <- content(test, "text", encoding = "UTF-8")
-test3 <- fromJSON(test2, flatten = TRUE)
-data_mm_rna <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
-data_mm_rna <- GET(data_mm_rna)
-data_mm_rna2 <- content(data_mm_rna , "text", encoding = "UTF-8")
-data_mm_rna3 <- fromJSON(data_mm_rna2, flatten = T)
-View(data_mm_rna3$'@graph')
+data <- content(data , "text", encoding = "UTF-8")
+data <- fromJSON(data, flatten = T)
+
+temp <- tempfile()
+download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
+data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
+
 
 
 ac <- "ENCSR968QHO"
@@ -39,26 +77,6 @@ data_mm_rna <- GET(data_mm_rna)
 data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
 data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
 View(data_mm_rna4[["files"]])
-
-
-
-which <- which(data_mm_rna4$files$file_format=="tsv" &
-                 data_mm_rna4$files$output_type=="gene quantifications" &
-                 data_mm_rna4$files$genome_annotation =="M21" &
-                 data_mm_rna4$files$status == "released")
-which_cols <- c("accession", "href", "md5sum", "biosample_ontology",
-                "biological_replicates", "technical_replicates",
-                "biological_replicates_formatted", "donors",
-                "dataset",
-                )
-gene_quant_files <- data_mm_rna4$files[which,which_cols]
-data <- content(data , "text", encoding = "UTF-8")
-data <- fromJSON(data, flatten = T)
-
-temp <- tempfile()
-download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
-data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
-gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
 
 
 ```
