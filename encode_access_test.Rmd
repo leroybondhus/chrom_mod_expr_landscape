@@ -5,7 +5,7 @@ output: html_document
 
 
 ```{r}
-GET
+
 library(jsonlite)
 library(httr)
 test <- GET("https://www.encodeproject.org/ENCBS000AAA/?format=json")
@@ -15,8 +15,40 @@ str(content(test))
 
 test2 <- content(test, "text", encoding = "UTF-8")
 test3 <- fromJSON(test2, flatten = TRUE)
-data_mm_rna <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json"
+data_mm_rna <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
 data_mm_rna <- GET(data_mm_rna)
-data_mm_rna2 <- content(data_mm_rna , "text")
-data_mm_rna3 <- fromJSON(data_mm_rna2, flatten = )
+data_mm_rna2 <- content(data_mm_rna , "text", encoding = "UTF-8")
+data_mm_rna3 <- fromJSON(data_mm_rna2, flatten = T)
+View(data_mm_rna3$'@graph')
+
+
+ac <- "ENCSR968QHO"
+data_mm_rna <- paste0("https://www.encodeproject.org/",
+                      data_mm_rna3$'@graph'$accession[1],
+                      "/?frame=embedded&format=json")
+data_mm_rna <- GET(data_mm_rna)
+data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
+data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
+
+## output_type="gene quantification", status="released", genome_annotation="M21"
+data_mm_rna <- paste0("https://www.encodeproject.org/",
+                      data_mm_rna3$'@graph'$accession[1],
+                      "/?frame=embedded&format=json",
+                      "&files.file_type=tsv")
+data_mm_rna <- GET(data_mm_rna)
+data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
+data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
+View(data_mm_rna4[["files"]])
+
+
+
+data <- content(data , "text", encoding = "UTF-8")
+data <- fromJSON(data, flatten = T)
+
+temp <- tempfile()
+download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
+data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
+
+
 ```
