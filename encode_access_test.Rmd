@@ -42,6 +42,16 @@ View(data_mm_rna4[["files"]])
 
 
 
+which <- which(data_mm_rna4$files$file_format=="tsv" &
+                 data_mm_rna4$files$output_type=="gene quantifications" &
+                 data_mm_rna4$files$genome_annotation =="M21" &
+                 data_mm_rna4$files$status == "released")
+which_cols <- c("accession", "href", "md5sum", "biosample_ontology",
+                "biological_replicates", "technical_replicates",
+                "biological_replicates_formatted", "donors",
+                "dataset",
+                )
+gene_quant_files <- data_mm_rna4$files[which,which_cols]
 data <- content(data , "text", encoding = "UTF-8")
 data <- fromJSON(data, flatten = T)
 
