@@ -19,6 +19,7 @@ query_result <- fromJSON(query_result, flatten = T)
 query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
 
 ##
+data_list <- list()
 for(i in 1:nrow(query_table)){
   target <- paste0("https://www.encodeproject.org/",
                           query_table$accession[i],
@@ -37,46 +38,50 @@ for(i in 1:nrow(query_table)){
                 "biological_replicates_formatted", "donors",
                 "dataset")
   gene_quant_files <- target_result$files[which,which_cols]
-  
+  gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
+    sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
   target_metadata <- cbind(query_table[i,], gene_quant_files)
   
   for(j in 1:nrow(target_metadata)){
     temp <- tempfile()
     download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
     temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+    data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
+                                             metadata = target_metadata[j,])
+    rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
   }
   
   
 }
 
-
-data <- content(data , "text", encoding = "UTF-8")
-data <- fromJSON(data, flatten = T)
-
-temp <- tempfile()
-download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
-data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
-gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
-
-
-
-ac <- "ENCSR968QHO"
-data_mm_rna <- paste0("https://www.encodeproject.org/",
-                      data_mm_rna3$'@graph'$accession[1],
-                      "/?frame=embedded&format=json")
-data_mm_rna <- GET(data_mm_rna)
-data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
-data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
-
-## output_type="gene quantification", status="released", genome_annotation="M21"
-data_mm_rna <- paste0("https://www.encodeproject.org/",
-                      data_mm_rna3$'@graph'$accession[1],
-                      "/?frame=embedded&format=json",
-                      "&files.file_type=tsv")
-data_mm_rna <- GET(data_mm_rna)
-data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
-data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
-View(data_mm_rna4[["files"]])
+# 
+# data <- content(data , "text", encoding = "UTF-8")
+# data <- fromJSON(data, flatten = T)
+# 
+# temp <- tempfile()
+# download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
+# data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+# gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
+# 
+# 
+# 
+# ac <- "ENCSR968QHO"
+# data_mm_rna <- paste0("https://www.encodeproject.org/",
+#                       data_mm_rna3$'@graph'$accession[1],
+#                       "/?frame=embedded&format=json")
+# data_mm_rna <- GET(data_mm_rna)
+# data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
+# data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
+# 
+# ## output_type="gene quantification", status="released", genome_annotation="M21"
+# data_mm_rna <- paste0("https://www.encodeproject.org/",
+#                       data_mm_rna3$'@graph'$accession[1],
+#                       "/?frame=embedded&format=json",
+#                       "&files.file_type=tsv")
+# data_mm_rna <- GET(data_mm_rna)
+# data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
+# data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
+# View(data_mm_rna4[["files"]])
 
 
 ```
