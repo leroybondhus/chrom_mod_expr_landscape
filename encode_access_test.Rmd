@@ -10,7 +10,7 @@ library(httr)
 library(stringr)
 ```
 
-```{r}
+```{r, read encode mouse ref RNAseq}
 ## get ENCODE search results : mouse epigenome reference RNAseq
 search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
 query_result <- GET(search_query)
@@ -21,16 +21,18 @@ query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.li
 ##
 data_list <- list()
 for(i in 1:nrow(query_table)){
+  if(i %% 5 == 0){print(i)}
   target <- paste0("https://www.encodeproject.org/",
                           query_table$accession[i],
                           "/?frame=embedded&format=json")
   target <- GET(target)
   target_result <- content(target, "text", encoding = "UTF-8")
   target_result <- fromJSON(target_result, flatten = TRUE)
-  
+  temp_gene_anno <-  unique(target_result$files$genome_annotation)
+  temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
   which <- which(target_result$files$file_format=="tsv" &
                  target_result$files$output_type=="gene quantifications" &
-                 grepl(max(as.numeric(str_remove_all(target_result$files$genome_annotation,"[a-zA-Z]")),na.rm = T),
+                 grepl(max(as.numeric(str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
                        target_result$files$genome_annotation) &
                  target_result$files$status == "released")
   which_cols <- c("accession", "href","biosample_ontology",
@@ -50,38 +52,24 @@ for(i in 1:nrow(query_table)){
                                              metadata = target_metadata[j,])
     rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
   }
-  
-  
 }
 
-# 
-# data <- content(data , "text", encoding = "UTF-8")
-# data <- fromJSON(data, flatten = T)
-# 
-# temp <- tempfile()
-# download.file("https://www.encodeproject.org/files/ENCFF875HME/@@download/ENCFF875HME.tsv",temp)
-# data <- read.table( temp, skip=0, header = TRUE, sep = "\t")
-# gtex_rowinfo <- data.frame(Name=gtex$Name, Description=gtex$Description)
-# 
-# 
-# 
-# ac <- "ENCSR968QHO"
-# data_mm_rna <- paste0("https://www.encodeproject.org/",
-#                       data_mm_rna3$'@graph'$accession[1],
-#                       "/?frame=embedded&format=json")
-# data_mm_rna <- GET(data_mm_rna)
-# data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
-# data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
-# 
-# ## output_type="gene quantification", status="released", genome_annotation="M21"
-# data_mm_rna <- paste0("https://www.encodeproject.org/",
-#                       data_mm_rna3$'@graph'$accession[1],
-#                       "/?frame=embedded&format=json",
-#                       "&files.file_type=tsv")
-# data_mm_rna <- GET(data_mm_rna)
-# data_mm_rna4 <- content(data_mm_rna , "text", encoding = "UTF-8")
-# data_mm_rna4 <- fromJSON(data_mm_rna4, flatten = T)
-# View(data_mm_rna4[["files"]])
+temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
+                                tpm_ncol=numeric(length=length(data_list)),
+                                metadata_nrow=numeric(length=length(data_list)))
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$metadata_nrow[i] <- nrow(data_list[[i]]$metadata) 
+}
+if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
 
+data_list_concat <- data_list[[1]]
+for(i in 2:length(data_list)){
+  data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
+  data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
+}
+data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
+#rm(data_list)
 
 ```
