@@ -10,7 +10,35 @@ library(httr)
 library(stringr)
 ```
 
+```{r, read early development}
+## zygote, 2 cell, 4 cell, 8 cell, 16 cell, 32 cell
+
+```
+
+```{r, read early gastrution paper ref data}
+## e3.5, e4.5, e5.5, e6.5
+target <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100597/suppl/GSE100597%5Fcount%5Ftable%5FQC%5Ffiltered%2Etxt%2Egz"
+temp <- tempfile()
+download.file(target, temp)
+temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+
+```
+
+```{r, read organogenesis paper ref data}
+## e6.5, 7.25, e7.75, 8.5
+library(data.table)
+library(Seurat)
+target <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/raw_counts.mtx"
+cells <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/meta.csv"
+features <- "C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/genes.tsv"
+temp <- tempfile()
+download.file(target, temp)
+temp_data <- ReadMtx(target,cells = cells, features = features)
+```
+
 ```{r, read encode mouse ref RNAseq}
+
+## e10.5, e11.5, e12.5, e13.5, e14.5, e15.5, e16.5, neonat, 8wk adult, 24wk adult
 ## get ENCODE search results : mouse epigenome reference RNAseq
 search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
 query_result <- GET(search_query)
@@ -71,5 +99,12 @@ for(i in 2:length(data_list)){
 }
 data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
 #rm(data_list)
+
+```
+
+
+
+```{r, }
+
 
 ```
