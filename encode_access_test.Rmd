@@ -25,15 +25,32 @@ temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
 ```
 
 ```{r, read organogenesis paper ref data}
+## Note this file is fairly large ~10 Gb
 ## e6.5, 7.25, e7.75, 8.5
 library(data.table)
 library(Seurat)
-target <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/raw_counts.mtx"
-cells <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/meta.csv"
-features <- "C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/genes.tsv"
-temp <- tempfile()
-download.file(target, temp)
-temp_data <- ReadMtx(target,cells = cells, features = features)
+
+if(!dir.exists("data")){
+  dir.create("data")
+}
+if(!dir.exists("data/e_mtab_6967_atlas")){
+  system(paste0("curl ",
+                "https://www.ebi.ac.uk/arrayexpress/files/",
+                "E-MTAB-6967/E-MTAB-6967.processed.1.zip ",
+                "> data/atlas_data.zip"))
+  system("unzip data/atlas_data.zip -d data")
+  system("rm data/atlas_data.zip")
+  system("tar -zxvf data/atlas_data.tar.gz -C data")
+  system("mv data/atlas data/e_mtab_6967_atlas")
+}
+
+temp_data <- ReadMtx("data/e_mtab_6967_atlas/raw_counts.mtx",
+                     cells = "data/e_mtab_6967_atlas/meta.csv",
+                     features = "data/e_mtab_6967_atlas/genes.tsv",
+                     skip.cell = 1,
+                     cell.sep = ",")
+
+cell_meta <- fread("data/e_mtab_6967_atlas/meta.csv")
 ```
 
 ```{r, read encode mouse ref RNAseq}
