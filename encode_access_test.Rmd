@@ -22,7 +22,6 @@ target <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100597/suppl/GSE
 temp <- tempfile()
 download.file(target, temp)
 temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
-
 ```
 
 ```{r, read organogenesis paper ref data}
@@ -52,6 +51,27 @@ temp_data <- ReadMtx("data/e_mtab_6967_atlas/raw_counts.mtx",
                      cell.sep = ",")
 
 cell_meta <- fread("data/e_mtab_6967_atlas/meta.csv")
+
+which <- which(!cell_meta$doublet)
+temp_data <- temp_data[,which]
+cell_meta <- cell_meta[which,]
+
+entities <- apply(cell_meta[,c("stage","cluster","cluster.sub","celltype")],1,paste,collapse=",")
+entity_types <- unique(entities)
+cell_entity_map <- list()
+for(i in 1:length(entity_types)){
+  which <- which(entities == entity_types[i])
+  cell_entity_map[[entity_types[i]]] <- cell_meta$cell[which]
+}
+
+df <- data.frame(matrix(nrow = nrow(temp_data), ncol=length(entity_types)))
+rownames(df) <- rownames(temp_data)
+colnames(df) <- names(cell_entity_map)
+
+for(i in 1:ncol(df)){
+  if(i %% 50 ==0){print(i)}
+  df[,i] <- rowSums(temp_data[,cell_entity_map[[i]],drop=F])
+}
 ```
 
 ```{r, read encode mouse ref RNAseq}
