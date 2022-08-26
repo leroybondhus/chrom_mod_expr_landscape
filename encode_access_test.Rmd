@@ -11,6 +11,10 @@ library(httr)
 library(stringr)
 ```
 
+```{r}
+dataset_list <- list()
+```
+
 ```{r, read early development}
 ## zygote, 2 cell, 4 cell, 8 cell, 16 cell, 32 cell
 
@@ -22,6 +26,11 @@ target <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100597/suppl/GSE
 temp <- tempfile()
 download.file(target, temp)
 temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+rownames(temp_data) <- temp_data$X
+temp_data$X <- NULL
+temp_data[,1:ncol(temp_data)] <- apply(temp_data,2,as.numeric)
+
+dataset_list[["GSE100597"]] <- list(mat=temp_data, meta=NA)
 ```
 
 ```{r, read organogenesis paper ref data}
@@ -56,7 +65,7 @@ which <- which(!cell_meta$doublet)
 temp_data <- temp_data[,which]
 cell_meta <- cell_meta[which,]
 
-entities <- apply(cell_meta[,c("stage","cluster","cluster.sub","celltype")],1,paste,collapse=",")
+entities <- apply(cell_meta[,c("stage","cluster","cluster.sub","celltype","haem_subclust","endo_gutCluster")],1,paste,collapse=",")
 entity_types <- unique(entities)
 cell_entity_map <- list()
 for(i in 1:length(entity_types)){
@@ -72,6 +81,12 @@ for(i in 1:ncol(df)){
   if(i %% 50 ==0){print(i)}
   df[,i] <- rowSums(temp_data[,cell_entity_map[[i]],drop=F])
 }
+
+for(i in 1:ncol(df)){
+  tempdf$num_cells[i] <- length(cell_entity_map[[i]])
+}
+
+dataset_list$E_MTAB_6967 <- list(mat=df,meta=tempdf) 
 ```
 
 ```{r, read encode mouse ref RNAseq}
@@ -115,7 +130,7 @@ for(i in 1:nrow(query_table)){
     download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
     temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
     data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
-                                             metadata = target_metadata[j,])
+                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
     rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
   }
 }
@@ -138,6 +153,7 @@ for(i in 2:length(data_list)){
 data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
 #rm(data_list)
 
+dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
 ```
 
 
