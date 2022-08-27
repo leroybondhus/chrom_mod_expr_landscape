@@ -9,6 +9,8 @@ output: html_document
 library(jsonlite)
 library(httr)
 library(stringr)
+library(data.table)
+data_dir <- "data/"
 ```
 
 ```{r}
@@ -158,7 +160,69 @@ dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, metadata=data_lis
 
 
 
-```{r, }
-
-
+```{r, mouse adult single cell}
+### USE THIS CODE AND LINKS TO DOWNLOAD AND PROCESSES EXPRESSION MATRIX IF NOT ALREADY SAVED
+if(TRUE){
+  ### if download speed via R is too slow, can also manually download files from https://figshare.com/articles/dataset/HCL_DGE_Data/7235471 ##
+  download.file("https://figshare.com/ndownloader/files/22447898", paste(data_dir,"annotation_rmbatch_data_revised417.zip",sep="/"))
+  unzip(paste(data_dir,"annotation_rmbatch_data_revised417.zip",sep="/"), exdir=data_dir)
+  
+  system(paste0("curl -L ",
+                "https://figshare.com/ndownloader/files/23043329 ",
+                "> data/dge_rmbatch_data.tar.gz"))
+  untar(paste(data_dir,"dge_rmbatch_data.tar.gz",sep="/"),exdir=data_dir)
+  
+  files <- list.files(path="./data/annotation_rmbatch_data_revised417",pattern="*.csv", full.names = T)
+  for(f in files){
+    temp <- fread(f)
+    if(!exists("anno")){
+      anno <- fread(f)
+    } else{
+      anno <- rbind(anno, temp,fill=TRUE)
+    }
+  }
+  
+  anno$V15 <- anno$V16 <- anno$V17 <- NULL
+  anno$Celltype_comb <- tolower(str_replace(anno$Celltype, "_.*gh","" ))
+  
+  files <- list.files(path="./data/new",pattern="*.txt.gz", full.names = T)
+  rownames_genes <- foreach(f=files, .combine="c") %dopar% {
+    rownames_genes <- fread(f)$V1
+    rownames_genes
+  }
+  rownames_genes <- unique(rownames_genes)
+  
+  rm(exp_mat)
+  ## foreach crashing r if called over too many files at once-  break into chunks and aggregate 1 chunk at a time
+  file_chunks <- split(files, cut(seq_along(files), 10, labels = F))
+  for(i in 1:length(file_chunks)){
+    print(i)
+    temp_mat <- foreach(f=file_chunks[[i]], .combine = "+") %dopar% {
+        temp_mat <- matrix(0, nrow=length(rownames_genes), ncol=length(unique(anno$Celltype_comb)) )
+        colnames(temp_mat) <- unique(anno$Celltype_comb)
+        rownames(temp_mat) <- rownames_genes
+        raw_exp <- fread(f)
+        rownames(raw_exp) <- raw_exp$V1
+        raw_exp$V1 <- NULL
+        cts <- unique(anno$Celltype_comb[which(is.element(anno$Cell_id, colnames(raw_exp)))])
+        for(ct in cts){
+          temp_mat[rownames(raw_exp),ct] <-  temp_mat[rownames(raw_exp),ct]+
+            rowSums(as.matrix(raw_exp)[,which(is.element(colnames(raw_exp),anno$Cell_id[which(anno$Celltype_comb==ct)]  ))])
+        }
+        temp_mat
+    }
+    if(!exists("exp_mat")){
+      exp_mat <- temp_mat
+    } else {
+      exp_mat <- exp_mat + temp_mat
+    }
+  }
+  
+  mouse_exp_mat <- exp_mat
+  #save(mouse_exp_mat, file = "mouse_sc.Rdata")
+  
+  #fwrite(mouse_exp_mat,file="mouse_sc.csv")
+}
+dataset_list$Adult_mouse_sc <- list(mat=exp_mat, meta=anno)
+save(dataset_list, file = "data/mouse_transcriptome_data.Rdata")
 ```
