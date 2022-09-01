@@ -6,6 +6,7 @@ output: html_document
 
 ```{r}
 #minor change
+library(Seurat)
 library(jsonlite)
 library(httr)
 library(stringr)
@@ -100,22 +101,30 @@ rm(temp_data)
 ```{r, read mouse organogenesis paper}
 # E9.5 to E13.5
 
-temp <- tempfile()
-download.file("https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz", temp)
-temp_data <- read.table(temp, skip = 0, header = TRUE, sep = ",")
-file.remove(temp)
-
+temp_dir <- paste0(data_dir,"GSE119945/")
+dir.create(temp_dir)
 system(paste0("curl ",
               "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
               "GSE119945/suppl/GSE119945%5Fgene%5Fcount%2Etxt%2Egz",
-              "> data/GSE119945_gene_count.txt.gz"))
-temp_dat <- fread("data/GSE119945_gene_count.txt.gz" )
+              paste0("> ",temp_dir,"gene_count.txt.gz" )))
 
-temp_data <- ReadMtx("data/GSE119945/gene_count.txt.gz",
-                     cells = "data/GSE119945/cells.csv",
-                     features = "data/GSE119945/genes.tsv",
-                     #skip.cell = 1,
-                     cell.sep = ",")
+system(paste0("curl ",
+              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+              "GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz",
+              paste0("> ",temp_dir,"cell_annotate.csv.gz" )))
+
+system(paste0("curl ",
+              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+              "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
+              paste0("> ",temp_dir,"gene_annotate.csv.gz" )))
+
+temp_data <- ReadMtx(paste0(temp_dir,"GSE119945_gene_count.txt.gz" ),
+                     cells = paste0(temp_dir,"cell_annotate.csv.gz" ),
+                     features = paste0(temp_dir,"gene_annotate.csv.gz" ),
+                     skip.cell = 1,
+                     feature.column = 1
+                     #cell.sep = ","
+                     )
 # system("gunzip data/GSE119945_gene_count.txt.gz ")
 # system("rm data/GSE119945_gene_count.txt.gz")
 
