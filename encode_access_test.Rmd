@@ -118,12 +118,42 @@ system(paste0("curl ",
               "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
               paste0("> ",temp_dir,"gene_annotate.csv.gz" )))
 
-temp_data <- ReadMtx(paste0(temp_dir,"GSE119945_gene_count.txt.gz" ),
+temp_cells <- fread(paste0(temp_dir,"cell_annotate.csv.gz" ))
+temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
+
+## num lines gene_count.txt.gz is at max cells x features + 2
+temp_nrow <- 50e6 
+temp_num <- ceiling(file.size(paste0(temp_dir,"gene_count.txt")) / temp_nrow)
+dir.create(paste0(temp_dir,"temp_split"))
+
+i=1
+while(file.size(paste0(temp_dir,"gene_count.txt")) > 0){
+  print(i)
+  if(i > temp_num){stop("stop: exceeded expected chunk count")}
+  system(paste0("head -n ", format(temp_nrow, scientific = F), " ",
+                temp_dir,"gene_count.txt",
+                " > ", temp_dir,"temp_split/chunk_",i, 
+                "; sed -i -e '1,", format(temp_nrow, scientific = F), "d' ",
+                temp_dir,"gene_count.txt"
+                )
+  )
+  i <- i+1
+} #sed -i.bak '2,$d' foo.txt
+
+# system(paste0("gunzip -c ",temp_dir,"gene_count.txt.gz > ",temp_dir,"gene_count.txt"))
+# system(paste0("split ",temp_dir,"GSE119945_gene_count.txt",
+#               " -n ", "l/",temp_num, " ",
+#               paste0(temp_dir,"temp_split/","chunk_")
+#               )
+# )
+
+temp_data <- ReadMtx(paste0(temp_dir,"tiny.txt" ),
                      cells = paste0(temp_dir,"cell_annotate.csv.gz" ),
                      features = paste0(temp_dir,"gene_annotate.csv.gz" ),
                      skip.cell = 1,
-                     feature.column = 1
-                     #cell.sep = ","
+                     skip.feature = 1,
+                     cell.sep = ",",
+                     feature.sep=","
                      )
 # system("gunzip data/GSE119945_gene_count.txt.gz ")
 # system("rm data/GSE119945_gene_count.txt.gz")
