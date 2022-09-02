@@ -107,6 +107,7 @@ system(paste0("curl ",
               "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
               "GSE119945/suppl/GSE119945%5Fgene%5Fcount%2Etxt%2Egz",
               paste0("> ",temp_dir,"gene_count.txt.gz" )))
+system(paste0("gunzip -c ",temp_dir,"gene_count.txt.gz > ",temp_dir,"gene_count.txt"))
 
 system(paste0("curl ",
               "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
@@ -121,40 +122,55 @@ system(paste0("curl ",
 temp_cells <- fread(paste0(temp_dir,"cell_annotate.csv.gz" ))
 temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
 
+
 ## num lines gene_count.txt.gz is at max cells x features + 2
-temp_nrow <- 50e6 
+temp_nrow <- 500e6 
 temp_num <- ceiling(file.size(paste0(temp_dir,"gene_count.txt")) / temp_nrow)
 dir.create(paste0(temp_dir,"temp_split"))
 
-i=1
-while(file.size(paste0(temp_dir,"gene_count.txt")) > 0){
-  print(i)
-  if(i > temp_num){stop("stop: exceeded expected chunk count")}
-  system(paste0("head -n ", format(temp_nrow, scientific = F), " ",
-                temp_dir,"gene_count.txt",
-                " > ", temp_dir,"temp_split/chunk_",i, 
-                "; sed -i -e '1,", format(temp_nrow, scientific = F), "d' ",
-                temp_dir,"gene_count.txt"
-                )
-  )
-  i <- i+1
-} #sed -i.bak '2,$d' foo.txt
+system(paste0("split ",temp_dir,"gene_count.txt",
+              " -n ", "l/",temp_num, " ",
+              paste0(temp_dir,"temp_split/","chunk_")
+              )
+)
 
-# system(paste0("gunzip -c ",temp_dir,"gene_count.txt.gz > ",temp_dir,"gene_count.txt"))
-# system(paste0("split ",temp_dir,"GSE119945_gene_count.txt",
-#               " -n ", "l/",temp_num, " ",
-#               paste0(temp_dir,"temp_split/","chunk_")
-#               )
-# )
+file_list <- list.files(paste0(temp_dir,"temp_split"), full.names = T) 
+file_list <- file_list[grep("chunk_", file_list)]
 
-temp_data <- ReadMtx(paste0(temp_dir,"tiny.txt" ),
-                     cells = paste0(temp_dir,"cell_annotate.csv.gz" ),
-                     features = paste0(temp_dir,"gene_annotate.csv.gz" ),
-                     skip.cell = 1,
-                     skip.feature = 1,
-                     cell.sep = ",",
-                     feature.sep=","
-                     )
+for(f in file_list ){
+   if(grepl("chunk_aa",f)){
+     temp_header <- system(paste0("head -n 2 ", f), intern = T)
+     fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
+     writeLines(temp_header, fileConn)
+     close(fileConn)
+   } else {
+     
+   }
+
+# for(f in file_list ){
+#    if(grepl("chunk_aa",f)){
+#      temp_header <- system(paste0("head -n 2 ", f), intern = T)
+#      fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
+#      writeLines(temp_header, fileConn)
+#      close(fileConn)
+#    } else {
+#      temp_header_2 <- system(paste0("head -n 2 ", f), intern = T)
+#      if(!all(temp_header == temp_header_2)){
+#        system(paste0("cat ",temp_dir,"temp_split/","header.txt",
+#                      " ",f," > ", temp_dir,"temp_split/","temp_chunk" ))
+#        system(paste0("mv ",  temp_dir,"temp_split/temp_chunk", " ",f ))
+#      }
+#    }
+}
+
+# temp_data <- ReadMtx(paste0(temp_dir,"tiny.txt" ),
+#                      cells = paste0(temp_dir,"cell_annotate.csv.gz" ),
+#                      features = paste0(temp_dir,"gene_annotate.csv.gz" ),
+#                      skip.cell = 1,
+#                      skip.feature = 1,
+#                      cell.sep = ",",
+#                      feature.sep=","
+#                      )
 # system("gunzip data/GSE119945_gene_count.txt.gz ")
 # system("rm data/GSE119945_gene_count.txt.gz")
 
