@@ -124,11 +124,12 @@ temp_cells <- as.data.frame(temp_cells)
 temp_cells$Sub_Cluster[grep("unknown", temp_cells$Sub_Cluster)] <- "0"
 temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
 temp_features <- as.data.frame(temp_features)
-cell_cluster_map <- data.frame(cell=1:nrow(temp_cells),
-                     cluster= apply(
-                       temp_cells[,c("Main_Cluster","Sub_Cluster")],
-                       1,paste,collapse="-"))
-
+temp_cells$cluster <- apply(temp_cells[,c("Main_Cluster","Sub_Cluster")],
+                            1,paste,collapse="-")
+cluster_exp_mat <- matrix(0,nrow = nrow(temp_features),
+                          ncol = length(unique(temp_cells$cluster)) )
+rownames(cluster_exp_mat) <- temp_features$gene_id
+colnames(cluster_exp_mat) <- unique(temp_cells$cluster)
 ## num lines gene_count.txt.gz is at max cells x features + 2
 temp_nrow <- 500e6 
 temp_num <- ceiling(file.size(paste0(temp_dir,"gene_count.txt")) / temp_nrow)
@@ -155,8 +156,8 @@ for(f in file_list ){
      mat_part <- fread(f, skip = 0, header = F,
                     col.names = c("gene","cell","value") )
    }
-  
-  
+  mat_part$cluster <- temp_cells$cluster[match(mat_part$cell, 1:nrow(temp_cells))]
+  ## next need to aggregate counts for each gene for each cluster .... 
 }
 
 # system("gunzip data/GSE119945_gene_count.txt.gz ")
