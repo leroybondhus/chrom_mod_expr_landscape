@@ -120,8 +120,14 @@ system(paste0("curl ",
               paste0("> ",temp_dir,"gene_annotate.csv.gz" )))
 
 temp_cells <- fread(paste0(temp_dir,"cell_annotate.csv.gz" ))
+temp_cells <- as.data.frame(temp_cells)
+temp_cells$Sub_Cluster[grep("unknown", temp_cells$Sub_Cluster)] <- "0"
 temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
-
+temp_features <- as.data.frame(temp_features)
+cell_cluster_map <- data.frame(cell=1:nrow(temp_cells),
+                     cluster= apply(
+                       temp_cells[,c("Main_Cluster","Sub_Cluster")],
+                       1,paste,collapse="-"))
 
 ## num lines gene_count.txt.gz is at max cells x features + 2
 temp_nrow <- 500e6 
@@ -143,34 +149,16 @@ for(f in file_list ){
      fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
      writeLines(temp_header, fileConn)
      close(fileConn)
+     mat_part <- fread(f, skip = 2, header = F,
+                    col.names = c("gene","cell","value") )
    } else {
-     
+     mat_part <- fread(f, skip = 0, header = F,
+                    col.names = c("gene","cell","value") )
    }
-
-# for(f in file_list ){
-#    if(grepl("chunk_aa",f)){
-#      temp_header <- system(paste0("head -n 2 ", f), intern = T)
-#      fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
-#      writeLines(temp_header, fileConn)
-#      close(fileConn)
-#    } else {
-#      temp_header_2 <- system(paste0("head -n 2 ", f), intern = T)
-#      if(!all(temp_header == temp_header_2)){
-#        system(paste0("cat ",temp_dir,"temp_split/","header.txt",
-#                      " ",f," > ", temp_dir,"temp_split/","temp_chunk" ))
-#        system(paste0("mv ",  temp_dir,"temp_split/temp_chunk", " ",f ))
-#      }
-#    }
+  
+  
 }
 
-# temp_data <- ReadMtx(paste0(temp_dir,"tiny.txt" ),
-#                      cells = paste0(temp_dir,"cell_annotate.csv.gz" ),
-#                      features = paste0(temp_dir,"gene_annotate.csv.gz" ),
-#                      skip.cell = 1,
-#                      skip.feature = 1,
-#                      cell.sep = ",",
-#                      feature.sep=","
-#                      )
 # system("gunzip data/GSE119945_gene_count.txt.gz ")
 # system("rm data/GSE119945_gene_count.txt.gz")
 
