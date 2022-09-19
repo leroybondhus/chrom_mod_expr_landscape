@@ -1,0 +1,35 @@
+---
+title: "expression_pattern_classification"
+author: "Leroy Bondhus"
+date: "9/18/2022"
+output: html_document
+---
+
+```{r, load libraries}
+
+```
+
+```{r, define expression pattern classes}
+
+## ubiquitous to specific
+
+## complex to simple
+
+## subsumes to X 
+
+## temporal dynamics 
+## temporal dynamics of summary statistics (spec, comp)
+
+## conservation of patterns
+### tissue-tissue, cell-cell mapping inter-organism, inter-devstage ...
+
+## dynamics of known complex subunits/partners
+
+```
+
+```{r, mouse development}
+
+### classes
+
+
+```
