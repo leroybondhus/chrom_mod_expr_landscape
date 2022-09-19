@@ -6,9 +6,18 @@ output: html_document
 
 ```{r}
 #minor change
+library(Seurat)
 library(jsonlite)
 library(httr)
 library(stringr)
+library(data.table)
+library(doParallel)
+registerDoParallel(detectCores()-1)
+data_dir <- "data/"
+```
+
+```{r}
+dataset_list <- list()
 ```
 
 ```{r, read early development}
@@ -22,20 +31,142 @@ target <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE100nnn/GSE100597/suppl/GSE
 temp <- tempfile()
 download.file(target, temp)
 temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+rownames(temp_data) <- temp_data$X
+temp_data$X <- NULL
+temp_data[,1:ncol(temp_data)] <- apply(temp_data,2,as.numeric)
 
+dataset_list[["GSE100597"]] <- list(mat=temp_data, meta=NA)
 ```
 
-```{r, read organogenesis paper ref data}
+```{r, read early organogenesis paper ref data}
+## Note this file is fairly large ~10 Gb
 ## e6.5, 7.25, e7.75, 8.5
 library(data.table)
 library(Seurat)
-target <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/raw_counts.mtx"
-cells <-"C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/meta.csv"
-features <- "C:/Users/LeroyBondhus/Downloads/E-MTAB-6967.processed.1/atlas/genes.tsv"
-temp <- tempfile()
-download.file(target, temp)
-temp_data <- ReadMtx(target,cells = cells, features = features)
+
+if(!dir.exists("data")){
+  dir.create("data")
+}
+if(!dir.exists("data/e_mtab_6967_atlas")){
+  system(paste0("curl ",
+                "https://www.ebi.ac.uk/arrayexpress/files/",
+                "E-MTAB-6967/E-MTAB-6967.processed.1.zip ",
+                "> data/atlas_data.zip"))
+  system("unzip data/atlas_data.zip -d data")
+  system("rm data/atlas_data.zip")
+  system("tar -zxvf data/atlas_data.tar.gz -C data")
+  system("mv data/atlas data/e_mtab_6967_atlas")
+}
+
+temp_data <- ReadMtx("data/e_mtab_6967_atlas/raw_counts.mtx",
+                     cells = "data/e_mtab_6967_atlas/meta.csv",
+                     features = "data/e_mtab_6967_atlas/genes.tsv",
+                     skip.cell = 1,
+                     cell.sep = ",")
+
+cell_meta <- fread("data/e_mtab_6967_atlas/meta.csv")
+
+which <- which(!cell_meta$doublet)
+temp_data <- temp_data[,which]
+cell_meta <- cell_meta[which,]
+
+entities <- apply(cell_meta[,c("stage","cluster","cluster.sub","celltype","haem_subclust","endo_gutCluster")],1,paste,collapse=",")
+tempdf <- unique(cell_meta[,c("stage","cluster","cluster.sub","celltype","haem_subclust","endo_gutCluster")])
+entity_types <- unique(entities)
+cell_entity_map <- list()
+for(i in 1:length(entity_types)){
+  which <- which(entities == entity_types[i])
+  cell_entity_map[[entity_types[i]]] <- cell_meta$cell[which]
+}
+
+df <- data.frame(matrix(nrow = nrow(temp_data), ncol=length(entity_types)))
+rownames(df) <- rownames(temp_data)
+colnames(df) <- names(cell_entity_map)
+
+for(i in 1:ncol(df)){
+  if(i %% 50 ==0){print(i)}
+  df[,i] <- rowSums(temp_data[,cell_entity_map[[i]],drop=F])
+}
+
+for(i in 1:ncol(df)){
+  tempdf$num_cells[i] <- length(cell_entity_map[[i]])
+}
+
+dataset_list$E_MTAB_6967 <- list(mat=df,meta=tempdf) 
+rm(temp_data)
 ```
+
+
+
+```{r, read mouse organogenesis paper}
+# E9.5 to E13.5
+
+temp_dir <- paste0(data_dir,"GSE119945/")
+dir.create(temp_dir)
+system(paste0("curl ",
+              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+              "GSE119945/suppl/GSE119945%5Fgene%5Fcount%2Etxt%2Egz",
+              paste0("> ",temp_dir,"gene_count.txt.gz" )))
+system(paste0("gunzip -c ",temp_dir,"gene_count.txt.gz > ",temp_dir,"gene_count.txt"))
+
+system(paste0("curl ",
+              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+              "GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz",
+              paste0("> ",temp_dir,"cell_annotate.csv.gz" )))
+
+system(paste0("curl ",
+              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+              "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
+              paste0("> ",temp_dir,"gene_annotate.csv.gz" )))
+
+temp_cells <- fread(paste0(temp_dir,"cell_annotate.csv.gz" ))
+temp_cells <- as.data.frame(temp_cells)
+temp_cells$Sub_Cluster[grep("unknown", temp_cells$Sub_Cluster)] <- "0"
+temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
+temp_features <- as.data.frame(temp_features)
+temp_cells$cluster <- apply(temp_cells[,c("Main_Cluster","Sub_Cluster")],
+                            1,paste,collapse="-")
+cluster_exp_mat <- matrix(0,nrow = nrow(temp_features),
+                          ncol = length(unique(temp_cells$cluster)) )
+rownames(cluster_exp_mat) <- temp_features$gene_id
+colnames(cluster_exp_mat) <- unique(temp_cells$cluster)
+## num lines gene_count.txt.gz is at max cells x features + 2
+temp_nrow <- 500e6 
+temp_num <- ceiling(file.size(paste0(temp_dir,"gene_count.txt")) / temp_nrow)
+dir.create(paste0(temp_dir,"temp_split"))
+
+system(paste0("split ",temp_dir,"gene_count.txt",
+              " -n ", "l/",temp_num, " ",
+              paste0(temp_dir,"temp_split/","chunk_")
+              )
+)
+
+file_list <- list.files(paste0(temp_dir,"temp_split"), full.names = T) 
+file_list <- file_list[grep("chunk_", file_list)]
+
+for(f in file_list ){
+   if(grepl("chunk_aa",f)){
+     temp_header <- system(paste0("head -n 2 ", f), intern = T)
+     fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
+     writeLines(temp_header, fileConn)
+     close(fileConn)
+     mat_part <- fread(f, skip = 2, header = F,
+                    col.names = c("gene","cell","value") )
+   } else {
+     mat_part <- fread(f, skip = 0, header = F,
+                    col.names = c("gene","cell","value") )
+   }
+  mat_part$cluster <- temp_cells$cluster[match(mat_part$cell, 1:nrow(temp_cells))]
+  ## next need to aggregate counts for each gene for each cluster .... 
+}
+
+# system("gunzip data/GSE119945_gene_count.txt.gz ")
+# system("rm data/GSE119945_gene_count.txt.gz")
+
+  
+
+```
+
 
 ```{r, read encode mouse ref RNAseq}
 
@@ -78,7 +209,7 @@ for(i in 1:nrow(query_table)){
     download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
     temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
     data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
-                                             metadata = target_metadata[j,])
+                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
     rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
   }
 }
@@ -99,13 +230,75 @@ for(i in 2:length(data_list)){
   data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
 }
 data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
-#rm(data_list)
 
+dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
+rm(data_list)
 ```
 
 
-
-```{r, }
-
-
+```{r, mouse adult single cell}
+### USE THIS CODE AND LINKS TO DOWNLOAD AND PROCESSES EXPRESSION MATRIX IF NOT ALREADY SAVED
+if(TRUE){
+  ### if download speed via R is too slow, can also manually download files from https://figshare.com/articles/dataset/HCL_DGE_Data/7235471 ##
+  download.file("https://figshare.com/ndownloader/files/22447898", paste(data_dir,"annotation_rmbatch_data_revised417.zip",sep="/"))
+  unzip(paste(data_dir,"annotation_rmbatch_data_revised417.zip",sep="/"), exdir=data_dir)
+  
+  system(paste0("curl -L ",
+                "https://figshare.com/ndownloader/files/23043329 ",
+                "> data/dge_rmbatch_data.tar.gz"))
+  untar(paste(data_dir,"dge_rmbatch_data.tar.gz",sep="/"),exdir=data_dir)
+  
+  files <- list.files(path="./data/annotation_rmbatch_data_revised417",pattern="*.csv", full.names = T)
+  for(f in files){
+    temp <- fread(f)
+    if(!exists("anno")){
+      anno <- fread(f)
+    } else{
+      anno <- rbind(anno, temp,fill=TRUE)
+    }
+  }
+  
+  anno$V15 <- anno$V16 <- anno$V17 <- NULL
+  anno$Celltype_comb <- tolower(str_replace(anno$Celltype, "_.*gh","" ))
+  
+  files <- list.files(path="./data/new",pattern="*.txt.gz", full.names = T)
+  rownames_genes <- foreach(f=files, .combine="c") %dopar% {
+    rownames_genes <- fread(f)$V1
+    rownames_genes
+  }
+  rownames_genes <- unique(rownames_genes)
+  
+  rm(exp_mat)
+  ## foreach crashing r if called over too many files at once-  break into chunks and aggregate 1 chunk at a time
+  file_chunks <- split(files, cut(seq_along(files), 10, labels = F))
+  for(i in 1:length(file_chunks)){
+    print(i)
+    temp_mat <- foreach(f=file_chunks[[i]], .combine = "+") %dopar% {
+        temp_mat <- matrix(0, nrow=length(rownames_genes), ncol=length(unique(anno$Celltype_comb)) )
+        colnames(temp_mat) <- unique(anno$Celltype_comb)
+        rownames(temp_mat) <- rownames_genes
+        raw_exp <- fread(f)
+        rownames(raw_exp) <- raw_exp$V1
+        raw_exp$V1 <- NULL
+        cts <- unique(anno$Celltype_comb[which(is.element(anno$Cell_id, colnames(raw_exp)))])
+        for(ct in cts){
+          temp_mat[rownames(raw_exp),ct] <-  temp_mat[rownames(raw_exp),ct]+
+            rowSums(as.matrix(raw_exp)[,which(is.element(colnames(raw_exp),anno$Cell_id[which(anno$Celltype_comb==ct)]  ))])
+        }
+        temp_mat
+    }
+    if(!exists("exp_mat")){
+      exp_mat <- temp_mat
+    } else {
+      exp_mat <- exp_mat + temp_mat
+    }
+  }
+  
+  mouse_exp_mat <- exp_mat
+  #save(mouse_exp_mat, file = "mouse_sc.Rdata")
+  
+  #fwrite(mouse_exp_mat,file="mouse_sc.csv")
+}
+dataset_list$Adult_mouse_sc <- list(mat=exp_mat, meta=anno)
+save(dataset_list, file = "data/mouse_transcriptome_data.Rdata")
 ```
