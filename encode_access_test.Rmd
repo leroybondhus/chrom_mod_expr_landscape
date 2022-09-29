@@ -16,6 +16,21 @@ registerDoParallel(detectCores()-1)
 data_dir <- "data/"
 ```
 
+
+
+```{r, create directory structure for project}
+dirs <- list(data_dir = "./data",
+             results_dir = "./results",
+             figures_dir_parent = "./results/figures",
+             figures_dir = "./results/figures/raw",
+             tables_dir = "./results/tables")
+for(d in dirs){
+  if(!dir.exists(d)){dir.create(d)}
+}
+date <- format(Sys.time(),"%Y%m%d")
+```
+
+
 ```{r}
 dataset_list <- list()
 ```
@@ -44,10 +59,8 @@ dataset_list[["GSE100597"]] <- list(mat=temp_data, meta=NA)
 library(data.table)
 library(Seurat)
 
-if(!dir.exists("data")){
-  dir.create("data")
-}
-if(!dir.exists("data/e_mtab_6967_atlas")){
+dirs$e_mtab_6967_atlas <- paste0(dirs$data_dir, "/e_mtab_6967_atlas")
+if(!dir.exists(dirs$e_mtab_6967_atlas)){
   system(paste0("curl ",
                 "https://www.ebi.ac.uk/arrayexpress/files/",
                 "E-MTAB-6967/E-MTAB-6967.processed.1.zip ",
@@ -58,9 +71,9 @@ if(!dir.exists("data/e_mtab_6967_atlas")){
   system("mv data/atlas data/e_mtab_6967_atlas")
 }
 
-temp_data <- ReadMtx("data/e_mtab_6967_atlas/raw_counts.mtx",
-                     cells = "data/e_mtab_6967_atlas/meta.csv",
-                     features = "data/e_mtab_6967_atlas/genes.tsv",
+temp_data <- ReadMtx( paste0(dirs$e_mtab_6967_atlas,"/raw_counts.mtx"),
+                     cells = paste0(dirs$e_mtab_6967_atlas,"/meta.csv"),
+                     features = paste0(dirs$e_mtab_6967_atlas,"/genes.tsv"),
                      skip.cell = 1,
                      cell.sep = ",")
 
@@ -101,70 +114,84 @@ rm(temp_data)
 ```{r, read mouse organogenesis paper}
 # E9.5 to E13.5
 
-temp_dir <- paste0(data_dir,"GSE119945/")
-dir.create(temp_dir)
-system(paste0("curl ",
-              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
-              "GSE119945/suppl/GSE119945%5Fgene%5Fcount%2Etxt%2Egz",
-              paste0("> ",temp_dir,"gene_count.txt.gz" )))
-system(paste0("gunzip -c ",temp_dir,"gene_count.txt.gz > ",temp_dir,"gene_count.txt"))
+dirs$GSE119945 <- paste0(data_dir,"GSE119945/")
+if(!(dir.exists(dirs$GSE119945))){
+  dir.create(dirs$GSE119945)
+  system(paste0("curl ",
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+                "GSE119945/suppl/GSE119945%5Fgene%5Fcount%2Etxt%2Egz",
+                paste0("> ",dirs$GSE119945,"gene_count.txt.gz" )))
+  system(paste0("gunzip -c ",dirs$GSE119945,"gene_count.txt.gz > ",dirs$GSE119945,"gene_count.txt"))
+  system(paste0("curl ",
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+                "GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz",
+                paste0("> ",dirs$GSE119945,"cell_annotate.csv.gz" )))
+  system(paste0("curl ",
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
+                "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
+                paste0("> ",dirs$GSE119945,"gene_annotate.csv.gz" )))
+}
 
-system(paste0("curl ",
-              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
-              "GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz",
-              paste0("> ",temp_dir,"cell_annotate.csv.gz" )))
-
-system(paste0("curl ",
-              "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
-              "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
-              paste0("> ",temp_dir,"gene_annotate.csv.gz" )))
-
-temp_cells <- fread(paste0(temp_dir,"cell_annotate.csv.gz" ))
+temp_cells <- fread(paste0(dirs$GSE119945,"cell_annotate.csv.gz" ))
 temp_cells <- as.data.frame(temp_cells)
 temp_cells$Sub_Cluster[grep("unknown", temp_cells$Sub_Cluster)] <- "0"
-temp_features <- fread(paste0(temp_dir,"gene_annotate.csv.gz" ))
+temp_features <- fread(paste0(dirs$GSE119945,"gene_annotate.csv.gz" ))
 temp_features <- as.data.frame(temp_features)
 temp_cells$cluster <- apply(temp_cells[,c("Main_Cluster","Sub_Cluster")],
                             1,paste,collapse="-")
-cluster_exp_mat <- matrix(0,nrow = nrow(temp_features),
+temp_cluster_exp_mat <- matrix(0,nrow = nrow(temp_features),
                           ncol = length(unique(temp_cells$cluster)) )
-rownames(cluster_exp_mat) <- temp_features$gene_id
-colnames(cluster_exp_mat) <- unique(temp_cells$cluster)
+rownames(temp_cluster_exp_mat) <- temp_features$gene_id
+colnames(temp_cluster_exp_mat) <- unique(temp_cells$cluster)
 ## num lines gene_count.txt.gz is at max cells x features + 2
 temp_nrow <- 500e6 
-temp_num <- ceiling(file.size(paste0(temp_dir,"gene_count.txt")) / temp_nrow)
-dir.create(paste0(temp_dir,"temp_split"))
+temp_num <- ceiling(file.size(paste0(dirs$GSE119945,"gene_count.txt")) / temp_nrow)
 
-system(paste0("split ",temp_dir,"gene_count.txt",
-              " -n ", "l/",temp_num, " ",
-              paste0(temp_dir,"temp_split/","chunk_")
-              )
-)
+dirs$temp_split <- paste0(dirs$GSE119945,"temp_split")
+if(!dir.exists(dirs$temp_split)){
+  dir.create(dirs$temp_split)
+  system(paste0("split ",dirs$GSE119945,"gene_count.txt",
+                " -n ", "l/",temp_num, " ",
+                paste0(dirs$temp_split,"/chunk_")
+                )
+  )
+}
 
-file_list <- list.files(paste0(temp_dir,"temp_split"), full.names = T) 
+
+file_list <- list.files(dirs$temp_split, full.names = T) 
 file_list <- file_list[grep("chunk_", file_list)]
 
-for(f in file_list ){
-   if(grepl("chunk_aa",f)){
-     temp_header <- system(paste0("head -n 2 ", f), intern = T)
-     fileConn <- file(paste0(temp_dir,"temp_split/","header.txt"))
-     writeLines(temp_header, fileConn)
-     close(fileConn)
+dataset_list$GSE119945$mat <- foreach( f=file_list, .combine = "+") %dopar% {
+  if(grepl("chunk_aa",f)){
+     # temp_header <- system(paste0("head -n 2 ", f), intern = T)
+     # fileConn <- file(paste0(dirs$GSE119945,"temp_split/","header.txt"))
+     # writeLines(temp_header, fileConn)
+     # close(fileConn)
      mat_part <- fread(f, skip = 2, header = F,
                     col.names = c("gene","cell","value") )
    } else {
      mat_part <- fread(f, skip = 0, header = F,
                     col.names = c("gene","cell","value") )
    }
+  mat_part <- as.data.frame(mat_part)
   mat_part$cluster <- temp_cells$cluster[match(mat_part$cell, 1:nrow(temp_cells))]
-  ## next need to aggregate counts for each gene for each cluster .... 
+  ## next need to aggregate counts for each gene for each cluster ....
+  
+  
+  # temp_mp<- aggregate(value ~ gene + cluster, data = mat_part, FUN=sum)
+  
+  temp_clusters <- unique(mat_part$cluster)
+  for(i in 1:length(temp_clusters)){
+    mat_part_sub <- mat_part[which(mat_part$cluster==temp_clusters[i]),]
+    temp_mp <- aggregate(value ~ gene + cluster, data = mat_part_sub, FUN=sum)
+    temp_cluster_exp_mat[temp_mp$gene, unique(temp_mp$cluster)] <-
+      temp_cluster_exp_mat[temp_mp$gene, unique(temp_mp$cluster)] + temp_mp$value
+  }
+  temp_cluster_exp_mat
 }
 
-# system("gunzip data/GSE119945_gene_count.txt.gz ")
-# system("rm data/GSE119945_gene_count.txt.gz")
-
-  
-
+dataset_list$GSE119945$meta <- temp_cells
+rm(temp_cells)
 ```
 
 
