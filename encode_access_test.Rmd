@@ -6,14 +6,13 @@ output: html_document
 
 ```{r}
 #minor change
-library(Seurat)
+#library(Seurat)
 library(jsonlite)
 library(httr)
 library(stringr)
 library(data.table)
 library(doParallel)
 registerDoParallel(detectCores()-1)
-data_dir <- "data/"
 ```
 
 
@@ -37,26 +36,41 @@ dataset_list <- list()
 ```
 
 ```{r, read early development}
-## zygote, 2 cell, 4 cell, 8 cell, 16 cell, 32 cell
+## zygote, 2 cell, 4 cell, 8 cell, 16 cell, blasts cell
 
-dirs$GSE78140 <- paste0(dirs$data_dir,"/GSE78140/")
-if(!(dir.exists(dirs$GSE78140))){
-  dir.create(dirs$GSE78140)
+dirs$GSE45719 <- paste0(dirs$data_dir,"/GSE45719")
+if(!(dir.exists(dirs$GSE45719))){
+  dir.create(dirs$GSE45719)
   system(paste0("curl ",
-                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE78nnn/",
-                "GSE78140/matrix/GSE78140_series_matrix.txt.gz",
-                paste0("> ",dirs$GSE78140,"/GSE78140_series_matrix.txt.gz" )))
-  system(paste0("gunzip -c ",dirs$GSE78140,"/GSE78140_series_matrix.txt.gz > ",dirs$GSE119945,"/GSE78140_series_matrix.txt"))
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE45nnn/",
+                "GSE45719/suppl/GSE45719_RAW.tar",
+                paste0(" > ",dirs$GSE45719,"/GSE45719_RAW.tar" )))
+  system(paste0("tar -xf ",dirs$GSE45719,"/GSE45719_RAW.tar -C ", dirs$GSE45719))
   
-  system(paste0("curl ",
-                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
-                "GSE119945/suppl/GSE119945%5Fcell%5Fannotate%2Ecsv%2Egz",
-                paste0("> ",dirs$GSE119945,"cell_annotate.csv.gz" )))
-  system(paste0("curl ",
-                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE119nnn/",
-                "GSE119945/suppl/GSE119945%5Fgene%5Fannotate%2Ecsv%2Egz",
-                paste0("> ",dirs$GSE119945,"gene_annotate.csv.gz" )))
+  files <- list.files(dirs$GSE45719)[grep(".txt.gz", list.files(dirs$GSE45719))]
+  for(f in files){
+   system(paste0("gunzip ", dirs$GSE45719,"/",f )) 
+  }
+  temp_list <- list()
+  files <- list.files(dirs$GSE45719, full.names = T)[grep("expression.txt", list.files(dirs$GSE45719))]
+  temp_df <- str_split_fixed(str_split_fixed(files,"GSE45719/|_expression",3)[,2], "_|-", 5)[,1:4]
+  colnames(temp_df) <- c("GSM_ID","stage","rep","cell_id")
+  files_df <- data.frame(file=files, temp_df)
+  files_df <- files_df[!grepl("BXC|fibroblast|pooled|split|smartseq",files_df$file),]
+  for(i in 1:nrow(files_df)){
+   temp_df <- fread(files_df$file[i])
+   temp_df <- temp_df[,c("#Gene_symbol","reads")]; colnames(temp_df)[1] <- "gene_symbol"
+   temp_df <- aggregate(reads ~ gene_symbol, temp_df,sum)
+   temp_list[[paste(files_df[i,3:ncol(files_df)], collapse="_")]] <- temp_df
+  }
+  temp_df <- as.data.frame(matrix(nrow=length(temp_list[[1]]$gene_symbol), ncol=length(temp_list)))
+  rownames(temp_df) <- temp_list[[1]]$gene_symbol; colnames(temp_df) <- names(temp_list)
+  for(i in 1:length(temp_list)){
+    if(any(temp_list[[i]]$gene_symbol != rownames(temp_df))){stop("gene names do not match")}
+    temp_df[,i] <- temp_list[[i]]$reads
+  }
 }
+dataset_list$GSE45719 <- list(mat=temp_df,meta=NA)
 ```
 
 ```{r, read early gastrution paper ref data}
