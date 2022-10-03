@@ -51,25 +51,26 @@ if(!(dir.exists(dirs$GSE45719))){
   for(f in files){
    system(paste0("gunzip ", dirs$GSE45719,"/",f )) 
   }
-  temp_list <- list()
-  files <- list.files(dirs$GSE45719, full.names = T)[grep("expression.txt", list.files(dirs$GSE45719))]
-  temp_df <- str_split_fixed(str_split_fixed(files,"GSE45719/|_expression",3)[,2], "_|-", 5)[,1:4]
-  colnames(temp_df) <- c("GSM_ID","stage","rep","cell_id")
-  files_df <- data.frame(file=files, temp_df)
-  files_df <- files_df[!grepl("BXC|fibroblast|pooled|split|smartseq",files_df$file),]
-  for(i in 1:nrow(files_df)){
-   temp_df <- fread(files_df$file[i])
-   temp_df <- temp_df[,c("#Gene_symbol","reads")]; colnames(temp_df)[1] <- "gene_symbol"
-   temp_df <- aggregate(reads ~ gene_symbol, temp_df,sum)
-   temp_list[[paste(files_df[i,3:ncol(files_df)], collapse="_")]] <- temp_df
-  }
-  temp_df <- as.data.frame(matrix(nrow=length(temp_list[[1]]$gene_symbol), ncol=length(temp_list)))
-  rownames(temp_df) <- temp_list[[1]]$gene_symbol; colnames(temp_df) <- names(temp_list)
-  for(i in 1:length(temp_list)){
-    if(any(temp_list[[i]]$gene_symbol != rownames(temp_df))){stop("gene names do not match")}
-    temp_df[,i] <- temp_list[[i]]$reads
-  }
 }
+temp_list <- list()
+files <- list.files(dirs$GSE45719, full.names = T)[grep("expression.txt", list.files(dirs$GSE45719))]
+temp_df <- str_split_fixed(str_split_fixed(files,"GSE45719/|_expression",3)[,2], "_|-", 5)[,1:4]
+colnames(temp_df) <- c("GSM_ID","stage","rep","cell_id")
+files_df <- data.frame(file=files, temp_df)
+files_df <- files_df[!grepl("BXC|fibroblast|pooled|split|smartseq",files_df$file),]
+for(i in 1:nrow(files_df)){
+ temp_df <- fread(files_df$file[i])
+ temp_df <- temp_df[,c("#Gene_symbol","reads")]; colnames(temp_df)[1] <- "gene_symbol"
+ temp_df <- aggregate(reads ~ gene_symbol, temp_df,sum)
+ temp_list[[paste(files_df[i,3:ncol(files_df)], collapse="_")]] <- temp_df
+}
+temp_df <- as.data.frame(matrix(nrow=length(temp_list[[1]]$gene_symbol), ncol=length(temp_list)))
+rownames(temp_df) <- temp_list[[1]]$gene_symbol; colnames(temp_df) <- names(temp_list)
+for(i in 1:length(temp_list)){
+  if(any(temp_list[[i]]$gene_symbol != rownames(temp_df))){stop("gene names do not match")}
+  temp_df[,i] <- temp_list[[i]]$reads
+}
+
 dataset_list$GSE45719 <- list(mat=temp_df,meta=NA)
 ```
 
@@ -363,4 +364,25 @@ if(TRUE){
 }
 dataset_list$Adult_mouse_sc <- list(mat=exp_mat, meta=anno)
 save(dataset_list, file = paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"))
+```
+
+
+```{r, temp cleaning chunk}
+## organize data here but move to original chunks later
+temp_ds <- dataset_list$E_MTAB_6967
+head(temp_ds$mat)
+head(temp_ds$meta)
+col_data <- data.frame(colnames=colnames(temp_ds$mat))
+unique(temp_ds$meta$stage)
+
+#"a.01.zygote"     "a.02.2cell"      "a.03.4cell"      "a.04.8cell"      "a.05.16cell"     "a.06.morula"     "a.07.blastocyst"
+### std_dev_time : a01.zygote ... (stage named by early morphology), e04.50 (embronic day.day_frac), p0.00.0 (postnatal year.week.day) 
+### std_dev_time_modifier : early, mid (default), late
+
+temp_df <- data.frame(std_dev_times = c("unknown","e06.50","e06.75","e07.00","e07.25","e07.50","e07.75","e08.00","e08.25","e08.50"),
+                      provided_dev_times = c("mixed_gastrulation","E6.5","E6.75","E7.0","E7.25","E7.5","E7.75","E8.0","E8.25","E8.5"))
+head(col_data)
+col_data$dev_time_temp <- temp_ds$meta$stage
+col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
+col_data$dev_time_temp <- NULL
 ```
