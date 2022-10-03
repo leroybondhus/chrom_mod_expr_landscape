@@ -368,6 +368,11 @@ save(dataset_list, file = paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"
 
 
 ```{r, temp cleaning chunk}
+#"a.01.zygote"     "a.02.2cell"      "a.03.4cell"      "a.04.8cell"      "a.05.16cell"     "a.06.morula"     "a.07.blastocyst"
+### std_dev_time : a01.zygote ... (stage named by early morphology), e04.50 (embronic day.day_frac), p0.00.0 (postnatal year.week.day) 
+### std_dev_time_modifier : early, mid (default), late
+
+
 ## organize data here but move to original chunks later
 temp_ds <- dataset_list$E_MTAB_6967
 head(temp_ds$mat)
@@ -375,14 +380,26 @@ head(temp_ds$meta)
 col_data <- data.frame(colnames=colnames(temp_ds$mat))
 unique(temp_ds$meta$stage)
 
-#"a.01.zygote"     "a.02.2cell"      "a.03.4cell"      "a.04.8cell"      "a.05.16cell"     "a.06.morula"     "a.07.blastocyst"
-### std_dev_time : a01.zygote ... (stage named by early morphology), e04.50 (embronic day.day_frac), p0.00.0 (postnatal year.week.day) 
-### std_dev_time_modifier : early, mid (default), late
-
 temp_df <- data.frame(std_dev_times = c("unknown","e06.50","e06.75","e07.00","e07.25","e07.50","e07.75","e08.00","e08.25","e08.50"),
                       provided_dev_times = c("mixed_gastrulation","E6.5","E6.75","E7.0","E7.25","E7.5","E7.75","E8.0","E8.25","E8.5"))
 head(col_data)
 col_data$dev_time_temp <- temp_ds$meta$stage
 col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
 col_data$dev_time_temp <- NULL
+dataset_list$E_MTAB_6967$col_data <- col_data
+
+
+temp_ds <- dataset_list$GSE100597
+## NOTE need to use markers from study to classify lineages in matrix for clustering 
+head(temp_ds$mat)
+head(temp_ds$meta)
+col_data <- data.frame(colnames=colnames(temp_ds$mat))
+col_data$dev_time_temp <- str_split_fixed(colnames(temp_ds$mat),"_",2)[,1]
+unique(col_data$dev_time_temp)
+
+temp_df <- data.frame(std_dev_times = c("e03.50","e04.50","e05.50","e06.50","e06.75"),
+                      provided_dev_times = c("E3.5","E4.5","E5.5","E6.5","E6.75"))
+
+col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
+
 ```
