@@ -336,7 +336,7 @@ if(TRUE){
         for(ct in cts){
           temp_mat[rownames(raw_exp),ct] <-  temp_mat[rownames(raw_exp),ct]+
             rowSums(as.matrix(raw_exp)[,which(is.element(colnames(raw_exp),anno$Cell.name[which(anno$Celltype_comb==ct)]  ))])
-        }
+        } 
         temp_mat
     }
     if(!exists("exp_mat")){
