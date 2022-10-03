@@ -345,8 +345,6 @@ if(TRUE){
       exp_mat <- exp_mat + temp_mat
     }
   }
-  
-  
   mouse_exp_mat <- exp_mat
   #save(mouse_exp_mat, file = "mouse_sc.Rdata")
   
@@ -354,6 +352,8 @@ if(TRUE){
 }
 dataset_list$GSE108097 <- list(mat=exp_mat, meta=anno)
 save(dataset_list, file = paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"))
+
+
 ```
 
 
@@ -430,6 +430,31 @@ temp_df <- data.frame(std_dev_times = c("e14.50","p0.00.00","p0.08.00"),
 col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
 col_data$dev_time_temp <- NULL
 dataset_list$GSE108097$col_data <- col_data
+
+
+
+temp_ds <- dataset_list$GSE45719
+head(temp_ds$mat)
+head(temp_ds$meta)
+## need to go back and set columns to be day-cluster_major-cluster_minor
+col_data <- data.frame(colnames=colnames(temp_ds$mat))
+col_data$dev_time_temp <- str_split_fixed(col_data$colnames,"_",2)[,1]
+col_data$dev_time_temp[grep("zy",col_data$dev_time_temp)] <- "zy"
+col_data$
+sort(unique(col_data$dev_time_temp))
+
+#"a01.zygote"     "a02.2cell"      "a03.4cell"      "a04.8cell"      "a05.16cell"     "a06.morula"     "a07.blastocyst"
+temp_df <- data.frame(std_dev_times = c("a01.zygote","a02.2cell.1.early","a02.2cell.2.mid","a02.2cell.3.late", "unknown",
+                                        "a03.4cell","a04.8cell","a05.16cell",
+                                        "a07.blastocyst.1.early","a07.blastocyst.2.mid","a07.blastocyst.3.late" ),
+                      provided_dev_times = c("zy","early2cell","mid2cell","late2cell","C57twocell",
+                                        "4cell","8cell","16cell",
+                                        "earlyblast","midblast","lateblast"))
+
+col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
+col_data$dev_time_temp <- NULL
+dataset_list$GSE45719$col_data <- col_data
+
 
 
 ```
