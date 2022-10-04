@@ -357,7 +357,7 @@ save(dataset_list, file = paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"
 ```
 
 
-```{r, temp cleaning chunk}
+```{r, temp cleaning developmental_time chunk}
 #"a.01.zygote"     "a.02.2cell"      "a.03.4cell"      "a.04.8cell"      "a.05.16cell"     "a.06.morula"     "a.07.blastocyst"
 ### std_dev_time : a01.zygote ... (stage named by early morphology), e04.50 (embronic day.day_frac), p0.00.0 (postnatal year.week.day) 
 ### std_dev_time_modifier : early, mid (default), late
@@ -440,7 +440,6 @@ head(temp_ds$meta)
 col_data <- data.frame(colnames=colnames(temp_ds$mat))
 col_data$dev_time_temp <- str_split_fixed(col_data$colnames,"_",2)[,1]
 col_data$dev_time_temp[grep("zy",col_data$dev_time_temp)] <- "zy"
-col_data$
 sort(unique(col_data$dev_time_temp))
 
 #"a01.zygote"     "a02.2cell"      "a03.4cell"      "a04.8cell"      "a05.16cell"     "a06.morula"     "a07.blastocyst"
@@ -456,5 +455,40 @@ col_data$dev_time_temp <- NULL
 dataset_list$GSE45719$col_data <- col_data
 
 
+
+
+dataset_list$ENCODE_MM_DEV$metadata$col_names <- apply(
+  dataset_list$ENCODE_MM_DEV$metadata[,c("accession","biological_replicates")],
+  1,paste,collapse="_")
+colnames(dataset_list$ENCODE_MM_DEV$mat) <- dataset_list$ENCODE_MM_DEV$metadata$col_names
+temp_ds <- dataset_list$ENCODE_MM_DEV
+head(temp_ds$mat)
+head(temp_ds$meta)
+## need to go back and set columns to be day-cluster_major-cluster_minor
+
+col_data <- data.frame(colnames=colnames(temp_ds$mat))
+col_data$dev_time_temp <- temp_ds$metadata$life_stage_age
+sort(unique(col_data$dev_time_temp))
+
+#"a01.zygote"     "a02.2cell"      "a03.4cell"      "a04.8cell"      "a05.16cell"     "a06.morula"     "a07.blastocyst"
+temp_df <- data.frame(std_dev_times = c("e11.50","e13.50","e14.50","e15.50", "e16.50",
+                                        "p0.00.00","p0.08.00","p0.24.00"),
+                      provided_dev_times = c("embryonic 11.5 days","embryonic 13.5 days","embryonic 14.5 days","embryonic 15.5 days",
+                                             "embryonic 16.5 days","postnatal 0 days", "adult 8 weeks","adult 24 weeks"))
+
+col_data$std_dev_time <- temp_df$std_dev_times[match(col_data$dev_time_temp,temp_df$provided_dev_times)]
+col_data$dev_time_temp <- NULL
+dataset_list$ENCODE_MM_DEV$col_data <- col_data
+
+
+
+
+```
+
+
+```{r,temp cleaning gene_annotations chunk}
+## organize data here but move to original chunks later
+
+dataset_list$ENCODE_MM_DEV$metadata
 
 ```
