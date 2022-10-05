@@ -28,6 +28,7 @@ for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
 }
 date <- format(Sys.time(),"%Y%m%d")
+#load(paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"))
 ```
 
 
@@ -511,7 +512,14 @@ if(!dir.exists(dirs$uberon_dir)){
 library(ontologyIndex)
 onto <- get_ontology("https://github.com/obophenotype/uberon/releases/latest/download/uberon.obo")
 
-dataset_list$E_MTAB_6967$meta$celltype
-onto$name[grep("^blood vessel$", onto$name,ignore.case = T)]
+# dataset_list$E_MTAB_6967$meta$celltype  ## mappable
+# dataset_list$GSE100597$col_data  ## no cell type labels
+# dataset_list$GSE119945$meta ## no cell type labels
+# dataset_list$ENCODE_MM_DEV$metadata$biosample_ontology  ## UBERON_IDs
+# dataset_list$GSE45719$col_data  ## mappable
+# dataset_list$GSE108097$col_data ## mappable 
+
+### CellMarker database to label cluster/ check whether cell types match - also check into papers and how types were assigned 
+
 ```
 
