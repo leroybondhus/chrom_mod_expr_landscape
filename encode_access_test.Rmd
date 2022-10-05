@@ -492,3 +492,26 @@ dataset_list$ENCODE_MM_DEV$col_data <- col_data
 dataset_list$ENCODE_MM_DEV$metadata
 
 ```
+
+
+
+```{r, standardize column / cell/ tissue names via uberon }
+
+## download uberon file
+dirs$uberon_dir <- paste0(dirs$data_dir,"/uberon")
+if(!dir.exists(dirs$uberon_dir)){
+  dir.create(dirs$uberon_dir)
+}
+
+# system(paste0("curl -L ",
+#               "https://github.com/obophenotype/uberon/releases/latest/download/uberon.owl",
+#               paste0(" > ",dirs$uberon_dir,"/uberon.owl" )))
+
+
+library(ontologyIndex)
+onto <- get_ontology("https://github.com/obophenotype/uberon/releases/latest/download/uberon.obo")
+
+dataset_list$E_MTAB_6967$meta$celltype
+onto$name[grep("^blood vessel$", onto$name,ignore.case = T)]
+```
+
