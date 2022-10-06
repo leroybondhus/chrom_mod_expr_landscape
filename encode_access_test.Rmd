@@ -12,6 +12,7 @@ library(httr)
 library(stringr)
 library(data.table)
 library(doParallel)
+library(biomaRt)
 registerDoParallel(detectCores()-1)
 ```
 
@@ -490,7 +491,49 @@ dataset_list$ENCODE_MM_DEV$col_data <- col_data
 ```{r,temp cleaning gene_annotations chunk}
 ## organize data here but move to original chunks later
 
-dataset_list$ENCODE_MM_DEV$metadata
+## gene_df <- get from Biomart 
+
+## import ensembl gene data
+ensembl = useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl")
+genes <- getBM(attributes=c('chromosome_name','start_position','end_position',
+                            'external_gene_name', 'ensembl_gene_id','gene_biotype',
+                            'external_synonym'),
+                 #filters = list('biotype'='protein_coding'),
+                 mart = ensembl, useCache = F) 
+genes <- genes[which(is.element(genes$chromosome_name, c(1:22, "X", "Y", "MT")) & genes$external_gene_name != "" ) ,]
+temp_genes <- as.data.frame(unique(rbind(as.matrix(genes[,c("ensembl_gene_id","external_gene_name")]),
+                                         as.matrix(genes[,c("ensembl_gene_id","external_synonym")]))))
+
+
+### check how many gene names can be match between Biomart and matrix
+temp <- make.unique(temp_genes$ensembl_gene_id[match(rownames(dataset_list$E_MTAB_6967$mat), temp_genes$external_gene_name)])
+temp[which(is.na(temp))] <- "NA"
+rownames(dataset_list$E_MTAB_6967$mat) <- temp
+
+
+rownames(dataset_list$GSE100597$mat)[sample(1:1e4, 25)]
+temp <- str_split_fixed(rownames(dataset_list$GSE100597$mat),"_",2)[,1]
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp[which(is.na(temp))] <- "NA" 
+rownames(dataset_list$GSE100597$mat) <- temp
+
+
+rownames(dataset_list$GSE119945$mat) <- str_split_fixed(rownames(dataset_list$GSE119945$mat),"\\.",2)[,1]
+
+rownames(dataset_list$ENCODE_MM_DEV$mat) <- str_split_fixed(rownames(dataset_list$ENCODE_MM_DEV$mat),"\\.",2)[,1]
+
+
+temp <- rownames(dataset_list$GSE45719$mat)
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp[which(is.na(temp))] <- "NA" 
+rownames(dataset_list$GSE45719$mat) <- temp
+
+
+temp <- rownames(dataset_list$GSE108097$mat)
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp[which(is.na(temp))] <- "NA" 
+rownames(dataset_list$GSE108097$mat) <- temp 
+
 
 ```
 
