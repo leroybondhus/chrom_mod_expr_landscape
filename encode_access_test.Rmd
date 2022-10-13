@@ -28,7 +28,9 @@ dirs$data_dir <- "/u/scratch/l/leroybon/chrom_mod_proj_data"
 for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
 }
+
 date <- format(Sys.time(),"%Y%m%d")
+
 #load(paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"))
 ```
 
@@ -506,35 +508,110 @@ temp_genes <- as.data.frame(unique(rbind(as.matrix(genes[,c("ensembl_gene_id","e
 
 
 ### check how many gene names can be match between Biomart and matrix
-temp <- make.unique(temp_genes$ensembl_gene_id[match(rownames(dataset_list$E_MTAB_6967$mat), temp_genes$external_gene_name)])
+temp <- make.unique(temp_genes$ensembl_gene_id[match(rownames(dataset_list$E_MTAB_6967$mat), temp_genes$ensembl_gene_id)])
 temp[which(is.na(temp))] <- "NA"
 rownames(dataset_list$E_MTAB_6967$mat) <- temp
 
 
 rownames(dataset_list$GSE100597$mat)[sample(1:1e4, 25)]
 temp <- str_split_fixed(rownames(dataset_list$GSE100597$mat),"_",2)[,1]
-temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
 temp[which(is.na(temp))] <- "NA" 
 rownames(dataset_list$GSE100597$mat) <- temp
 
 
-rownames(dataset_list$GSE119945$mat) <- str_split_fixed(rownames(dataset_list$GSE119945$mat),"\\.",2)[,1]
+temp <- str_split_fixed(rownames(dataset_list$GSE119945$mat),"\\.",2)[,1]
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
+temp[which(is.na(temp))] <- "NA"
+rownames(dataset_list$GSE119945$mat) <- temp
 
-rownames(dataset_list$ENCODE_MM_DEV$mat) <- str_split_fixed(rownames(dataset_list$ENCODE_MM_DEV$mat),"\\.",2)[,1]
+
+temp <- str_split_fixed(rownames(dataset_list$ENCODE_MM_DEV$mat),"\\.",2)[,1]
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
+temp[which(is.na(temp))] <- "NA"
+rownames(dataset_list$ENCODE_MM_DEV$mat) <- temp
 
 
 temp <- rownames(dataset_list$GSE45719$mat)
-temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
 temp[which(is.na(temp))] <- "NA" 
 rownames(dataset_list$GSE45719$mat) <- temp
 
 
 temp <- rownames(dataset_list$GSE108097$mat)
-temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
 temp[which(is.na(temp))] <- "NA" 
 rownames(dataset_list$GSE108097$mat) <- temp 
 
 
+```
+
+
+
+```{r, make colnames cleaner - add to individual data read ins later}
+
+sample(colnames(dataset_list$E_MTAB_6967$mat),10)
+head(dataset_list$E_MTAB_6967$col_data)
+dataset_list$E_MTAB_6967$col_data$informative_colname <- apply(str_split_fixed(dataset_list$E_MTAB_6967$col_data$colnames,",",6)[,c(1,4,2,3)],
+                                                               1,paste,collapse="_",sep="")
+
+sample(colnames(dataset_list$GSE100597$mat),10) ## current names uninformative
+
+
+temp_file <- tempfile()
+download.file("https://ars.els-cdn.com/content/image/1-s2.0-S2211124717309610-mmc2.xlsx",temp_file)
+temp_marker_genes <- as.data.frame(readxl::read_excel(temp_file,skip=1,
+                                                      col_types = c("text","text","numeric","numeric",rep("skip",7))))
+temp_marker_genes$gene_ensembl_id <- temp_genes$ensembl_gene_id[match(temp_marker_genes$Gene, temp_genes$external_gene_name)]
+unlink(temp_file)
+cluster_names <- unique(temp_marker_genes$Stage)
+
+dim(dataset_list$GSE100597$mat)
+
+temp_marker_genes$gene_ensembl_id <- temp_genes$ensembl_gene_id[match(temp_marker_genes$Gene, temp_genes$external_gene_name)]
+temp_cell_classifier <- cbind(dataset_list$GSE100597$col_data,
+                              matrix(nrow = nrow(dataset_list$GSE100597$col_data),
+                                     ncol = length(cluster_names),dimnames = list(NULL,cluster_names)) )
+temp_marker_genes_list <- list()
+for(i in 1:length(cluster_names)){
+  temp_marker_genes_list[[ cluster_names[i] ]] <- temp_marker_genes[which(temp_marker_genes$Stage==cluster_names[i]),]
+}
+for(i in 1:ncol(dataset_list$GSE100597$mat)){
+  if(i %% 30 == 1){print(i)}
+  temp_cell_vec <- dataset_list$GSE100597$mat[,i,drop=F]
+  for(j in 1:length(cluster_names)){
+    colnames(temp_cell_classifier)
+    temp <- temp_cell_vec[temp_marker_genes_list[[cluster_names[j]] ]$gene_ensembl_id,1]
+    temp_cell_classifier[i, cluster_names[j]] <- sum(log10(temp[!is.na(temp)]+1))/length(temp)
+  }
+}
+
+
+sample(colnames(dataset_list$GSE119945$mat),10) ## current names uninformative
+
+sample(colnames(dataset_list$ENCODE_MM_DEV$mat),10) ## current names uninformative
+
+sample(colnames(dataset_list$GSE45719$mat),10)
+
+sample(colnames(dataset_list$GSE108097$mat),10)
+```
+
+
+```{r, }
+
+
+## subset matrices for only overlapping genes so that rows match
+
+
+## concatenate all matrices and col_data for name and dev_time
+
+## gene_specificity functions to get weights --> sim tree (virtual parent nodes)
+
+## bipartite cluster prev to next stage  --> dev tree (real parent nodes)
+
+## 
+
+##
 ```
 
 
