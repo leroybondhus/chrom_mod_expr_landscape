@@ -577,7 +577,7 @@ for(i in 1:length(cluster_names)){
   temp_marker_genes_list[[ cluster_names[i] ]] <- temp_marker_genes[which(temp_marker_genes$Stage==cluster_names[i]),]
 }
 for(i in 1:ncol(dataset_list$GSE100597$mat)){
-  if(i %% 30 == 1){print(i)}
+  if(i %% 100 == 1){print(i)}
   temp_cell_vec <- dataset_list$GSE100597$mat[,i,drop=F]
   for(j in 1:length(cluster_names)){
     colnames(temp_cell_classifier)
@@ -585,7 +585,24 @@ for(i in 1:ncol(dataset_list$GSE100597$mat)){
     temp_cell_classifier[i, cluster_names[j]] <- sum(log10(temp[!is.na(temp)]+1))/length(temp)
   }
 }
-
+temp_cell_classifier$predicted_class <- cluster_names[apply(temp_cell_classifier[,3:ncol(temp_cell_classifier)],1, which.max)]
+dataset_list$GSE100597$temp_mat <- as.data.frame(matrix(nrow=nrow(dataset_list$GSE100597$mat), ncol=length(cluster_names),
+                                          dimnames = list(rownames(dataset_list$GSE100597$mat), cluster_names)))
+for(i in 1:ncol(dataset_list$GSE100597$temp_mat)){
+  which <- which(temp_cell_classifier$predicted_class == colnames(dataset_list$GSE100597$temp_mat[i]) &
+                  str_extract(temp_cell_classifier$colnames,"E[0-9]\\.[0-9]")==str_extract(temp_cell_classifier$predicted_class,"E[0-9]\\.[0-9]") )
+  dataset_list$GSE100597$temp_mat[,i] <- rowSums( dataset_list$GSE100597$mat[,which], na.rm = T) 
+}
+dataset_list$GSE100597$temp_mat <- apply(dataset_list$GSE100597$temp_mat,2,function(x){x*1e6/sum(x)} )
+temp_df <- data.frame(std_dev_times = c("e03.50","e04.50","e05.50","e06.50","e06.75"),
+                      provided_dev_times = c("E3.5","E4.5","E5.5","E6.5","E6.75"))
+dataset_list$GSE100597$temp_col_data <- data.frame(colnames=colnames(dataset_list$GSE100597$temp_mat),
+                                                   std_dev_time= temp_df$std_dev_times[match(str_extract(colnames(dataset_list$GSE100597$temp_mat),"E[0-9]\\.[0-9]"),
+                                                                                             temp_df$provided_dev_times)]  )
+dataset_list$GSE100597$mat <- dataset_list$GSE100597$temp_mat
+dataset_list$GSE100597$col_data <- dataset_list$GSE100597$temp_col_data
+dataset_list$GSE100597$temp_mat <- NULL
+dataset_list$GSE100597$temp_col_data <- NULL
 
 sample(colnames(dataset_list$GSE119945$mat),10) ## current names uninformative
 
