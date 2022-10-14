@@ -581,7 +581,7 @@ for(i in 1:ncol(dataset_list$GSE100597$mat)){
   temp_cell_vec <- dataset_list$GSE100597$mat[,i,drop=F]
   for(j in 1:length(cluster_names)){
     colnames(temp_cell_classifier)
-    temp <- temp_cell_vec[temp_marker_genes_list[[cluster_names[j]] ]$gene_ensembl_id,1]
+    temp <- temp_cell_vec[temp_marker_genes_list[[cluster_names[j]] ]$gene_ensembl_id , 1]
     temp_cell_classifier[i, cluster_names[j]] <- sum(log10(temp[!is.na(temp)]+1))/length(temp)
   }
 }
@@ -604,7 +604,45 @@ dataset_list$GSE100597$col_data <- dataset_list$GSE100597$temp_col_data
 dataset_list$GSE100597$temp_mat <- NULL
 dataset_list$GSE100597$temp_col_data <- NULL
 
+
+
+
 sample(colnames(dataset_list$GSE119945$mat),10) ## current names uninformative
+# 
+temp_file <- tempfile()
+download.file("https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-019-0969-x/MediaObjects/41586_2019_969_MOESM3_ESM.xlsx",temp_file)
+temp_anno <-as.data.frame(readxl::read_excel(temp_file,skip=1,sheet = 5,
+                          col_types = c(rep("text",7),rep("skip",21-7))))
+head(dataset_list$GSE119945$col_data)
+###  aggregate columns along meaningful names .. want E#.# and cluster name and cluster trajectory.. aggregate across subclusters.. 
+colnames(dataset_list$GSE119945$mat)
+dataset_list$GSE119945$col_data$temp_cluster <- str_split_fixed(dataset_list$GSE119945$col_data$colnames, "-",2)[,2]
+
+temp_anno$full_cluster_id <- str_remove(temp_anno$Sub_cluster_id,"cluster\\.")
+dataset_list$GSE119945$col_data$temp_new_colname <-  apply(temp_anno[,c("Main_cluster_name","Sub_trajectory_name")][match(dataset_list$GSE119945$col_data$temp_cluster,
+                                                                                                                    temp_anno$full_cluster_id),],1,paste,collapse="--")
+dataset_list$GSE119945$col_data$temp_new_colname <- str_remove(dataset_list$GSE119945$col_data$temp_new_colname , "--NA")
+dataset_list$GSE119945$col_data$temp_new_colname <- apply(dataset_list$GSE119945$col_data[,c("std_dev_time","temp_new_colname")],
+                                                          1, paste,collapse="--")
+temp_clusters <- unique(dataset_list$GSE119945$col_data$temp_new_colname)
+temp_clusters <- temp_clusters[grep("--NA",temp_clusters,invert = T)]
+dataset_list$GSE119945$temp_mat <- matrix(nrow=nrow(dataset_list$GSE119945$mat), ncol=length(temp_clusters),
+                                          dimnames = list(rownames(dataset_list$GSE119945$mat),temp_clusters)  )
+dataset_list$GSE119945$temp_col_data <- data.frame(colnames=temp_clusters,std_dev_time=str_extract(temp_clusters,"e[0-9]*\\.[0-9]*") )
+for(i in 1:length(temp_clusters)){
+  which <- which(dataset_list$GSE119945$col_data$temp_new_colname == temp_clusters[i])
+  dataset_list$GSE119945$temp_mat[,temp_clusters[i]] <- rowSums(dataset_list$GSE119945$mat[,which,drop=F])
+}
+dataset_list$GSE119945$temp_mat <- apply(dataset_list$GSE119945$temp_mat,2,function(x){x*1e6/sum(x)} )
+dataset_list$GSE119945$mat <- dataset_list$GSE119945$temp_mat
+dataset_list$GSE119945$col_data <- dataset_list$GSE119945$temp_col_data
+dataset_list$GSE119945$temp_mat <- NULL
+dataset_list$GSE119945$temp_col_data <- NULL
+
+
+```
+
+```{r}
 
 sample(colnames(dataset_list$ENCODE_MM_DEV$mat),10) ## current names uninformative
 
