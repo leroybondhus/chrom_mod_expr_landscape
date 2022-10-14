@@ -304,7 +304,7 @@ rm(data_list)
 
 ```{r, mouse adult single cell}
 ### USE THIS CODE AND LINKS TO DOWNLOAD AND PROCESSES EXPRESSION MATRIX IF NOT ALREADY SAVED
-dirs$GSE108097 <- paste0(dirs$data_dir,"/GSE108097/")
+dirs$GSE108097 <- paste0(dirs$data_dir,"/GSE108097")
 if(!(dir.exists(dirs$GSE108097))){
   dir.create(dirs$GSE108097)
 }
@@ -326,10 +326,12 @@ if(TRUE){
   
   rm(exp_mat)
   ## foreach crashing r if called over too many files at once-  break into chunks and aggregate 1 chunk at a time
-  file_chunks <- split(files, cut(seq_along(files), 10, labels = F))
+  file_chunks <- split(files, cut(seq_along(files), 30, labels = F))
   for(i in 1:length(file_chunks)){
     print(i)
     temp_mat <- foreach(f=file_chunks[[i]], .combine = "+") %dopar% {
+    #for(f in file_chunks[[4]]){
+        #print(f)
         temp_mat <- matrix(0, nrow=length(rownames_genes), ncol=length(unique(anno$Annotation)) )
         colnames(temp_mat) <- unique(anno$Annotation)
         rownames(temp_mat) <- rownames_genes
@@ -337,10 +339,13 @@ if(TRUE){
         rownames(raw_exp) <- raw_exp$V1
         raw_exp$V1 <- NULL
         cts <- unique(anno$Annotation[which(is.element(anno$Cell.name, colnames(raw_exp)))])
-        for(ct in cts){
-          temp_mat[rownames(raw_exp),ct] <-  temp_mat[rownames(raw_exp),ct]+
-            rowSums(as.matrix(raw_exp)[,which(is.element(colnames(raw_exp),anno$Cell.name[which(anno$Celltype_comb==ct)]  ))])
+        if(length(cts)>0){
+          for(ct in cts){
+            temp_mat[rownames(raw_exp),ct] <-  temp_mat[rownames(raw_exp),ct, drop=F]+
+              rowSums(as.matrix(raw_exp)[,which(is.element(colnames(raw_exp),anno$Cell.name[which(anno$Annotation==ct)]  )), drop=F])
+          }
         }
+       # print(table(colSums(temp_mat)))
         temp_mat
     }
     if(!exists("exp_mat")){
@@ -539,7 +544,7 @@ rownames(dataset_list$GSE45719$mat) <- temp
 
 
 temp <- rownames(dataset_list$GSE108097$mat)
-temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$ensembl_gene_id)])
+temp <- make.unique(temp_genes$ensembl_gene_id[match(temp, temp_genes$external_gene_name)])
 temp[which(is.na(temp))] <- "NA" 
 rownames(dataset_list$GSE108097$mat) <- temp 
 
@@ -624,6 +629,8 @@ dataset_list$GSE119945$col_data$temp_new_colname <-  apply(temp_anno[,c("Main_cl
 dataset_list$GSE119945$col_data$temp_new_colname <- str_remove(dataset_list$GSE119945$col_data$temp_new_colname , "--NA")
 dataset_list$GSE119945$col_data$temp_new_colname <- apply(dataset_list$GSE119945$col_data[,c("std_dev_time","temp_new_colname")],
                                                           1, paste,collapse="--")
+dataset_list$GSE119945$col_data$temp_new_colname <- str_remove(dataset_list$GSE119945$col_data$temp_new_colname,
+                                                               " trajectory.*")
 temp_clusters <- unique(dataset_list$GSE119945$col_data$temp_new_colname)
 temp_clusters <- temp_clusters[grep("--NA",temp_clusters,invert = T)]
 dataset_list$GSE119945$temp_mat <- matrix(nrow=nrow(dataset_list$GSE119945$mat), ncol=length(temp_clusters),
@@ -636,19 +643,59 @@ for(i in 1:length(temp_clusters)){
 dataset_list$GSE119945$temp_mat <- apply(dataset_list$GSE119945$temp_mat,2,function(x){x*1e6/sum(x)} )
 dataset_list$GSE119945$mat <- dataset_list$GSE119945$temp_mat
 dataset_list$GSE119945$col_data <- dataset_list$GSE119945$temp_col_data
+
 dataset_list$GSE119945$temp_mat <- NULL
 dataset_list$GSE119945$temp_col_data <- NULL
 
 
-```
-
-```{r}
-
-sample(colnames(dataset_list$ENCODE_MM_DEV$mat),10) ## current names uninformative
+sample(colnames(dataset_list$ENCODE_MM_DEV$mat),10) ## current names uninformative AND THATS OK (for now... :o)
 
 sample(colnames(dataset_list$GSE45719$mat),10)
+dataset_list$GSE45719$col_data$temp_new_cluster <- str_split_fixed(dataset_list$GSE45719$col_data$colnames,"_",2)[,1]
+dataset_list$GSE45719$col_data$temp_new_cluster <- str_remove(dataset_list$GSE45719$col_data$temp_new_cluster, "[0-9]$")
+temp_clusters <- unique(dataset_list$GSE45719$col_data$temp_new_cluster)
+dataset_list$GSE45719$temp_mat <- matrix(nrow=nrow(dataset_list$GSE45719$mat), ncol=length(temp_clusters),
+                                         dimnames =list(rownames(dataset_list$GSE45719$mat),temp_clusters) )
+temp_time <-unique(dataset_list$GSE45719$col_data[,c("std_dev_time","temp_new_cluster")])
+dataset_list$GSE45719$temp_col_data <- data.frame(colnames=temp_clusters,
+                                                  std_dev_time=temp_time$std_dev_time[match(temp_clusters,temp_time$temp_new_cluster)] )
+for(i in 1:length(temp_clusters)){
+  which <- which(dataset_list$GSE45719$col_data$temp_new_cluster == temp_clusters[i])
+  dataset_list$GSE45719$temp_mat[,temp_clusters[i]] <- rowSums(dataset_list$GSE45719$mat[,which,drop=F])
+}
+dataset_list$GSE45719$temp_mat <- apply(dataset_list$GSE45719$temp_mat,2,function(x){x*1e6/sum(x)} )
+dataset_list$GSE45719$mat <- dataset_list$GSE45719$temp_mat
+dataset_list$GSE45719$col_data <- dataset_list$GSE45719$temp_col_data
+
+dataset_list$GSE45719$temp_mat <- NULL
+dataset_list$GSE45719$temp_col_data <- NULL
+
+
+# temp_mat <- dataset_list$GSE45719$mat
+# temp_mat <- apply(temp_mat,2,function(x){x*1e6/sum(x)} )
+# heatmap(log10(temp_mat[sample(nrow(temp_mat),4000),sample(ncol(temp_mat),100)]+1))
+
 
 sample(colnames(dataset_list$GSE108097$mat),10)
+head(dataset_list$GSE108097$col_data)
+dataset_list$GSE108097$col_data$temp_clusters <- str_remove(dataset_list$GSE108097$col_data$colnames,"_.*high")
+#dataset_list$GSE108097$col_data$temp_clusters <- apply(dataset_list$GSE108097$col_data[,c("std_dev_time","temp_clusters")],1,paste,collapse="--") 
+temp_clusters <- unique(dataset_list$GSE108097$col_data$temp_clusters)
+dataset_list$GSE108097$temp_mat <- matrix(nrow=nrow(dataset_list$GSE108097$mat), ncol=length(temp_clusters),
+                                         dimnames =list(rownames(dataset_list$GSE108097$mat),temp_clusters) )
+dataset_list$GSE108097$temp_col_data <- data.frame(colnames= unique(dataset_list$GSE108097$col_data[,c("temp_clusters","std_dev_time")])$temp_cluster,
+                                                  std_dev_time=unique(dataset_list$GSE108097$col_data[,c("temp_clusters","std_dev_time")])$std_dev_time)
+
+for(i in 1:length(temp_clusters)){
+  which <- which(dataset_list$GSE108097$col_data$temp_clusters == temp_clusters[i])
+  dataset_list$GSE108097$temp_mat[,temp_clusters[i]] <- rowSums(dataset_list$GSE108097$mat[,which,drop=F])
+}
+dataset_list$GSE108097$temp_mat <- apply(dataset_list$GSE108097$temp_mat,2,function(x){x*1e6/sum(x)} )
+dataset_list$GSE108097$mat <- dataset_list$GSE108097$temp_mat
+dataset_list$GSE108097$col_data <- dataset_list$GSE108097$temp_col_data
+
+dataset_list$GSE108097$temp_mat <- NULL
+dataset_list$GSE108097$temp_col_data <- NULL
 ```
 
 
