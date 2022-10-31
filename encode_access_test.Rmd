@@ -29,7 +29,9 @@ for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
 }
 
+load(paste0(dirs$data_dir,"/temp.Rdata"))
 date <- format(Sys.time(),"%Y%m%d")
+
 
 #load(paste0(dirs$data_dir,"/mouse_transcriptome_data.Rdata"))
 ```
@@ -557,9 +559,10 @@ rownames(dataset_list$GSE108097$mat) <- temp
 
 sample(colnames(dataset_list$E_MTAB_6967$mat),10)
 head(dataset_list$E_MTAB_6967$col_data)
-dataset_list$E_MTAB_6967$col_data$informative_colname <- apply(str_split_fixed(dataset_list$E_MTAB_6967$col_data$colnames,",",6)[,c(1,4,2,3)],
+dataset_list$E_MTAB_6967$col_data$colnames <- apply(str_split_fixed(dataset_list$E_MTAB_6967$col_data$colnames,",",6)[,c(1,4,2,3)],
                                                                1,paste,collapse="_",sep="")
-
+dataset_list$E_MTAB_6967$col_data$colnames <- str_replace_all(dataset_list$E_MTAB_6967$col_data$colnames,"_ ","_")
+colnames(dataset_list$E_MTAB_6967$mat) <- dataset_list$E_MTAB_6967$col_data$colnames
 sample(colnames(dataset_list$GSE100597$mat),10) ## current names uninformative
 
 
@@ -703,16 +706,56 @@ dataset_list$GSE108097$temp_col_data <- NULL
 
 
 ## subset matrices for only overlapping genes so that rows match
-
+gene_intersect <- rownames(dataset_list[[1]]$mat) 
+for(i in 2:length(dataset_list)){
+  gene_intersect <- intersect(gene_intersect, rownames(dataset_list[[i]]$mat)) 
+}
 
 ## concatenate all matrices and col_data for name and dev_time
+full_data_list <- list(mat=dataset_list[[1]]$mat[gene_intersect,],
+                       col_data=dataset_list[[1]]$col_data[,c("colnames","std_dev_time")]) 
+for(i in 2:length(dataset_list)){
+  full_data_list$mat <- cbind(full_data_list$mat,dataset_list[[i]]$mat[gene_intersect,] )
+  full_data_list$col_data <- rbind(full_data_list$col_data, dataset_list[[i]]$col_data[,c("colnames","std_dev_time")])
+}
+full_data_list$mat <- apply(full_data_list$mat,2,function(x){x*1e6/sum(x)} )
+##(LATER) gene_specificity functions to get weights --> sim tree (virtual parent nodes)
+## bipartite mapping from stage N to ancestor stage A(N) 
 
-## gene_specificity functions to get weights --> sim tree (virtual parent nodes)
+
+temp_dev_times <- sort(unique(full_data_list$col_data$std_dev_time)) 
+temp_dev_times <- temp_dev_times[!grepl("unknown|p0\\.24", temp_dev_times)] 
+ table(full_data_list$col_data$std_dev_time)
+temp_dev_times <- temp_dev_times[!grepl("e03.50|e04.50|e05.50|e16.50|e15.50", temp_dev_times)]
+n <- 70
+temp_col_sample <- sample( full_data_list$col_data$colnames[which(full_data_list$col_data$std_dev_time=="p0.08.00")],n) 
+
+part_mat <- matrix(nrow = length(temp_dev_times), ncol = n,
+                   dimnames = list(temp_dev_times, temp_col_sample))
+gene_mats <- list(kat6a=list(mat=part_mat, gene_id="ENSMUSG00000031540"),
+                  kat6b=list(mat=part_mat, gene_id="ENSMUSG00000021767"))
 
 ## bipartite cluster prev to next stage  --> dev tree (real parent nodes)
+full_data_list$log10p1mat <- log10(full_data_list$mat+1) 
+for(i in 1:length(temp_col_sample)){
+  vec_i <- full_data_list$log10p1mat[,temp_col_sample[i],drop=F]
+  for(j in 1:length(temp_dev_times)){
+    
+    which <- which(full_data_list$col_data$std_dev_time ==temp_dev_times[j])
+    vec_js <- full_data_list$log10p1mat[,which,drop=F]
+    
+    temp_sims <- apply(vec_js, 2, function(x){ sum(x*vec_i)/(norm(x,"2")*norm(vec_i,"2"))  })
+    
+    gene_mats$kat6a$mat[j,i] <- full_data_list$mat[gene_mats$kat6a$gene_id,names(which.max(temp_sims))]
+    gene_mats$kat6b$mat[j,i] <- full_data_list$mat[gene_mats$kat6b$gene_id,names(which.max(temp_sims))]
+    
+  }
+}
 
 ## 
-
+png(filename = paste0(dirs$figures_dir,"/dev_time_cell_type.png"),units = "in",width=8,height=5,res = 300)
+heatmap(log10(gene_mats$kat6a$mat[nrow(gene_mats$kat6a$mat):1,]+1), Rowv = NA,scale="none")
+dev.off()
 ##
 ```
 
