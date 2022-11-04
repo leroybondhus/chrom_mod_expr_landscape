@@ -18,6 +18,8 @@ dirs <- list(data="./data/",
              sra_metadata="./data/sra/metadata/",
              scratch="/u/scratch/l/leroybon/")
 date <- format(Sys.time(),"%Y%m%d")
+## Note may want to read in old log if planning to only run failed runs
+## NOTE: LEROY code this up to read in previous run log
 files <- list(sra_run_log = paste0(dirs$sra,date,"_sra.log"))
 for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
@@ -34,7 +36,7 @@ if(file.exists("./data/sra_metadata/SraExpPack_SRP018525.xml")){
   root_sras <- xmlRoot(xmlParse("./data/sra_metadata/SraExpPack_SRP018525.xml"))
   # temp <- xmlToList(root_sras[[1]])
   sras <- xmlToList("./data/sra_metadata/SraExpPack_SRP018525.xml")
-  temp_cols <- c("srp_id","srr_id","library_info","barcode_file","taxon_id","sample_title", "std_dev_time","source","file_size")
+  temp_cols <- c("srp_id","srr_id","library_info","barcode_file","taxon_id","sample_title", "std_dev_time","source","file_size","file_space_req")
   sra_metadata <- data.frame(matrix(nrow=length(sras),ncol=length(temp_cols))) 
   colnames(sra_metadata) <- temp_cols
   for(i in 1:length(sras)){
@@ -46,6 +48,7 @@ if(file.exists("./data/sra_metadata/SraExpPack_SRP018525.xml")){
     sra_metadata$srr_id[i] <- sras[[i]]$RUN_SET$RUN$IDENTIFIERS$PRIMARY_ID
     sra_metadata$taxon_id[i] <- sras[[i]]$SAMPLE$SAMPLE_NAME$TAXON_ID
     sra_metadata$file_size[i] <- as.numeric(sras[[i]]$RUN_SET$RUN$.attrs[["size"]]) ## file size
+    sra_metadata$file_space_req[i] <- as.numeric(sras[[i]]$RUN_SET$RUN$.attrs[["size"]])*file_expansion_factor
     sra_metadata$sample_title[i] <- sras[[i]]$SAMPLE$TITLE
     sra_metadata$source[i] <- temp_df$VALUE[which(temp_df$TAG == "source_name")]
     
@@ -77,28 +80,42 @@ while(any(sra_metadata$status==not_yet_run )){
   
   which_not_run <- which(sra_metadata$status==not_yet_run)
   which_running <- which(sra_metadata$status=="running")
-  space_unavail <- sum(as.numeric(sra_metadata$file_size[which_running])) * file_expansion_factor
+  space_unavail <- sum(sra_metadata$file_space_req[which_running])
   space_avail <- space_total - space_unavail
   
   which_next <- which_not_run[1]
-  if(space_avail >= sra_metadata$file_size[which_next]){
-    sra_metadata$status[which_next] <- "running" ## success and fail status should be assigned at end of script
-    
+  if(space_avail >= sra_metadata$file_space_req[which_next] ){
+    space_avail <- space_avail - sra_metadata$file_space_req[which_next] 
+    ### SUBMIT SCRIPT TO RUN
+    # SCRIPT SUBMISSION sra_metadata$srr_id[which_next]
+    ### 
+    sra_metadata$status[which_next] <- "running" ## success and fail status must be assigned at end of external SCRIPT
     ## UPDATE SYSTEM LOG FILE
     to_log <- paste(Sys.time(),sra_metadata$srr_id[which_next],as.character(sra_metadata$status[which_next]), sep="\t")
     write(to_log,files$sra_run_log, sep="\t", append = T)
-    ## UPDATE SCRIPT LOG (CURRENTLY aka sra_metadata)
+    ## UPDATE SESSION LOG (CURRENTLY aka sra_metadata)
     current_log <- fread(files$sra_run_log)
     which_running <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="running")]))
     which_success <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="success")]))
     which_fail <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="fail")]))
     which_running <- setdiff(which_running, union(which_success,which_fail))
-    sra_metadata
-    
-    SUBMIT SCRIPT TO RUN sra_metadata$srr_id[which_next]
+    sra_metadata$status[which_running] <- "running" 
+    sra_metadata$status[which_success] <- "success"
+    sra_metadata$status[which_fail] <- "fail"
   } else {
-    READ LOG FILE
-    IF ALL JOBS COMPLETED AND NO SPACE EXIT
+    current_log <- fread(files$sra_run_log)
+    which_running <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="running")]))
+    which_success <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="success")]))
+    which_fail <- which(is.element(sra_metadata$srr_id, current_log$srr_id[which(current_log$status=="fail")]))
+    which_running <- setdiff(which_running, union(which_success,which_fail))
+    if(length(which_running)==0){
+      stop("Jobs remain but no space avail and no jobs running: Need to free up space to continue")
+    } else{
+      ## no space but jobs running which will eventually complete and free up space.
+      ## Let's just wait a little while then check if anything has completed ok?
+      system("sleep 2.5m")
+      system("date +'%Y-%m-%d %H:%M:%S PDT' ",intern = T) ## unix to R format from Sys.time()
+    }
   }
   
 }
