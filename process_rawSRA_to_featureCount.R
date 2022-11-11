@@ -11,11 +11,12 @@
 ### read in xml of data
 library(XML)
 library(stringr)
+library(data.table)
 
 file_expansion_factor <- 12 ## from SRA documentation, fasterq-dump requires up to 8x space available
 dirs <- list(data="./data/",
-             sra="./data/sra/",
-             sra_metadata="./data/sra/metadata/",
+             sra="/u/scratch/l/leroybon/chrom_mod_proj_data/sra/",
+             sra_metadata="./data/sra_metadata/",
              scratch="/u/scratch/l/leroybon/")
 date <- format(Sys.time(),"%Y%m%d")
 ## Note may want to read in old log if planning to only run failed runs
@@ -24,21 +25,39 @@ files <- list(sra_run_log = paste0(dirs$sra,date,"_sra.log"))
 for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
 }
-file.remove(files$sra_run_log)
+if(file.exists(files$sra_run_log)){
+  file.remove(files$sra_run_log) 
+}
 for(f in files){
   system(paste0("touch ",f))
 }
 to_log <- paste("time", "srr_id","status", sep="\t")
 write(to_log,files$sra_run_log, sep="\t", append = T)
 
-##### 
-if(file.exists("./data/sra_metadata/SraExpPack_SRP018525.xml")){
-  root_sras <- xmlRoot(xmlParse("./data/sra_metadata/SraExpPack_SRP018525.xml"))
+
+
+temp_cols <- c("srp_id","srr_id",
+               "library_info","barcode_file",
+               "taxon_id","sample_title",
+               "std_dev_time","source",
+               "file_size","file_space_req")
+sra_metadata_full <- data.frame(matrix(nrow=0,ncol=length(temp_cols)))
+colnames(sra_metadata_full) <- temp_cols
+
+#####
+files$srps <- list(SRP018525 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP018525.xml")),
+                   SRP110669 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP161714.xml")),
+                   SRP190004 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP190004.xml")),
+                   SRP161714 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP161714.xml")),
+                   SRP126776 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP126776.xml"))
+                   )
+for(srp in files$srps ){
+  if(!file.exists(srp$xml)){ stop(paste0(srp$xml, ": file does not exist")) }
+  root_sras <- xmlRoot(xmlParse(srp$xml))
   # temp <- xmlToList(root_sras[[1]])
-  sras <- xmlToList("./data/sra_metadata/SraExpPack_SRP018525.xml")
-  temp_cols <- c("srp_id","srr_id","library_info","barcode_file","taxon_id","sample_title", "std_dev_time","source","file_size","file_space_req")
-  sra_metadata <- data.frame(matrix(nrow=length(sras),ncol=length(temp_cols))) 
-  colnames(sra_metadata) <- temp_cols
+  sras <- xmlToList(srp$xml)
+  sra_metadata <- data.frame(matrix(nrow=length(sras),ncol=ncol(sra_metadata_full))) 
+  colnames(sra_metadata) <- colnames(sra_metadata_full)
   for(i in 1:length(sras)){
     temp_df <- cbind(xmlToDataFrame(xmlElementsByTagName(root_sras[[i]],"TAG", recursive=TRUE)),
                      xmlToDataFrame( xmlElementsByTagName(root_sras[[i]],"VALUE", recursive=TRUE)))
@@ -56,8 +75,9 @@ if(file.exists("./data/sra_metadata/SraExpPack_SRP018525.xml")){
                                         names(sras[[1]]$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_LAYOUT)),
                                       collapse = "__")
   }
-  utils:::format.object_size(sum(as.numeric(sra_metadata$file_size) ), "Gb")
+  sra_metadata_full <- rbind(sra_metadata_full, sra_metadata)
 }
+
 
 sra_metadata <- sra_metadata[which(sra_metadata$taxon_id == "10090"),]
 
