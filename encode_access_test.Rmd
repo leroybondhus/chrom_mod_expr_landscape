@@ -29,7 +29,7 @@ for(d in dirs){
   if(!dir.exists(d)){dir.create(d)}
 }
 
-load(paste0(dirs$data_dir,"/temp.Rdata"))
+#load(paste0(dirs$data_dir,"/temp.Rdata"))
 date <- format(Sys.time(),"%Y%m%d")
 
 

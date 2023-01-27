@@ -1,0 +1,73 @@
+---
+title: "main"
+output: html_document
+date: "2023-01-27"
+author: "Leroy Bondhus"
+---
+
+```{r set up dir structure}
+dirs <- list(data="./data/",
+             results = "./results/",
+             tables = "./results/tables/",
+             figures = "./results/figures/")
+for(dir in dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+date <- format(Sys.time(),"%Y%m%d")
+```
+
+```{r load libraries}
+req_packages <- list(
+  standard = c("BiocManager","doParallel","ggplot2","stringr"),
+  biocmanager = c("Gviz","biomaRt")
+)
+for(std_package in req_packages$standard ){
+  if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
+};rm(std_package)
+for(bioc_package in req_packages$biocmanager ){
+  if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
+};rm(bioc_package)
+rm(req_packages)
+```
+
+```{r, organize gene sets}
+ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
+genes <- getBM(attributes=c('chromosome_name','start_position','end_position','strand',
+                            'ensembl_gene_id',"external_gene_name"),
+                 #filters = list('biotype'='protein_coding'),
+                 mart = ensembl, useCache = F)
+
+
+gene_sets <- list()
+## human
+## mouse
+## zebrafish
+## celegans
+## fly 
+## chromatin modifier
+
+
+```
+
+
+```{r, organize ontologies}
+ontos <- list()
+## uberon
+## hpo
+## go # MF
+## go # CC
+## go # BP
+
+```
+
+
+```{r, organize datasets}
+
+dataset_list <- list()
+## encode (has uberon, standard format)
+## gtex (has uberon, standard format)
+## sra (mixed format)
+
+
+```
+

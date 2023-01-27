@@ -46,7 +46,7 @@ colnames(sra_metadata_full) <- temp_cols
 
 #####
 files$srps <- list(SRP018525 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP018525.xml")),
-                   SRP110669 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP161714.xml")),
+                   SRP110669 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP110669.xml")),
                    SRP190004 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP190004.xml")),
                    SRP161714 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP161714.xml")),
                    SRP126776 = list( xml = paste0(dirs$sra_metadata,"SraExpPack_SRP126776.xml"))
@@ -69,7 +69,7 @@ for(srp in files$srps ){
     sra_metadata$file_size[i] <- as.numeric(sras[[i]]$RUN_SET$RUN$.attrs[["size"]]) ## file size
     sra_metadata$file_space_req[i] <- as.numeric(sras[[i]]$RUN_SET$RUN$.attrs[["size"]])*file_expansion_factor
     sra_metadata$sample_title[i] <- sras[[i]]$SAMPLE$TITLE
-    sra_metadata$source[i] <- temp_df$VALUE[which(temp_df$TAG == "source_name")]
+    sra_metadata$source[i] <- paste0(temp_df$VALUE,collapse="---") #temp_df$VALUE[which(temp_df$TAG == "source_name")]
     
     sra_metadata$library_info[i] <- paste0(c(as.character(sras[[1]]$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR[c(1,3)]),
                                         names(sras[[1]]$EXPERIMENT$DESIGN$LIBRARY_DESCRIPTOR$LIBRARY_LAYOUT)),
