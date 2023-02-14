@@ -92,7 +92,7 @@ for(i in 1:length(ontos$go$ont$id)){
   which <- which(is.element(ontos$go$ont$id, ontos$go$ont$parents[i][[1]]))
   if(length(which)==0){next}
   for(el in which){
-    ontos$go$ont$children[el][[1]] <- unique(c(ontos$go$ont$children[el][[1]], ontos$go$ont$id[i] ))
+    ontos$go$ont$children[el][[1]] <- unique(c(ontos$go$ont$children[el][[1]], ontos$go$ont$id[i]))
   }
 }
 
@@ -109,35 +109,80 @@ for(i in 1:length(ontos$go$ont$id)){
 
 ```{r, organize gene sets}
 ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
-# genes <- getBM(attributes=c('chromosome_name','start_position','end_position','strand',
-#                             'ensembl_gene_id',"external_gene_name"),
-#                  #filters = list('biotype'='protein_coding'),
-#                  mart = ensembl, useCache = F)
-
-genes <- getBM(attributes=c('chromosome_name','start_position','end_position','strand',
-                            'ensembl_gene_id',"external_gene_name","go_id","name_1006"),
-                 #filters = list('biotype'='protein_coding'),
+options(timeout=180)
+gene_sets <- list()
+### these pulls are fairly time intensive -> consider saving to data in short term and load if exists
+gene_sets$genes_all_go <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","go_id","name_1006"),
                  mart = ensembl, useCache = F)
+## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
+for(chr in c(as.character(1:22),"X","Y","MT" )){
+  print(chr)
+  temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
+                             "ensembl_transcript_id","transcript_length",
+                             "chromosome_name", "exon_chrom_start","exon_chrom_end","rank"),
+                filters = "chromosome_name",
+                values = chr,
+                mart = ensembl, useCache = F)
+  temp2 <- getBM(attributes=c('ensembl_gene_id',
+                             "ensembl_transcript_id",
+                             "transcript_is_canonical"),
+                filters = "chromosome_name",
+                values = chr,
+                mart = ensembl, useCache = F)
+  temp <- merge(temp, temp2)
+  gene_sets$genes_all_transcript <- rbind(gene_sets$genes_all_transcript, temp)
+}
+gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
-term_sets <- list()
-term_sets$chromatin_go_terms <- c("histone acetyltransferase activity",
-                                  "histone deacetylase activity",
-                                  "histone methyltransferase activity",
-                                  "histone demethylase activity",
-                                  "histone ubiquitin ligase activity",
-                                  "histone deubiquitinase activity",
-                                  "histone kinase activity",
-                                  "histone phosphatase activity",
-                                  "chromatin remodeling",
-                                  "chromatin organization",
-                                  "DNA-methyltransferase activity",
-                                  "DNA demethylase activity"
-                                  )
+gene_sets$human_chromatin_modifiers <- list()
+gene_sets$human_chromatin_modifiers$go_terms = c( "histone acetyltransferase activity",
+                                        "histone deacetylase activity",
+                                        "histone methyltransferase activity",
+                                        "histone demethylase activity",
+                                        "histone ubiquitin ligase activity",
+                                        "histone deubiquitinase activity",
+                                        "histone kinase activity",
+                                        "histone phosphatase activity",
+                                      ##  "chromatin remodeling", too broad
+                                      ##  "chromatin organization", too broad
+                                        "nucleosome organization",
+                                        "chromatin looping",
+                                        "heterochromatin organization",
+                                        "DNA-methyltransferase activity",
+                                        "DNA demethylase activity")
 
 ## for each term in chrom_go_terms, check which genes are associated with term (and any of it's descendants)
-## for each term, get all descendant terms, 
+#### for each term, get all descendant terms
+go_funcs <- list()
+go_funcs$get_descendants <- function(id,go){
+  which <- which(go$id == id)
+  descendants <- go$id[which] ### a term is considered a descendant of itself
+  if( length(go$children[[which]])==0 ){return(descendants)}
+  for(child in go$children[[which]]){
+    descendants <- unique(c(descendants, go_funcs$get_descendants(child, go) ))
+  }
+  return(descendants)
+}
 
-gene_sets <- list()
+gene_sets$human_chromatin_modifiers$go_ids <- character(length = length(gene_sets$human_chromatin_modifiers$go_terms))
+gene_sets$human_chromatin_modifiers$gene_subsets <- vector("list",length(gene_sets$human_chromatin_modifiers$go_terms))
+names(gene_sets$human_chromatin_modifiers$gene_subsets ) <- gene_sets$human_chromatin_modifiers$go_terms
+for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
+  ## which go onto node has the current term
+  which <- which(ontos$go$ont$name == gene_sets$human_chromatin_modifiers$go_terms[i])
+  term_id <- ontos$go$ont$id[which]
+  gene_sets$human_chromatin_modifiers$go_ids[i] <- term_id
+  
+  ## genes which have GO id for current term or any of it's descendants
+  descendants <- go_funcs$get_descendants(term_id, ontos$go$ont)
+  gene_sets$human_chromatin_modifiers$gene_subsets[[i]] <-
+    unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, descendants ))])
+  
+}
+
+
+
+
 ## human
 ## mouse
 ## zebrafish
