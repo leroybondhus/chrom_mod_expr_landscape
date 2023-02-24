@@ -112,11 +112,13 @@ ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
 options(timeout=180)
 gene_sets <- list()
 ### these pulls are fairly time intensive -> consider saving to data in short term and load if exists
+gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
+                                          "start_position","end_position"),
+                 mart = ensembl, useCache = F)
 gene_sets$genes_all_go <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","go_id","name_1006"),
                  mart = ensembl, useCache = F)
 ## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
 for(chr in c(as.character(1:22),"X","Y","MT" )){
-  print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
                              "ensembl_transcript_id","transcript_length",
                              "chromosome_name", "exon_chrom_start","exon_chrom_end","rank"),
@@ -193,7 +195,62 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
 
 ```
 
+```{r, custom ggplot themes}
+barcode_theme <- theme_classic()+
+  theme(axis.line.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y  = element_blank(),
+        axis.ticks.y = element_blank()
+  )
+
+
+```
+
 ```{r, look at basic chromatin modifier summary statistics}
+
+## gene length
+## transcript length
+## exon count
+## exon size
+ggl <- list()
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
+  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  
+  ## gene length barcode plot
+  df <- gene_sets$genes_all[which(is.element(gene_sets$genes_all$ensembl_gene_id, chrom_subset )),]
+  df$gene_length <- df$end_position - df$start_position
+  ggl[[length(ggl)+1]] <- ggplot(df, aes(log10(gene_length)))+
+    geom_histogram(bins=200,  fill="grey20")+
+    coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
+    barcode_theme
+  names(ggl)[length(ggl)] <- paste0(chrom_subset_name, ": ", "gene_length")
+  
+  ## transcript length barcode plot
+  df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
+  df <- unique(df[,c("ensembl_gene_id", "transcript_length")])
+  ggl[[length(ggl)+1]] <- ggplot(df, aes(log10(transcript_length)))+
+    geom_histogram(bins=200, fill="grey20")+
+    coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
+    barcode_theme
+  names(ggl)[length(ggl)] <- paste0(chrom_subset_name, ": ", "transcript_length")
+  
+  
+  ## exon length  plot
+  df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
+   df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, sample(unique(gene_sets$genes_all$ensembl_gene_id),45) )),]
+  df$exon_length <- df$exon_chrom_end - df$exon_chrom_start
+  df$gene_factor_num <- as.numeric(as.factor(df$ensembl_gene_id))
+  ggl[[length(ggl)+1]] <- ggplot(df, aes(x=log10(exon_length),y=gene_factor_num))+
+    geom_point(fill="grey20") +
+    coord_cartesian( xlim = c(1, 4))+
+    barcode_theme
+  names(ggl)[length(ggl)] <- paste0(chrom_subset_name, ": ", "rand_exon_length")
+  
+  gene_sets$genes_all_transcript
+
+  
+}
 
 
 ### look at pLI
@@ -210,6 +267,13 @@ go_complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
 # temp <- tempfile()
 # download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip",temp)
 # complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+
+ggplot(df, aes(log10(transcript_length, )))+
+  geom_histogram(bins=500, alpha=0.7, fill="grey20")+
+  coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
+  barcode_theme
+    #theme_bw()+
+    
 ```
 
 
