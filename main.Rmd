@@ -21,7 +21,7 @@ date <- format(Sys.time(),"%Y%m%d")
 
 ```{r load libraries}
 req_packages <- list(
-  standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2"),
+  standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML"),
   biocmanager = c("Gviz","biomaRt")
 )
 for(std_package in req_packages$standard ){
@@ -153,6 +153,7 @@ gene_sets$human_chromatin_modifiers$go_terms = c( "histone acetyltransferase act
                                         "DNA-methyltransferase activity",
                                         "DNA demethylase activity")
 
+gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
 ## for each term in chrom_go_terms, check which genes are associated with term (and any of it's descendants)
 #### for each term, get all descendant terms
 go_funcs <- list()
@@ -213,26 +214,39 @@ barcode_theme <- theme_classic()+
 ## exon count
 ## exon size
 ggl <- list()
-for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
   chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
-  
-  ## gene length barcode plot
+  if(length(chrom_subset)==0){next}
+  ## gene length density + barcode plots
   df <- gene_sets$genes_all[which(is.element(gene_sets$genes_all$ensembl_gene_id, chrom_subset )),]
   df$gene_length <- df$end_position - df$start_position
-  temp_name <- paste0(chrom_subset_name, ": ", "gene_length")
-  ggl[[temp_name]] <- ggplot(df, aes(log10(gene_length)))+
-    geom_histogram(bins=200,  fill="grey20")+
+  
+  temp_name <- paste0(chrom_subset_name, ": ", "gene_length density")
+  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length)))+
+    ggtitle(temp_name)+
+    geom_density(alpha=0.5)
+  
+  temp_name <- paste0(chrom_subset_name, ": ", "gene_length barcode")
+  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length),xend=log10(gene_length), y=0,yend=1))+
+    ggtitle(temp_name)+
+    geom_segment(alpha=0.5)+
     coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
     barcode_theme
   
-  
-  ## transcript length barcode plot
+  ## transcript length density + barcode plot
   df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
   df <- unique(df[,c("ensembl_gene_id", "transcript_length")])
-  temp_name <- paste0(chrom_subset_name, ": ", "transcript_length")
-  ggl[[temp_name]] <- ggplot(df, aes(log10(transcript_length)))+
-    geom_histogram(bins=200, fill="grey20")+
+  
+  temp_name <- paste0(chrom_subset_name, ": ", "transcript_length density")
+  ggl[[temp_name]] <- ggplot(df, aes(x=log10(transcript_length)))+
+    ggtitle(temp_name)+
+    geom_density(alpha=0.5)
+  
+  temp_name <- paste0(chrom_subset_name, ": ", "transcript_length barcode")
+  ggl[[temp_name]] <-  ggplot(df, aes(x=log10(transcript_length),xend=log10(transcript_length), y=0,yend=1))+
+    ggtitle(temp_name)+
+    geom_segment(alpha=0.5)+
     coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
     barcode_theme
    
@@ -245,6 +259,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   df$gene_factor_num <- as.numeric(as.factor(df$ensembl_gene_id))
   temp_name <- paste0(chrom_subset_name, ": ", "exon_length")
   ggl[[temp_name]] <- ggplot(df, aes(x=log10(exon_length),y=gene_factor_num))+
+    ggtitle(temp_name)+
     geom_point(fill="grey20") +
     coord_cartesian( xlim = c(1, 4))+
     barcode_theme
@@ -271,15 +286,31 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   temp2 <- unsplit(temp2, temp$L1)
   temp$percentile <- temp2
   temp$L1 <- as.numeric(temp$L1)
-  temp <- temp[order(temp$L1, temp$value),]
+  temp <- temp[order(temp$L1, temp$percentile),]
   temp$L1 <- as.factor(temp$L1)
-  
-  
-  ggplot(temp, aes(log10(value), percentile, group=L1, color=L1))+
+  colnames(temp) <- c("exon_length","exon_rank_by_length","percentile")
+  temp_name <- paste0(chrom_subset_name, ": ", "genes_w_N_exons_of_size_or_greater")
+  ggl[[temp_name]] <- ggplot(temp, aes(log10(exon_length), percentile, group=exon_rank_by_length, color=exon_rank_by_length))+
+    ggtitle(temp_name)+
     geom_line()
   
+  temp <- split(df$rank, df$ensembl_transcript_id)
+  temp <-sapply(temp, function(x) order(-x))
+  temp <- unsplit(temp, df$ensembl_transcript_id)
+  df$rank_from_end <- temp
+  temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank")
+  ggl[[temp_name]] <- ggplot(df, aes(rank, log10(exon_length) ))+
+    ggtitle(temp_name)+
+    geom_point()
+  temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank_from_end")
+  ggl[[temp_name]] <- ggplot(df, aes(rank_from_end, log10(exon_length) ))+
+    ggtitle(temp_name)+
+    geom_point()
+  
 }
+```
 
+```{r, look at basic disease association statistics }
 
 ### look at pLI
 
@@ -291,17 +322,43 @@ temp <- tempfile()
 download.file("http://geneontology.org/gene-associations/goa_human_complex.gaf.gz",temp)
 go_complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
 
+ggl2 <- list()
+for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
+  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  if(length(chrom_subset)==0){next}
+  
+  ## 
+  df <- lof_metrics[which(is.element(lof_metrics$gene_id, chrom_subset)),] 
+  df$gene_length <- df$end_position - df$start_position
+  
+  temp_name <- paste0(chrom_subset_name, ": ", "gene_length density")
+  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length)))+
+    ggtitle(temp_name)+
+    geom_density(alpha=0.5)
+}
 
-# temp <- tempfile()
-# download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip",temp)
-# complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+
+
+
+### xml structure --- dissect xml in R to recapitulate each complex and it's member species
+files$human_complexes <- paste0(dirs$temp_data,"human_complexes.zip")
+download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip", files$human_complexes )
+dirs$human_complexes <- str_remove(files$human_complexes,".zip")
+system(paste0("unzip ",files$human_complexes, " -d ", dirs$temp_data))
+system(paste0("mv ", dirs$temp_data, "human ", dirs$human_complexes))
+
+temp_files <- list.files(dirs$human_complexes, full.names = T)
+complex_metrics <- xmlTreeParse(temp_files[1])
+# <- read.table( temp, skip=0, header = TRUE, sep = "\t" )
 
 # ggplot(df, aes(log2(transcript_length, )))+
 #   geom_histogram(bins=500, alpha=0.7, fill="grey20")+
 #   coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
 #   barcode_theme
     #theme_bw()+
-    
+
+
 ```
 
 
