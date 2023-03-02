@@ -153,7 +153,7 @@ gene_sets$human_chromatin_modifiers$go_terms = c( "histone acetyltransferase act
                                         "DNA-methyltransferase activity",
                                         "DNA demethylase activity")
 
-gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
+
 ## for each term in chrom_go_terms, check which genes are associated with term (and any of it's descendants)
 #### for each term, get all descendant terms
 go_funcs <- list()
@@ -183,7 +183,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
   
 }
 
-
+gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
 
 
 ## human
@@ -301,13 +301,25 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank")
   ggl[[temp_name]] <- ggplot(df, aes(rank, log10(exon_length) ))+
     ggtitle(temp_name)+
-    geom_point()
+    geom_point(alpha=0.5)
   temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank_from_end")
   ggl[[temp_name]] <- ggplot(df, aes(rank_from_end, log10(exon_length) ))+
     ggtitle(temp_name)+
-    geom_point()
+    geom_point(alpha=0.5)
   
 }
+
+dirs$gene_arch_summary_figs <- paste0(dirs$figures,"gene_arch_summary_figures/")
+if(!dir.exists(dirs$gene_arch_summary_figs)){dir.create(dirs$gene_arch_summary_figs)}
+for(i in 1:length(ggl)){
+  
+  temp_filename <- paste0(dirs$gene_arch_summary_figs,names(ggl)[i],".png")
+  temp_filename <- str_replace_all(temp_filename,"[ \t:]","_")
+  w <- 7
+  h <- ifelse(grepl("barcode", temp_filename), 3, 5)
+  ggsave(temp_filename, ggl[[i]], device = "png", width=w, height=h)
+}
+
 ```
 
 ```{r, look at basic disease association statistics }
@@ -328,14 +340,22 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
   if(length(chrom_subset)==0){next}
   
-  ## 
   df <- lof_metrics[which(is.element(lof_metrics$gene_id, chrom_subset)),] 
-  df$gene_length <- df$end_position - df$start_position
+  id_cols <- c("gene","gene_id","gene_type")
+  var_cols <- c("oe_mis","oe_syn","oe_lof","no_lofs","obs_het_lof","obs_hom_lof", "pLI","oe_lof_upper","syn_z","mis_z","lof_z")
+  df_melt <- melt(df, id.vars=id_cols, measure.vars = var_cols)
   
   temp_name <- paste0(chrom_subset_name, ": ", "gene_length density")
-  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length)))+
-    ggtitle(temp_name)+
-    geom_density(alpha=0.5)
+  ggplot(df_melt[grep("oe", df_melt$variable),],aes(x=variable, y=value))+
+    geom_violin() 
+  ggplot(df_melt[grep("_z", df_melt$variable),],aes(x=variable, y=value))+
+    geom_violin()
+  ggplot(df_melt[grep("pLI", df_melt$variable),],aes(y=value))+
+    geom_histogram()
+  
+  
+  ### GET all associated with Mendelian disorder (e.g. v pLI)
+
 }
 
 
