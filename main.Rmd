@@ -6,17 +6,41 @@ author: "Leroy Bondhus"
 ---
 
 ```{r set up dir structure}
+                         
 dirs <- list(data="./data/",
              results = "./results/",
              tables = "./results/tables/",
              figures = "./results/figures/",
-             temp_data ="/u/scratch/l/leroybon/chrom_mod_expr_landscape/")
+             temp_data ="/u/scratch/l/leroybon/chrom_mod_expr_landscape/",
+             OMIM_data = "./data/omim_ra/")
 for(dir in dirs){
   if(!dir.exists(dir)){dir.create(dir)}
 };rm(dir)
 
 files <- list()
+
+####
 date <- format(Sys.time(),"%Y%m%d")
+```
+
+```{r setup note}
+#### NOTE : USER HAS TO REQUEST ACCESS TO A LINK FROM OMIM DIRECTLY TO GET THIS FILE #####
+####        ONCE THIS IS DONE REPLACE "NULL" BELOW WITH THE URL TO genemap2.txt FILE #####
+
+#OMIM_genemap2_URL <- "https://data.omim.org/downloads/##USER_ACCESS_PATTERN##/genemap2.txt"
+OMIM_genemap2_URL <- NULL
+#if(is.null(OMIM_genemap2_URL){rm(OMIM_genemap2_URL)}
+####                                     END NOTE                                    #####
+
+files$MIM_gene_to_disease <- paste0(dirs$OMIM_data,"HPO_genes_to_phenotypes.txt")
+if(!file.exists(files$MIM_gene_to_disease)){
+  if(!exists("OMIM_genemap2_URL")){
+    stop(paste0( "Please visit https://www.omim.org/downloads and follow instructions to get URL link ",
+                 "for 'genemap2.txt', then set OMIM_genemap2_URL variable to this link in this script " ))
+  }
+  download.file(OMIM_genemap2_URL, files$MIM_gene_to_disease)
+}
+     
 ```
 
 ```{r load libraries}
@@ -32,7 +56,6 @@ for(bioc_package in req_packages$biocmanager ){
 };rm(bioc_package)
 rm(req_packages)
 ```
-
 
 ```{r, organize ontologies}
 
@@ -98,11 +121,52 @@ for(i in 1:length(ontos$go$ont$id)){
 
 ##### done: read in and set up ontology ####
 
+
+
+
+
 ## uberon
 ## hpo
+
+
+
 ## go # MF
 ## go # CC
 ## go # BP
+
+```
+
+```{r, organize dbs}
+dbs <- list()
+dbs$MIM_gene_to_disease <- list()
+
+##### read in and set up database ####
+
+
+con <- file(files$MIM_gene_to_disease,open="r")
+temp_header <- readLines(con, 4)[4]
+temp_header <- str_remove(temp_header,"# ")
+temp_header <- str_split_1(temp_header,"\t")
+close(con)
+dbs$MIM_gene_to_disease$map <- read.delim2(files$MIM_gene_to_disease, header=FALSE, comment.char="#")
+colnames(dbs$MIM_gene_to_disease$map) <- temp_header
+dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[complete.cases(dbs$MIM_gene_to_disease$map),]
+
+### consider requesting genemap2.txt from OMIM for inheritance mode column
+
+
+dbs$HPO_gene_phen <- list()
+dbs$HPO_gene_phen$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt"
+files$HPO_gene_phen <- paste0(dirs$temp_data,"HPO_genes_to_phenotypes.txt")
+download.file(dbs$HPO_gene_phen$URL, files$HPO_gene_phen)
+##### read in and set up database ####
+con <- file(files$HPO_gene_phen,open="r")
+temp_header <- readLines(con, 1)
+temp_header <- str_remove(temp_header,"#Format: ")
+temp_header <- str_split_1(temp_header,"<tab>")
+close(con)
+dbs$HPO_gene_phen$map <- read.table(files$HPO_gene_phen,sep="\t",skip=1)
+colnames(dbs$HPO_gene_phen$map) <- temp_header
 
 ```
 
@@ -352,6 +416,8 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
     geom_violin()
   ggplot(df_melt[grep("pLI", df_melt$variable),],aes(y=value))+
     geom_histogram()
+  ggplot(df_melt[grep("oe_lof_upper", df_melt$variable),],aes(y=value))+
+    geom_histogram()
   
   
   ### GET all associated with Mendelian disorder (e.g. v pLI)
@@ -363,14 +429,38 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 
 ### xml structure --- dissect xml in R to recapitulate each complex and it's member species
 files$human_complexes <- paste0(dirs$temp_data,"human_complexes.zip")
-download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip", files$human_complexes )
+#download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip", files$human_complexes )
 dirs$human_complexes <- str_remove(files$human_complexes,".zip")
-system(paste0("unzip ",files$human_complexes, " -d ", dirs$temp_data))
-system(paste0("mv ", dirs$temp_data, "human ", dirs$human_complexes))
+#system(paste0("unzip ",files$human_complexes, " -d ", dirs$temp_data))
+#system(paste0("mv ", dirs$temp_data, "human ", dirs$human_complexes))
 
 temp_files <- list.files(dirs$human_complexes, full.names = T)
-complex_metrics <- xmlTreeParse(temp_files[1])
-# <- read.table( temp, skip=0, header = TRUE, sep = "\t" )
+complex <- list()
+i = 1
+for(f in temp_files){
+  if( i %% 20 ==1 ){print(paste0(basename(f),": ",i, " of ", length(temp_files)))}
+  complex_metrics <- xmlParse(f)
+  complex_metrics <- xmlToList(complex_metrics)
+  i <- i+1
+  
+  complex_name <- complex_metrics$entry$interactionList$abstractInteraction$names$shortLabel
+  complex_id <- paste0(complex_metrics$entry$interactionList$abstractInteraction$xref$primaryRef,collapse="__")
+  complex[[complex_name]] <- list(name = complex_name,
+                                  id = complex_id,
+                                  members = c())
+  for(interactor in complex_metrics$entry$interactorList){
+    temp <- sapply(interactor$xref, function(x){paste0(x,collapse="__")} )
+    temp <- temp[grep("ENSG.*gene",temp)]
+    if(length(temp)==0){next}
+    complex[[complex_name]]$members <- c(complex[[complex_name]]$members,
+                                         str_extract(temp,"ENSG[0-9]*"))
+  }  
+}
+
+### FOR EACH CHROM MODIFIER -> ID NUM OF COMPLEX SPECIES AND THEIR RESPECTIVE NUMBER OF TOTAL UNIQUE SUBUNITS ID'D
+### PLOT SUMMARY DISTRIBUTION FOR ALL GENES
+### BARCODE PLOT
+
 
 # ggplot(df, aes(log2(transcript_length, )))+
 #   geom_histogram(bins=500, alpha=0.7, fill="grey20")+
