@@ -127,8 +127,105 @@ for(i in 1:length(ontos$go$ont$id)){
 
 ## uberon
 ## hpo
+ontos$hpo <- list()
+ontos$hpo$URL <- "https://github.com/obophenotype/human-phenotype-ontology/raw/master/hp.obo"
+
+files$hp_obo <- paste0(dirs$temp_data,"hp.obo")
+download.file(ontos$hpo$URL,files$hp_obo)
 
 
+con <- file(files$hp_obo,open="r")
+num_terms <- 0
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){break}
+  num_terms <- num_terms + grepl("^\\[Term\\]$",line)
+}
+close(con)
+
+ontos$hpo$ont <- list(
+  id=character(length = num_terms ),
+  name=character(length = num_terms ),
+#  namespace = character(length = num_terms ),
+  parents = vector("list", num_terms),
+  children = vector("list", num_terms),
+  is_obsolete = rep(FALSE, num_terms)
+)
+
+term_num <- 0
+con <- file(files$hp_obo,open="r")
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){
+    break
+  } else if(grepl("^\\[Term\\]$",line)){
+    term_num <- term_num + 1
+  } else if(grepl("^id:.*HP:",line)){
+    ontos$hpo$ont$id[term_num] <- str_extract(line, "HP:[0-9]+")
+  } else if(grepl("^name:",line)){
+    ontos$hpo$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
+  } else if(grepl("^is_a:",line)){
+    ontos$hpo$ont$parents[term_num][[1]] <- c(ontos$hpo$ont$parents[term_num][[1]], str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*")) 
+  } else if(grepl("^is_obsolete: true",line)){
+    ontos$hpo$ont$is_obsolete[term_num] <- TRUE 
+  }
+}
+close(con)
+
+
+## set up uberon ontology ###
+ontos$uberon <- list()
+ontos$uberon$URL <- "https://github.com/obophenotype/uberon/releases/download/v2023-02-14/uberon-full.obo"
+
+files$uberon_obo <- paste0(dirs$temp_data,"uberon-full.obo")
+download.file(ontos$uberon$URL,files$uberon_obo)
+
+
+con <- file(files$uberon_obo,open="r")
+num_terms <- 0
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){break}
+  num_terms <- num_terms + grepl("^\\[Term\\]$",line)
+}
+close(con)
+
+ontos$uberon$ont <- list(
+  id=character(length = num_terms ),
+  name=character(length = num_terms ),
+#  namespace = character(length = num_terms ),
+  parents = vector("list", num_terms),
+  children = vector("list", num_terms),
+  relation = vector("list", num_terms),
+  is_obsolete = rep(FALSE, num_terms)
+)
+
+term_num <- 0
+is_uberon <- FALSE
+con <- file(files$uberon_obo,open="r")
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){
+    break
+  } else if(grepl("^\\[Term\\]$",line)){
+    is_uberon <- FALSE
+  } else if(grepl("^id:.*UBERON:",line)){
+    term_num <- term_num + 1
+    ontos$uberon$ont$id[term_num] <- str_extract(line, "UBERON:[0-9]+")
+    is_uberon <- TRUE
+  } else if(grepl("^name:",line) & is_uberon){
+    ontos$uberon$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
+  } else if(grepl("^is_a:.*UBERON",line) & is_uberon){
+    ontos$uberon$ont$parents[term_num][[1]] <- c(ontos$uberon$ont$parents[term_num][[1]],
+                                                 str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*")) 
+  } else if(grepl("^relationship:.*UBERON",line) & is_uberon){
+    ontos$uberon$ont$relation[term_num][[1]] <- c(ontos$uberon$ont$parents[term_num][[1]],
+                                                 str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")) 
+  } else if(grepl("^is_obsolete: true",line) & is_uberon){
+    ontos$uberon$ont$is_obsolete[term_num] <- TRUE 
+  }
+}
+close(con)
 
 ## go # MF
 ## go # CC
@@ -140,33 +237,86 @@ for(i in 1:length(ontos$go$ont$id)){
 dbs <- list()
 dbs$MIM_gene_to_disease <- list()
 
-##### read in and set up database ####
-
-
+##### read in and set up MIM gene to disease database (aka map) ####
 con <- file(files$MIM_gene_to_disease,open="r")
 temp_header <- readLines(con, 4)[4]
 temp_header <- str_remove(temp_header,"# ")
 temp_header <- str_split_1(temp_header,"\t")
 close(con)
 dbs$MIM_gene_to_disease$map <- read.delim2(files$MIM_gene_to_disease, header=FALSE, comment.char="#")
-colnames(dbs$MIM_gene_to_disease$map) <- temp_header
+colnames(dbs$MIM_gene_to_disease$map) <- str_replace_all(temp_header,"[[:space:]]","_")
 dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[complete.cases(dbs$MIM_gene_to_disease$map),]
-
-### consider requesting genemap2.txt from OMIM for inheritance mode column
 
 
 dbs$HPO_gene_phen <- list()
-dbs$HPO_gene_phen$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt"
-files$HPO_gene_phen <- paste0(dirs$temp_data,"HPO_genes_to_phenotypes.txt")
+##### try other file......
+dbs$HPO_gene_phen$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa"
+files$HPO_gene_phen <- paste0(dirs$temp_data,"phenotype.hpoa")
 download.file(dbs$HPO_gene_phen$URL, files$HPO_gene_phen)
-##### read in and set up database ####
-con <- file(files$HPO_gene_phen,open="r")
-temp_header <- readLines(con, 1)
-temp_header <- str_remove(temp_header,"#Format: ")
-temp_header <- str_split_1(temp_header,"<tab>")
+### column descriptors https://hpo-annotation-qc.readthedocs.io/en/latest/annotationFormat.html#phenotype-hpoa-format
+##### read in and set up HPO gene to phenotype map ####
+dbs$HPO_gene_phen$map <- read.csv(files$HPO_gene_phen,sep="\t",skip=4)
+dbs$HPO_gene_phen$map <- dbs$HPO_gene_phen$map[grepl("OMIM",dbs$HPO_gene_phen$map$X.DatabaseID),]
+colnames(dbs$HPO_gene_phen$map)[which(colnames(dbs$HPO_gene_phen$map)=="X.DatabaseID")] <- "OMIM_ID"
+
+
+
+
+
+
+
+### HPO to UBERON
+## hpo
+dbs$HPO_to_UBERON <- list()
+dbs$HPO_to_UBERON$URL <- "https://github.com/obophenotype/human-phenotype-ontology/raw/master/hp.owl"
+
+files$hp_owl <- paste0(dirs$temp_data,"hp.owl")
+download.file(dbs$HPO_to_UBERON$URL,files$hp_owl)
+
+
+con <- file(files$hp_owl,open="r")
+num_terms <- 0
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){break}
+  num_terms <- num_terms + grepl("<!--.*HP_",line)
+}
 close(con)
-dbs$HPO_gene_phen$map <- read.table(files$HPO_gene_phen,sep="\t",skip=1)
-colnames(dbs$HPO_gene_phen$map) <- temp_header
+
+dbs$HPO_to_UBERON$map <- list(
+  HPO_id=character(length = num_terms ),
+  UBERON_terms = vector("list", num_terms)
+)
+
+term_num <- 0
+on_HPO_term <- FALSE
+con <- file(files$hp_owl,open="r")
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){
+    break
+  } else if(grepl("<!--.*HP_",line)){
+    term_num <- term_num + 1
+    dbs$HPO_to_UBERON$map$HPO_id[term_num] <- str_extract(line, "HP_[0-9]+")
+    on_HPO_term <- TRUE
+  } else if(grepl("UBERON",line) & on_HPO_term){
+    dbs$HPO_to_UBERON$map$UBERON_terms[[term_num]] <- c(dbs$HPO_to_UBERON$map$UBERON_terms[[term_num]], 
+                                                        str_extract(line, "UBERON_[0-9]+"))
+  } else if(grepl("<!--",line)){
+    on_HPO_term <- FALSE
+  }
+}
+close(con)
+
+dbs$HPO_to_UBERON$map$UBERON_terms[sapply(dbs$HPO_to_UBERON$map$UBERON_terms, is.null)] <- NA 
+names(dbs$HPO_to_UBERON$map$UBERON_terms) <- dbs$HPO_to_UBERON$map$HPO_id
+temp <- reshape2::melt(dbs$HPO_to_UBERON$map$UBERON_terms)
+colnames(temp) <- c("UBERON_ID","HPO_ID")
+temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
+temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
+temp <- temp[,c("HPO_ID","UBERON_ID")]
+
+
 
 ```
 
