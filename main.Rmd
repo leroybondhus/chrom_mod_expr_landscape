@@ -186,7 +186,7 @@ num_terms <- 0
 while(TRUE){
   line = readLines(con,n=1)
   if(length(line)==0){break}
-  num_terms <- num_terms + grepl("^\\[Term\\]$",line)
+  num_terms <- num_terms + grepl("^id:.*UBERON:",line)
 }
 close(con)
 
@@ -246,7 +246,21 @@ close(con)
 dbs$MIM_gene_to_disease$map <- read.delim2(files$MIM_gene_to_disease, header=FALSE, comment.char="#")
 colnames(dbs$MIM_gene_to_disease$map) <- str_replace_all(temp_header,"[[:space:]]","_")
 dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[complete.cases(dbs$MIM_gene_to_disease$map),]
+### FURTHER PARSING NECESSARY: COLUMN "Phenotypes" contains actual phenotype OMIM ID, MIM_Number is for gene's mim number...
+###                            for "Phenotypes" column, only use those associated with (3) which indicates gene found causative
+dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[,c("Ensembl_Gene_ID","Phenotypes")]
 
+temp <- str_split(dbs$MIM_gene_to_disease$map$Phenotypes,";")
+names(temp) <- dbs$MIM_gene_to_disease$map$Ensembl_Gene_ID
+temp <- melt(temp); colnames(temp) <- c("Phenotype","Ensembl_Gene_ID")
+temp$temp_str <- str_extract(temp$Phenotype,"[0-9]{6}.*\\([0-4]\\).*")
+temp$evidence_code <- str_extract(temp$temp_str,"\\([0-4]\\)")
+temp$inheritance_mode <- str_extract(temp$temp_str,"[a-zA-Z].*")
+temp$OMIM_ID <- str_extract(temp$temp_str,"[0-9]{6}")
+temp$temp_str <- NULL
+temp$Phenotype <-  str_remove(temp$Phenotype,", [0-9]{6}.*")
+
+dbs$MIM_gene_to_disease$map <- temp
 
 dbs$HPO_gene_phen <- list()
 ##### try other file......
@@ -260,8 +274,12 @@ dbs$HPO_gene_phen$map <- dbs$HPO_gene_phen$map[grepl("OMIM",dbs$HPO_gene_phen$ma
 colnames(dbs$HPO_gene_phen$map)[which(colnames(dbs$HPO_gene_phen$map)=="X.DatabaseID")] <- "OMIM_ID"
 
 
-
-
+dbs$HPO_OMIM_GENE <- list()
+temp1 <- dbs$HPO_gene_phen$map[,c("OMIM_ID","HPO_ID")]
+temp2 <- dbs$MIM_gene_to_disease$map[c("MIM_Number","Ensembl_Gene_ID")]
+temp2$OMIM_ID <- paste0("OMIM:",temp2$MIM_Number)
+temp2$MIM_Number <- NULL
+dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2, by="OMIM_ID")
 
 
 
@@ -315,6 +333,8 @@ colnames(temp) <- c("UBERON_ID","HPO_ID")
 temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
 temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
 temp <- temp[,c("HPO_ID","UBERON_ID")]
+
+
 
 
 
@@ -575,6 +595,32 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 }
 
 
+## for each HPO, test enrichment of chrom modifiers in set
+## plot by signif and OR, add labels (padj by bonferroni)
+
+
+
+for(i in 1:length(ontos$hpo$ont$id)){
+  
+  
+  
+  fisher.test(x=cbind(c(),
+                      c()))
+  
+}
+
+
+## plot Gene-Gene phenotype similarity (assymetric if want subsumption test e.g.  if A has subset of phens of B)
+## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
+
+
+
+
+```
+
+
+
+```{r DRAFT extract protein complex associations}
 
 
 ### xml structure --- dissect xml in R to recapitulate each complex and it's member species
