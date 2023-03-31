@@ -56,6 +56,35 @@ for(bioc_package in req_packages$biocmanager ){
 };rm(bioc_package)
 rm(req_packages)
 ```
+```{r, ontos helper functions}
+## assume ontology is list of elements of equal length
+## elements must include "id", "name", "parents", "children"
+
+add_children_from_parents <- function(onto){
+  for(i in 1:length(onto$id)){
+    if(length(onto$parents[[i]])<1){next}
+    which <- which(is.element(onto$id, onto$parents[[i]]))
+    for(j in which){
+      onto$children[[j]] <- c(onto$children[[j]], onto$id[i])
+    }
+  }
+  return(onto)
+}
+
+get_descendants <- function(id, onto){
+  which <- which(onto$id==id)
+  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+  if(length(onto$children[[which]]) == 0){
+    return(onto$id[which])
+  }
+  descendants <- id
+  for(child in onto$children[[which]]){
+    descendants <- unique(c(descendants, get_descendants(child, onto)))
+  }
+  return(descendants)
+}
+```
 
 ```{r, organize ontologies}
 
@@ -171,6 +200,7 @@ while(TRUE){
   }
 }
 close(con)
+ontos$hpo$ont <- add_children_from_parents(ontos$hpo$ont)
 
 
 ## set up uberon ontology ###
@@ -233,6 +263,8 @@ close(con)
 
 ```
 
+
+
 ```{r, organize dbs}
 dbs <- list()
 dbs$MIM_gene_to_disease <- list()
@@ -276,10 +308,9 @@ colnames(dbs$HPO_gene_phen$map)[which(colnames(dbs$HPO_gene_phen$map)=="X.Databa
 
 dbs$HPO_OMIM_GENE <- list()
 temp1 <- dbs$HPO_gene_phen$map[,c("OMIM_ID","HPO_ID")]
-temp2 <- dbs$MIM_gene_to_disease$map[c("MIM_Number","Ensembl_Gene_ID")]
-temp2$OMIM_ID <- paste0("OMIM:",temp2$MIM_Number)
-temp2$MIM_Number <- NULL
-dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2, by="OMIM_ID")
+temp2 <- dbs$MIM_gene_to_disease$map[c("Ensembl_Gene_ID","OMIM_ID")]
+temp2$OMIM_ID <- paste0("OMIM:",temp2$OMIM_ID)
+dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2)
 
 
 
@@ -600,13 +631,45 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 
 
 
+which <- which(is.element(dbs$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- dbs$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- dbs$HPO_OMIM_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_lb=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_ub=numeric(length(ontos$hpo$ont$id)))
+
 for(i in 1:length(ontos$hpo$ont$id)){
+  if(i %% 100 == 1){print(i)}
+  hps <- get_descendants(ontos$hpo$ont$id[i], ontos$hpo$ont)
   
+  which <- which(is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+    ### Use all genes or only those with some HP association ?
+  which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
   
+  ## chrom and hp
   
-  fisher.test(x=cbind(c(),
-                      c()))
+  ## chrom and not hp
+  ## not chrom and hp
+  ## not chrom and not hp
   
+  temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+  
+  ## Odds Ratio
+  temp_res_df$p.value[i] <- temp_res$p.value
+  temp_res_df$odds_ratio[i] <- temp_res$estimate
+  temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
+  temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
 }
 
 
