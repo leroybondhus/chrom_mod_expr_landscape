@@ -32,13 +32,13 @@ OMIM_genemap2_URL <- NULL
 #if(is.null(OMIM_genemap2_URL){rm(OMIM_genemap2_URL)}
 ####                                     END NOTE                                    #####
 
-files$MIM_gene_to_disease <- paste0(dirs$OMIM_data,"HPO_genes_to_phenotypes.txt")
-if(!file.exists(files$MIM_gene_to_disease)){
+files$OMIM_GENE <- paste0(dirs$OMIM_data,"HPO_genes_to_phenotypes.txt")
+if(!file.exists(files$OMIM_GENE)){
   if(!exists("OMIM_genemap2_URL")){
     stop(paste0( "Please visit https://www.omim.org/downloads and follow instructions to get URL link ",
                  "for 'genemap2.txt', then set OMIM_genemap2_URL variable to this link in this script " ))
   }
-  download.file(OMIM_genemap2_URL, files$MIM_gene_to_disease)
+  download.file(OMIM_genemap2_URL, files$OMIM_GENE)
 }
      
 ```
@@ -56,6 +56,8 @@ for(bioc_package in req_packages$biocmanager ){
 };rm(bioc_package)
 rm(req_packages)
 ```
+
+
 ```{r, ontos helper functions}
 ## assume ontology is list of elements of equal length
 ## elements must include "id", "name", "parents", "children"
@@ -83,6 +85,51 @@ get_descendants <- function(id, onto){
     descendants <- unique(c(descendants, get_descendants(child, onto)))
   }
   return(descendants)
+}
+
+get_height <- function(id, onto){
+  which <- which(onto$id==id)
+  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+  if(length(onto$children[[which]]) == 0){
+    return(1)
+  }
+  max_child_height <- 0
+  for(child in onto$children[[which]]){
+    max_child_height <- max(max_child_height, get_height(child, onto))
+  }
+  return(max_child_height+1)
+}
+
+get_depth <- function(id, onto){
+  which <- which(onto$id==id)
+  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+  if(length(onto$parents[[which]]) == 0){
+    return(1)
+  }
+  max_parent_depth <- 0
+  for(parent in onto$parents[[which]]){
+    max_parent_depth <- max(max_parent_depth, get_depth(parent, onto))
+  }
+  return(max_parent_depth+1)
+}
+
+get_mask_set <- function(id, onto){ #}, mask_self=T){
+  which <- which(onto$id==id)
+  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+  if(onto$is_signif[which] ){
+    return(onto$id[which]) ## if signif, end recursion down since don't need to also mask descendants
+  } else {
+    mask_set <- character(length=0)
+  }
+  if(length(onto$children[[which]]) > 0){ 
+    for(child in onto$children[[which]]){
+      mask_set <- c(mask_set, get_mask_set(child,onto)) # ,mask_self=F)) 
+    }
+  }
+  return(unique(mask_set))
 }
 ```
 
@@ -140,13 +187,7 @@ close(con)
 
 ### replace is_a with parents
 ### add children attribute to each term for ease of navigation up and down ontology
-for(i in 1:length(ontos$go$ont$id)){
-  which <- which(is.element(ontos$go$ont$id, ontos$go$ont$parents[i][[1]]))
-  if(length(which)==0){next}
-  for(el in which){
-    ontos$go$ont$children[el][[1]] <- unique(c(ontos$go$ont$children[el][[1]], ontos$go$ont$id[i]))
-  }
-}
+ontos$go$ont <- add_children_from_parents(ontos$go$ont)
 
 ##### done: read in and set up ontology ####
 
@@ -256,10 +297,8 @@ while(TRUE){
   }
 }
 close(con)
+ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
 
-## go # MF
-## go # CC
-## go # BP
 
 ```
 
@@ -267,23 +306,23 @@ close(con)
 
 ```{r, organize dbs}
 dbs <- list()
-dbs$MIM_gene_to_disease <- list()
+dbs$OMIM_GENE <- list()
 
 ##### read in and set up MIM gene to disease database (aka map) ####
-con <- file(files$MIM_gene_to_disease,open="r")
+con <- file(files$OMIM_GENE,open="r")
 temp_header <- readLines(con, 4)[4]
 temp_header <- str_remove(temp_header,"# ")
 temp_header <- str_split_1(temp_header,"\t")
 close(con)
-dbs$MIM_gene_to_disease$map <- read.delim2(files$MIM_gene_to_disease, header=FALSE, comment.char="#")
-colnames(dbs$MIM_gene_to_disease$map) <- str_replace_all(temp_header,"[[:space:]]","_")
-dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[complete.cases(dbs$MIM_gene_to_disease$map),]
+dbs$OMIM_GENE$map <- read.delim2(files$OMIM_GENE, header=FALSE, comment.char="#")
+colnames(dbs$OMIM_GENE$map) <- str_replace_all(temp_header,"[[:space:]]","_")
+dbs$OMIM_GENE$map <- dbs$OMIM_GENE$map[complete.cases(dbs$OMIM_GENE$map),]
 ### FURTHER PARSING NECESSARY: COLUMN "Phenotypes" contains actual phenotype OMIM ID, MIM_Number is for gene's mim number...
 ###                            for "Phenotypes" column, only use those associated with (3) which indicates gene found causative
-dbs$MIM_gene_to_disease$map <- dbs$MIM_gene_to_disease$map[,c("Ensembl_Gene_ID","Phenotypes")]
+dbs$OMIM_GENE$map <- dbs$OMIM_GENE$map[,c("Ensembl_Gene_ID","Phenotypes")]
 
-temp <- str_split(dbs$MIM_gene_to_disease$map$Phenotypes,";")
-names(temp) <- dbs$MIM_gene_to_disease$map$Ensembl_Gene_ID
+temp <- str_split(dbs$OMIM_GENE$map$Phenotypes,";")
+names(temp) <- dbs$OMIM_GENE$map$Ensembl_Gene_ID
 temp <- melt(temp); colnames(temp) <- c("Phenotype","Ensembl_Gene_ID")
 temp$temp_str <- str_extract(temp$Phenotype,"[0-9]{6}.*\\([0-4]\\).*")
 temp$evidence_code <- str_extract(temp$temp_str,"\\([0-4]\\)")
@@ -292,23 +331,23 @@ temp$OMIM_ID <- str_extract(temp$temp_str,"[0-9]{6}")
 temp$temp_str <- NULL
 temp$Phenotype <-  str_remove(temp$Phenotype,", [0-9]{6}.*")
 
-dbs$MIM_gene_to_disease$map <- temp
+dbs$OMIM_GENE$map <- temp
 
-dbs$HPO_gene_phen <- list()
+dbs$HPO_OMIM <- list()
 ##### try other file......
-dbs$HPO_gene_phen$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa"
-files$HPO_gene_phen <- paste0(dirs$temp_data,"phenotype.hpoa")
-download.file(dbs$HPO_gene_phen$URL, files$HPO_gene_phen)
+dbs$HPO_OMIM$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa"
+files$HPO_OMIM <- paste0(dirs$temp_data,"phenotype.hpoa")
+download.file(dbs$HPO_OMIM$URL, files$HPO_OMIM)
 ### column descriptors https://hpo-annotation-qc.readthedocs.io/en/latest/annotationFormat.html#phenotype-hpoa-format
 ##### read in and set up HPO gene to phenotype map ####
-dbs$HPO_gene_phen$map <- read.csv(files$HPO_gene_phen,sep="\t",skip=4)
-dbs$HPO_gene_phen$map <- dbs$HPO_gene_phen$map[grepl("OMIM",dbs$HPO_gene_phen$map$X.DatabaseID),]
-colnames(dbs$HPO_gene_phen$map)[which(colnames(dbs$HPO_gene_phen$map)=="X.DatabaseID")] <- "OMIM_ID"
+dbs$HPO_OMIM$map <- read.csv(files$HPO_OMIM,sep="\t",skip=4)
+dbs$HPO_OMIM$map <- dbs$HPO_OMIM$map[grepl("OMIM",dbs$HPO_OMIM$map$X.DatabaseID),]
+colnames(dbs$HPO_OMIM$map)[which(colnames(dbs$HPO_OMIM$map)=="X.DatabaseID")] <- "OMIM_ID"
 
 
 dbs$HPO_OMIM_GENE <- list()
-temp1 <- dbs$HPO_gene_phen$map[,c("OMIM_ID","HPO_ID")]
-temp2 <- dbs$MIM_gene_to_disease$map[c("Ensembl_Gene_ID","OMIM_ID")]
+temp1 <- dbs$HPO_OMIM$map[,c("OMIM_ID","HPO_ID")]
+temp2 <- dbs$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID")]
 temp2$OMIM_ID <- paste0("OMIM:",temp2$OMIM_ID)
 dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2)
 
@@ -316,11 +355,11 @@ dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2)
 
 ### HPO to UBERON
 ## hpo
-dbs$HPO_to_UBERON <- list()
-dbs$HPO_to_UBERON$URL <- "https://github.com/obophenotype/human-phenotype-ontology/raw/master/hp.owl"
+dbs$HPO_UBERON <- list()
+dbs$HPO_UBERON$URL <- "https://github.com/obophenotype/human-phenotype-ontology/raw/master/hp.owl"
 
 files$hp_owl <- paste0(dirs$temp_data,"hp.owl")
-download.file(dbs$HPO_to_UBERON$URL,files$hp_owl)
+download.file(dbs$HPO_UBERON$URL,files$hp_owl)
 
 
 con <- file(files$hp_owl,open="r")
@@ -332,7 +371,7 @@ while(TRUE){
 }
 close(con)
 
-dbs$HPO_to_UBERON$map <- list(
+dbs$HPO_UBERON$map <- list(
   HPO_id=character(length = num_terms ),
   UBERON_terms = vector("list", num_terms)
 )
@@ -346,10 +385,10 @@ while(TRUE){
     break
   } else if(grepl("<!--.*HP_",line)){
     term_num <- term_num + 1
-    dbs$HPO_to_UBERON$map$HPO_id[term_num] <- str_extract(line, "HP_[0-9]+")
+    dbs$HPO_UBERON$map$HPO_id[term_num] <- str_extract(line, "HP_[0-9]+")
     on_HPO_term <- TRUE
   } else if(grepl("UBERON",line) & on_HPO_term){
-    dbs$HPO_to_UBERON$map$UBERON_terms[[term_num]] <- c(dbs$HPO_to_UBERON$map$UBERON_terms[[term_num]], 
+    dbs$HPO_UBERON$map$UBERON_terms[[term_num]] <- c(dbs$HPO_UBERON$map$UBERON_terms[[term_num]], 
                                                         str_extract(line, "UBERON_[0-9]+"))
   } else if(grepl("<!--",line)){
     on_HPO_term <- FALSE
@@ -357,13 +396,13 @@ while(TRUE){
 }
 close(con)
 
-dbs$HPO_to_UBERON$map$UBERON_terms[sapply(dbs$HPO_to_UBERON$map$UBERON_terms, is.null)] <- NA 
-names(dbs$HPO_to_UBERON$map$UBERON_terms) <- dbs$HPO_to_UBERON$map$HPO_id
-temp <- reshape2::melt(dbs$HPO_to_UBERON$map$UBERON_terms)
+dbs$HPO_UBERON$map$UBERON_terms[sapply(dbs$HPO_UBERON$map$UBERON_terms, is.null)] <- NA 
+names(dbs$HPO_UBERON$map$UBERON_terms) <- dbs$HPO_UBERON$map$HPO_id
+temp <- reshape2::melt(dbs$HPO_UBERON$map$UBERON_terms)
 colnames(temp) <- c("UBERON_ID","HPO_ID")
 temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
 temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
-temp <- temp[,c("HPO_ID","UBERON_ID")]
+dbs$HPO_UBERON$map <- temp[,c("HPO_ID","UBERON_ID")]
 
 
 
@@ -374,14 +413,13 @@ temp <- temp[,c("HPO_ID","UBERON_ID")]
 
 ```{r, organize gene sets}
 ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
-options(timeout=180)
+options(timeout=300)
 gene_sets <- list()
 ### these pulls are fairly time intensive -> consider saving to data in short term and load if exists
 gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
                                           "start_position","end_position"),
                  mart = ensembl, useCache = F)
-gene_sets$genes_all_go <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","go_id","name_1006"),
-                 mart = ensembl, useCache = F)
+
 ## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
 for(chr in c(as.character(1:22),"X","Y","MT" )){
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
@@ -398,6 +436,13 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
                 mart = ensembl, useCache = F)
   temp <- merge(temp, temp2)
   gene_sets$genes_all_transcript <- rbind(gene_sets$genes_all_transcript, temp)
+  
+  temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","go_id","name_1006"),
+                filters = "chromosome_name",
+                values = chr,
+                mart = ensembl, useCache = F)
+  gene_sets$genes_all_go <- rbind(gene_sets$genes_all_go, temp)
+  
 }
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
@@ -642,7 +687,7 @@ temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
                           odds_ratio_ub=numeric(length(ontos$hpo$ont$id)))
 
 for(i in 1:length(ontos$hpo$ont$id)){
-  if(i %% 100 == 1){print(i)}
+  if(i %% 1000 == 1){print(i)}
   hps <- get_descendants(ontos$hpo$ont$id[i], ontos$hpo$ont)
   
   which <- which(is.element(temp_chrom$HPO_ID, hps))
@@ -673,14 +718,108 @@ for(i in 1:length(ontos$hpo$ont$id)){
 }
 
 
-## plot Gene-Gene phenotype similarity (assymetric if want subsumption test e.g.  if A has subset of phens of B)
+## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
 ## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
-
-
-
 
 ```
 
+```{r, experimental ontology layered analysis}
+
+which <- which(is.element(dbs$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- dbs$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- dbs$HPO_OMIM_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+onto <- ontos$hpo$ont
+
+onto$height <- numeric(length=length(onto$id))
+onto$depth <- numeric(length=length(onto$id))
+for(i in 1:length(onto$id)){
+  if(i %% 500 == 0){print(i)}
+  onto$height[i] <- get_height(onto$id[i],onto)
+  onto$depth[i] <- get_depth(onto$id[i],onto)
+}
+
+
+onto$is_signif <- rep(F,length(onto$id))
+for( layer in 1:max(onto$height)){
+  print(paste0("layer is: ",layer ))
+  els_in_layer <- which(onto$height==layer)
+  i = 1
+  for( el in els_in_layer ){
+    if(i %% 250 == 0){print(i)}
+    i <- i+1
+    hps <- get_descendants(onto$id[el], onto)
+  
+    which <- which(is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+      ### Use all genes or only those with some HP association ?
+    which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+    
+    temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+    
+    is_signif <- temp_res$p.value < 0.05
+    if(!is_signif){next}
+    ## get list of signif children - these form the mask set.. 
+    ## actually.. probs want all signif descendants? Probs don't
+    ## need to deal with children of signif children, but children of
+    ## insignif children may themselves have substantial signal/ be signif...
+    ## and then drive association at later ancestor level.. 
+    
+    #children_subset <- which(is.element(onto$id, onto$children[[el]]))
+    
+    # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
+    # 
+    # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
+    # signif_children <- onto$id[which_children_signif] 
+    # signif_children <- signif_children[which(!is.element(signif_children,onto$id[el]))] # remove _self_ from descendants
+    
+    signif_children <- get_mask_set(onto$id[el], onto)
+    
+    if(length(signif_children>0)){ ### replace with children that are already called as significant only
+      for( child in signif_children){
+        hps <- onto$id[el] ## want to retain any that are directly associated with _self_.. 
+        ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
+        ## only include most specific instance and NOT also all ancestors of that instance ..
+        for( other_child in signif_children){
+          if( other_child == child){next}
+          hps <- c(hps, get_descendants(other_child, onto))
+        } 
+  
+        which <- which(is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+      
+          ### Use all genes or only those with some HP association ?
+        which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+        
+        temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                      c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+        is_signif <- temp_res$p.value < 0.05 
+        if(!is_signif){break}
+      }
+      
+    }
+    onto$is_signif[el] <- is_signif
+  }
+}
+save.image()
+```
+
+```{r, }
+##phenotype complexity/diversity of genes -> system of affect complexity/diversity
+```
 
 
 ```{r DRAFT extract protein complex associations}
