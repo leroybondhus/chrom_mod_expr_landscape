@@ -87,6 +87,20 @@ get_descendants <- function(id, onto){
   return(descendants)
 }
 
+get_ancestors <- function(id, onto){
+  which <- which(onto$id==id)
+  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+  if(length(onto$parents[[which]]) == 0){
+    return(onto$id[which])
+  }
+  ancestors <- id
+  for(parent in onto$parents[[which]]){
+    ancestors <- unique(c(ancestors, get_ancestors(parent, onto)))
+  }
+  return(ancestors)
+}
+
 get_height <- function(id, onto){
   which <- which(onto$id==id)
   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
@@ -288,7 +302,8 @@ while(TRUE){
     ontos$uberon$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
   } else if(grepl("^is_a:.*UBERON",line) & is_uberon){
     ontos$uberon$ont$parents[term_num][[1]] <- c(ontos$uberon$ont$parents[term_num][[1]],
-                                                 str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*")) 
+                                                 #str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*"))
+                                                 str_extract(line, "UBERON:[0-9]*"))
   } else if(grepl("^relationship:.*UBERON",line) & is_uberon){
     ontos$uberon$ont$relation[term_num][[1]] <- c(ontos$uberon$ont$parents[term_num][[1]],
                                                  str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")) 
@@ -304,9 +319,9 @@ ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
 
 
 
-```{r, organize dbs}
-dbs <- list()
-dbs$OMIM_GENE <- list()
+```{r, organize onto_maps}
+onto_maps <- list()
+onto_maps$OMIM_GENE <- list()
 
 ##### read in and set up MIM gene to disease database (aka map) ####
 con <- file(files$OMIM_GENE,open="r")
@@ -314,15 +329,15 @@ temp_header <- readLines(con, 4)[4]
 temp_header <- str_remove(temp_header,"# ")
 temp_header <- str_split_1(temp_header,"\t")
 close(con)
-dbs$OMIM_GENE$map <- read.delim2(files$OMIM_GENE, header=FALSE, comment.char="#")
-colnames(dbs$OMIM_GENE$map) <- str_replace_all(temp_header,"[[:space:]]","_")
-dbs$OMIM_GENE$map <- dbs$OMIM_GENE$map[complete.cases(dbs$OMIM_GENE$map),]
+onto_maps$OMIM_GENE$map <- read.delim2(files$OMIM_GENE, header=FALSE, comment.char="#")
+colnames(onto_maps$OMIM_GENE$map) <- str_replace_all(temp_header,"[[:space:]]","_")
+onto_maps$OMIM_GENE$map <- onto_maps$OMIM_GENE$map[complete.cases(onto_maps$OMIM_GENE$map),]
 ### FURTHER PARSING NECESSARY: COLUMN "Phenotypes" contains actual phenotype OMIM ID, MIM_Number is for gene's mim number...
 ###                            for "Phenotypes" column, only use those associated with (3) which indicates gene found causative
-dbs$OMIM_GENE$map <- dbs$OMIM_GENE$map[,c("Ensembl_Gene_ID","Phenotypes")]
+onto_maps$OMIM_GENE$map <- onto_maps$OMIM_GENE$map[,c("Ensembl_Gene_ID","Phenotypes")]
 
-temp <- str_split(dbs$OMIM_GENE$map$Phenotypes,";")
-names(temp) <- dbs$OMIM_GENE$map$Ensembl_Gene_ID
+temp <- str_split(onto_maps$OMIM_GENE$map$Phenotypes,";")
+names(temp) <- onto_maps$OMIM_GENE$map$Ensembl_Gene_ID
 temp <- melt(temp); colnames(temp) <- c("Phenotype","Ensembl_Gene_ID")
 temp$temp_str <- str_extract(temp$Phenotype,"[0-9]{6}.*\\([0-4]\\).*")
 temp$evidence_code <- str_extract(temp$temp_str,"\\([0-4]\\)")
@@ -331,35 +346,36 @@ temp$OMIM_ID <- str_extract(temp$temp_str,"[0-9]{6}")
 temp$temp_str <- NULL
 temp$Phenotype <-  str_remove(temp$Phenotype,", [0-9]{6}.*")
 
-dbs$OMIM_GENE$map <- temp
+onto_maps$OMIM_GENE$map <- temp
 
-dbs$HPO_OMIM <- list()
+onto_maps$HPO_OMIM <- list()
 ##### try other file......
-dbs$HPO_OMIM$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa"
+onto_maps$HPO_OMIM$URL <- "http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa"
 files$HPO_OMIM <- paste0(dirs$temp_data,"phenotype.hpoa")
-download.file(dbs$HPO_OMIM$URL, files$HPO_OMIM)
+download.file(onto_maps$HPO_OMIM$URL, files$HPO_OMIM)
 ### column descriptors https://hpo-annotation-qc.readthedocs.io/en/latest/annotationFormat.html#phenotype-hpoa-format
 ##### read in and set up HPO gene to phenotype map ####
-dbs$HPO_OMIM$map <- read.csv(files$HPO_OMIM,sep="\t",skip=4)
-dbs$HPO_OMIM$map <- dbs$HPO_OMIM$map[grepl("OMIM",dbs$HPO_OMIM$map$X.DatabaseID),]
-colnames(dbs$HPO_OMIM$map)[which(colnames(dbs$HPO_OMIM$map)=="X.DatabaseID")] <- "OMIM_ID"
+onto_maps$HPO_OMIM$map <- read.csv(files$HPO_OMIM,sep="\t",skip=4)
+onto_maps$HPO_OMIM$map <- onto_maps$HPO_OMIM$map[grepl("OMIM",onto_maps$HPO_OMIM$map$database_id),]
+colnames(onto_maps$HPO_OMIM$map)[which(colnames(onto_maps$HPO_OMIM$map)=="database_id")] <- "OMIM_ID"
+colnames(onto_maps$HPO_OMIM$map)[which(colnames(onto_maps$HPO_OMIM$map)=="hpo_id")] <- "HPO_ID"
 
 
-dbs$HPO_OMIM_GENE <- list()
-temp1 <- dbs$HPO_OMIM$map[,c("OMIM_ID","HPO_ID")]
-temp2 <- dbs$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID")]
+onto_maps$HPO_OMIM_GENE <- list()
+temp1 <- onto_maps$HPO_OMIM$map[,c("OMIM_ID","HPO_ID")]
+temp2 <- onto_maps$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID")]
 temp2$OMIM_ID <- paste0("OMIM:",temp2$OMIM_ID)
-dbs$HPO_OMIM_GENE$map <- merge(temp1,temp2)
+onto_maps$HPO_OMIM_GENE$map <- merge(temp1,temp2)
 
 
 
 ### HPO to UBERON
 ## hpo
-dbs$HPO_UBERON <- list()
-dbs$HPO_UBERON$URL <- "https://github.com/obophenotype/human-phenotype-ontology/raw/master/hp.owl"
+onto_maps$HPO_UBERON <- list()
+onto_maps$HPO_UBERON$URL <- "http://purl.obolibrary.org/obo/hp.owl"
 
 files$hp_owl <- paste0(dirs$temp_data,"hp.owl")
-download.file(dbs$HPO_UBERON$URL,files$hp_owl)
+download.file(onto_maps$HPO_UBERON$URL,files$hp_owl)
 
 
 con <- file(files$hp_owl,open="r")
@@ -371,7 +387,7 @@ while(TRUE){
 }
 close(con)
 
-dbs$HPO_UBERON$map <- list(
+onto_maps$HPO_UBERON$map <- list(
   HPO_id=character(length = num_terms ),
   UBERON_terms = vector("list", num_terms)
 )
@@ -385,10 +401,10 @@ while(TRUE){
     break
   } else if(grepl("<!--.*HP_",line)){
     term_num <- term_num + 1
-    dbs$HPO_UBERON$map$HPO_id[term_num] <- str_extract(line, "HP_[0-9]+")
+    onto_maps$HPO_UBERON$map$HPO_id[term_num] <- str_extract(line, "HP_[0-9]+")
     on_HPO_term <- TRUE
   } else if(grepl("UBERON",line) & on_HPO_term){
-    dbs$HPO_UBERON$map$UBERON_terms[[term_num]] <- c(dbs$HPO_UBERON$map$UBERON_terms[[term_num]], 
+    onto_maps$HPO_UBERON$map$UBERON_terms[[term_num]] <- c(onto_maps$HPO_UBERON$map$UBERON_terms[[term_num]], 
                                                         str_extract(line, "UBERON_[0-9]+"))
   } else if(grepl("<!--",line)){
     on_HPO_term <- FALSE
@@ -396,13 +412,13 @@ while(TRUE){
 }
 close(con)
 
-dbs$HPO_UBERON$map$UBERON_terms[sapply(dbs$HPO_UBERON$map$UBERON_terms, is.null)] <- NA 
-names(dbs$HPO_UBERON$map$UBERON_terms) <- dbs$HPO_UBERON$map$HPO_id
-temp <- reshape2::melt(dbs$HPO_UBERON$map$UBERON_terms)
+onto_maps$HPO_UBERON$map$UBERON_terms[sapply(onto_maps$HPO_UBERON$map$UBERON_terms, is.null)] <- NA 
+names(onto_maps$HPO_UBERON$map$UBERON_terms) <- onto_maps$HPO_UBERON$map$HPO_id
+temp <- reshape2::melt(onto_maps$HPO_UBERON$map$UBERON_terms)
 colnames(temp) <- c("UBERON_ID","HPO_ID")
 temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
 temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
-dbs$HPO_UBERON$map <- temp[,c("HPO_ID","UBERON_ID")]
+onto_maps$HPO_UBERON$map <- temp[,c("HPO_ID","UBERON_ID")]
 
 
 
@@ -676,10 +692,10 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 
 
 
-which <- which(is.element(dbs$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
            gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
-temp_chrom <- dbs$HPO_OMIM_GENE$map[which,]
-temp_not_chrom <- dbs$HPO_OMIM_GENE$map[-which,]
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
 temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
 temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
                           odds_ratio=numeric(length(ontos$hpo$ont$id)),
@@ -725,10 +741,10 @@ for(i in 1:length(ontos$hpo$ont$id)){
 
 ```{r, experimental ontology layered analysis}
 
-which <- which(is.element(dbs$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
            gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
-temp_chrom <- dbs$HPO_OMIM_GENE$map[which,]
-temp_not_chrom <- dbs$HPO_OMIM_GENE$map[-which,]
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
 temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
 onto <- ontos$hpo$ont
 
@@ -815,6 +831,18 @@ for( layer in 1:max(onto$height)){
   }
 }
 save.image()
+
+layer_df <- list()
+for( i in 1:max(onto$depth)){
+  which <- which(onto$depth==i & onto$is_signif)
+  if(length(which) < 1){ next}
+  for(id in onto$id[which]){
+    ancestors <- get_ancestors(id, onto)
+    ancestors <- ancestors[which(ancestors != id)]
+    
+  }
+}
+
 ```
 
 ```{r, }
@@ -875,9 +903,195 @@ for(f in temp_files){
 
 dataset_list <- list()
 ## encode (has uberon, standard format)
+
 ## gtex (has uberon, standard format)
+
 ## sra (mixed format)
 
 
 ```
 
+
+```{r, read encode mouse ref RNAseq}
+library(jsonlite)
+library(httr)
+## e10.5, e11.5, e12.5, e13.5, e14.5, e15.5, e16.5, neonat, 8wk adult, 24wk adult
+## get ENCODE search results : mouse epigenome reference RNAseq
+search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+# 
+# search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+query_result <- GET(search_query)
+query_result <- content(query_result , "text", encoding = "UTF-8")
+query_result <- fromJSON(query_result, flatten = T)
+query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
+
+##
+data_list <- list()
+for(i in 1:nrow(query_table)){
+  if(i %% 5 == 0){print(i)}
+  target <- paste0("https://www.encodeproject.org/",
+                          query_table$accession[i],
+                          "/?frame=embedded&format=json")
+  target <- GET(target)
+  target_result <- content(target, "text", encoding = "UTF-8")
+  target_result <- fromJSON(target_result, flatten = TRUE)
+  temp_gene_anno <-  unique(target_result$files$genome_annotation)
+  temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
+  which <- which(target_result$files$file_format=="tsv" &
+                 target_result$files$output_type=="gene quantifications" &
+                 grepl(max(as.numeric(str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
+                       target_result$files$genome_annotation) &
+                 target_result$files$status == "released")
+  which_cols <- c("accession", "href","biosample_ontology",
+                "biological_replicates", "technical_replicates",
+                "biological_replicates_formatted", "donors",
+                "dataset")
+  gene_quant_files <- target_result$files[which,which_cols]
+  gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
+    sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
+  target_metadata <- cbind(query_table[i,], gene_quant_files)
+  
+  for(j in 1:nrow(target_metadata)){
+    temp <- tempfile()
+    download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
+    temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+    data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
+                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
+    rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
+  }
+}
+
+temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
+                                tpm_ncol=numeric(length=length(data_list)),
+                                metadata_nrow=numeric(length=length(data_list)))
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$metadata_nrow[i] <- nrow(data_list[[i]]$metadata) 
+}
+if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
+
+data_list_concat <- data_list[[1]]
+for(i in 2:length(data_list)){
+  data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
+  data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
+}
+data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
+
+dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
+rm(data_list)
+```
+
+
+```{r, read encode human ref RNAseq}
+library(jsonlite)
+library(httr)
+
+# search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+# 
+search_query <- "https://www.encodeproject.org/search/?type=Experiment&control_type!=*&status=released&perturbed=false&assay_title=polyA+plus+RNA-seq&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&format=json&limit=all"
+#"https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+query_result <- GET(search_query)
+query_result <- content(query_result , "text", encoding = "UTF-8")
+query_result <- fromJSON(query_result, flatten = T)
+query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
+
+##
+data_list <- list()
+for(i in 1:nrow(query_table)){
+  if(i %% 5 == 0){print(i)}
+  target <- paste0("https://www.encodeproject.org/",
+                          query_table$accession[i],
+                          "/?frame=embedded&format=json")
+  target <- GET(target)
+  target_result <- content(target, "text", encoding = "UTF-8")
+  target_result <- fromJSON(target_result, flatten = TRUE)
+  temp_gene_anno <-  unique(target_result$files$genome_annotation)
+  temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
+  which <- which(target_result$files$file_format=="tsv" &
+                 target_result$files$output_type=="gene quantifications" &
+                 grepl(max(as.numeric(str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
+                       target_result$files$genome_annotation) &
+                 target_result$files$status == "released")
+  if(length(which)==0){next}
+  which_cols <- c("accession", "href","biosample_ontology",
+                "biological_replicates", "technical_replicates",
+                "biological_replicates_formatted", "donors",
+                "dataset")
+  gene_quant_files <- target_result$files[which,which_cols]
+  gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
+    sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
+  target_metadata <- cbind(query_table[i,], gene_quant_files)
+  
+  for(j in 1:nrow(target_metadata)){
+    temp <- tempfile()
+    download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
+    temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+    data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
+                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
+    rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
+  }
+}
+
+temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
+                                tpm_ncol=numeric(length=length(data_list)),
+                                metadata_nrow=numeric(length=length(data_list)))
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$metadata_nrow[i] <- nrow(data_list[[i]]$metadata) 
+}
+if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
+
+data_list_concat <- data_list[[1]]
+for(i in 2:length(data_list)){
+  data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
+  data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
+}
+data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
+
+dataset_list$ENCODE_HH <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
+rm(data_list)
+```
+
+```{r}
+temp_onto <- ontos$uberon$ont
+temp_onto$data_cols <- vector(mode = "list", length=length(temp_onto$id))
+temp_ds <- dataset_list$ENCODE_MM_DEV$metadata
+
+add_annotation <- function(id, onto, annotation_name, annotation_value,
+                           propegate_to_ancestors=TRUE,
+                           allow_repeat_annotations=FALSE){
+  annotation_index <- which(names(onto)==annotation_name)
+  if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
+  if(length(annotation_index)>1){stop(paste("annotation_name", annotation_name, "ambiguous in ontology"))}
+  which <- which(onto$id==id) 
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  
+  onto[[annotation_index]][[which]] <- c(onto[[annotation_index]][[which]], annotation_value)
+  if(!allow_repeat_annotations){
+    onto[[annotation_index]][[which]] <- unique(onto[[annotation_index]][[which]])
+  }
+  if(propegate_to_ancestors | length(onto$parents[[which]]) != 0){
+    for(parent in onto$parents[[which]]){
+      onto <- add_annotation(parent, onto, annotation_name, annotation_value,
+                             allow_repeat_annotations = allow_repeat_annotations)
+    }
+  }
+  return(onto)
+}
+
+
+for(i in 1:nrow(temp_ds)){
+  print(i)
+  onto_id <- str_replace(str_extract(temp_ds$biosample_ontology[i],"UBERON_[0-9]*"),"_",":")
+  if(is.na(onto_id)){next}
+  temp_onto <- add_annotation(onto_id, temp_onto,
+                              annotation_name = "data_cols",
+                              annotation_value = i )
+  # col_id <- i
+  
+}
+
+```
