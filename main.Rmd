@@ -281,7 +281,7 @@ ontos$uberon$ont <- list(
 #  namespace = character(length = num_terms ),
   parents = vector("list", num_terms),
   children = vector("list", num_terms),
-  relation = vector("list", num_terms),
+  relations = vector("list", num_terms),
   is_obsolete = rep(FALSE, num_terms)
 )
 
@@ -305,8 +305,13 @@ while(TRUE){
                                                  #str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*"))
                                                  str_extract(line, "UBERON:[0-9]*"))
   } else if(grepl("^relationship:.*UBERON",line) & is_uberon){
-    ontos$uberon$ont$relation[term_num][[1]] <- c(ontos$uberon$ont$parents[term_num][[1]],
-                                                 str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")) 
+    temp_relation  <- str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")
+    temp_df <- data.frame(relation = str_remove(temp_relation, " .*"),
+                          id = str_extract(temp_relation, "UBERON:[0-9]+"))
+    ontos$uberon$ont$relations[term_num][[1]] <- rbind(ontos$uberon$ont$relations[term_num][[1]],
+                                                       temp_df) 
+      # c(ontos$uberon$ont$parents[term_num][[1]],
+      # str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")) 
   } else if(grepl("^is_obsolete: true",line) & is_uberon){
     ontos$uberon$ont$is_obsolete[term_num] <- TRUE 
   }
@@ -949,36 +954,36 @@ for(i in 1:nrow(query_table)){
   gene_quant_files <- target_result$files[which,which_cols]
   gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
     sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
-  target_metadata <- cbind(query_table[i,], gene_quant_files)
+  target_coldata <- cbind(query_table[i,], gene_quant_files)
   
-  for(j in 1:nrow(target_metadata)){
+  for(j in 1:nrow(target_coldata)){
     temp <- tempfile()
-    download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
+    download.file(paste0("https://www.encodeproject.org/",target_coldata$href[j]), temp)
     temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
     data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
-                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
+                                             coldata = cbind(target_coldata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
     rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
   }
 }
 
 temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
                                 tpm_ncol=numeric(length=length(data_list)),
-                                metadata_nrow=numeric(length=length(data_list)))
+                                coldata_nrow=numeric(length=length(data_list)))
 for(i in 1:length(data_list)){
   temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
   temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
-  temp_data_list_qc$metadata_nrow[i] <- nrow(data_list[[i]]$metadata) 
+  temp_data_list_qc$coldata_nrow[i] <- nrow(data_list[[i]]$coldata) 
 }
 if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
 
 data_list_concat <- data_list[[1]]
 for(i in 2:length(data_list)){
   data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
-  data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
+  data_list_concat$coldata <- rbind(data_list_concat$coldata, data_list[[i]]$coldata)
 }
-data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
+data_list_concat$coldata <- as.data.frame(data_list_concat$coldata)
 
-dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
+dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, coldata=data_list_concat$coldata)
 rm(data_list)
 ```
 
@@ -1021,46 +1026,64 @@ for(i in 1:nrow(query_table)){
   gene_quant_files <- target_result$files[which,which_cols]
   gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
     sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
-  target_metadata <- cbind(query_table[i,], gene_quant_files)
+  target_coldata <- cbind(query_table[i,], gene_quant_files)
   
-  for(j in 1:nrow(target_metadata)){
+  for(j in 1:nrow(target_coldata)){
     temp <- tempfile()
-    download.file(paste0("https://www.encodeproject.org/",target_metadata$href[j]), temp)
+    download.file(paste0("https://www.encodeproject.org/",target_coldata$href[j]), temp)
     temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+    temp_data <- temp_data[grep("PAR_Y",temp_data$gene_id, invert=T),]
     data_list[[length(data_list)+1]] <- list(TPM = data.frame(TPM=temp_data$TPM),
-                                             metadata = cbind(target_metadata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
-    rownames(data_list[[length(data_list)]]$TPM) <- temp_data$gene_id
+                                             coldata = cbind(target_coldata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
+    rownames(data_list[[length(data_list)]]$TPM) <- str_remove(temp_data$gene_id,"\\..*")
   }
 }
 
+temp_rownames <- character()
 temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
                                 tpm_ncol=numeric(length=length(data_list)),
-                                metadata_nrow=numeric(length=length(data_list)))
+                                coldata_nrow=numeric(length=length(data_list)))
 for(i in 1:length(data_list)){
   temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
   temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
-  temp_data_list_qc$metadata_nrow[i] <- nrow(data_list[[i]]$metadata) 
+  temp_data_list_qc$coldata_nrow[i] <- nrow(data_list[[i]]$coldata)
+  temp_rownames <- unique(c(temp_rownames,rownames(data_list[[i]]$TPM)))
 }
+for(i in 1:length(data_list)){
+  temp_missing_rownames <- setdiff(temp_rownames, rownames(data_list[[i]]$TPM))
+  if(length(temp_missing_rownames)==0){next}
+  temp_df <- data.frame(TPM = rep(0, length(temp_missing_rownames)))
+  rownames(temp_df) <- temp_missing_rownames
+  data_list[[i]]$TPM <- rbind(data_list[[i]]$TPM, temp_df)
+}
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$coldata_nrow[i] <- nrow(data_list[[i]]$coldata)
+}
+#### fix dim mismatch issue for human data here ..... 
 if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
 
 data_list_concat <- data_list[[1]]
 for(i in 2:length(data_list)){
   data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
-  data_list_concat$metadata <- rbind(data_list_concat$metadata, data_list[[i]]$metadata)
+  data_list_concat$coldata <- rbind(data_list_concat$coldata, data_list[[i]]$coldata)
 }
-data_list_concat$metadata <- as.data.frame(data_list_concat$metadata)
+data_list_concat$coldata <- as.data.frame(data_list_concat$coldata)
 
-dataset_list$ENCODE_HH <- list(mat = data_list_concat$TPM, metadata=data_list_concat$metadata)
+dataset_list$ENCODE_HH <- list(mat = data_list_concat$TPM, coldata=data_list_concat$coldata)
 rm(data_list)
 ```
 
 ```{r}
 temp_onto <- ontos$uberon$ont
 temp_onto$data_cols <- vector(mode = "list", length=length(temp_onto$id))
-temp_ds <- dataset_list$ENCODE_MM_DEV$metadata
+temp_ds <- dataset_list$ENCODE_MM_DEV$coldata
+temp_ds <- dataset_list$ENCODE_HH$coldata
 
 add_annotation <- function(id, onto, annotation_name, annotation_value,
                            propegate_to_ancestors=TRUE,
+                           propegate_from_part_to_whole=TRUE,
                            allow_repeat_annotations=FALSE){
   annotation_index <- which(names(onto)==annotation_name)
   if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
@@ -1093,5 +1116,47 @@ for(i in 1:nrow(temp_ds)){
   # col_id <- i
   
 }
+
+
+### get table of onto term and all descendants
+get_desc_summary_table <- function(id,onto, level=1){
+  which <- which(onto$id==id) 
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  
+  
+  temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
+                                  dimnames = list(NULL, names(onto))))
+  for(el in names(onto)){
+    if( is.list(onto[[el]][which] )){
+      if(length(onto[[el]][which]) > 0){
+       temp_df[el] <- sapply(onto[[el]][which], paste, collapse=",")
+      } else { temp_df[el] <- NA }
+    } else{
+      temp_df[el] <- onto[[el]][which]
+    } 
+  }
+  temp_df <- cbind(temp_df, data.frame(level=level))
+  if(length( onto$children[[which]]) > 0 ){
+    for(child in onto$children[[which]]){
+      temp_df <- rbind(temp_df,
+                       get_desc_summary_table(child, onto, level=level+1))
+    }
+  }
+  return(unique(temp_df))
+}
+
+muscle_df <- get_desc_summary_table("UBERON:0004120", temp_onto)
+muscle_df$num_datasets <- sapply(str_split(muscle_df$data_cols,","), function(x){ifelse(all(x==""),0,length(x)) })
+muscle_df_sub <- muscle_df[which(muscle_df$data_cols != ""),c("id","name","num_datasets","level")]
+muscle_df_sub <- muscle_df_sub[order(muscle_df_sub$level),]
+
+heart_chamber_df <- get_desc_summary_table("UBERON:0004151", temp_onto)
+heart_chamber_df$num_datasets <- sapply(str_split(heart_chamber_df$data_cols,","), function(x){ifelse(all(x==""),0,length(x)) })
+heart_chamber_df_sub <- heart_chamber_df[which(heart_chamber_df$data_cols != ""),c("id","name","num_datasets","level")]
+heart_chamber_df_sub <- heart_chamber_df_sub[order(heart_chamber_df_sub$level),]
+
+write.csv(muscle_df_sub, paste0(dirs$tables,"ENCODE_mesoderm_derived_RNAseq.csv"))
+write.csv(heart_chamber_df_sub, paste0(dirs$tables,"ENCODE_heart_chamber_RNAseq.csv"))
 
 ```
