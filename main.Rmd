@@ -1081,43 +1081,85 @@ temp_onto$data_cols <- vector(mode = "list", length=length(temp_onto$id))
 temp_ds <- dataset_list$ENCODE_MM_DEV$coldata
 temp_ds <- dataset_list$ENCODE_HH$coldata
 
-add_annotation <- function(id, onto, annotation_name, annotation_value,
-                           propegate_to_ancestors=TRUE,
-                           propegate_from_part_to_whole=TRUE,
-                           allow_repeat_annotations=FALSE){
+# add_annotation <- function(id, onto, annotation_name, annotation_value,
+#                            propegate_to_ancestors=TRUE,
+#                            propegate_from_part_to_whole=TRUE,
+#                            allow_repeat_annotations=FALSE){
+#   annotation_index <- which(names(onto)==annotation_name)
+#   if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
+#   if(length(annotation_index)>1){stop(paste("annotation_name", annotation_name, "ambiguous in ontology"))}
+#   which <- which(onto$id==id) 
+#   if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+#   if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+#   
+#   onto[[annotation_index]][[which]] <- c(onto[[annotation_index]][[which]], annotation_value)
+#   if(!allow_repeat_annotations){
+#     onto[[annotation_index]][[which]] <- unique(onto[[annotation_index]][[which]])
+#   }
+#   if(propegate_to_ancestors | length(onto$parents[[which]]) != 0){
+#     for(parent in onto$parents[[which]]){
+#       onto <- add_annotation(parent, onto, annotation_name, annotation_value,
+#                              propegate_to_ancestors = propegate_to_ancestors,
+#                              propegate_from_part_to_whole = propegate_from_part_to_whole,
+#                              allow_repeat_annotations = allow_repeat_annotations)
+#     }
+#   }
+#   return(onto)
+# }
+
+### cycle in is_a, part_of graph ? i.e. not a DAG?   
+add_annotation <- function(id, onto, annotation_name,annotation_value,
+                           transitive_relations=c("is_a","part_of"),
+                           propegate_to_parents=TRUE,
+                           visited_ids= c()){
   annotation_index <- which(names(onto)==annotation_name)
   if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
   if(length(annotation_index)>1){stop(paste("annotation_name", annotation_name, "ambiguous in ontology"))}
-  which <- which(onto$id==id) 
+  which <- which(onto$id==id)
   if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
   if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
   
-  onto[[annotation_index]][[which]] <- c(onto[[annotation_index]][[which]], annotation_value)
-  if(!allow_repeat_annotations){
-    onto[[annotation_index]][[which]] <- unique(onto[[annotation_index]][[which]])
+  onto[[annotation_index]][[which]] <- unique(c(onto[[annotation_index]][[which]], annotation_value))
+  ## set up and use blacklist of visited_ids
+  #transitive_ids <- transitive_ids[which(transitive_ids != id)]
+  visited_ids <- c(visited_ids,id)
+  
+  relation_df <- onto$relations[[which]]
+  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
+  if(propegate_to_parents){
+    transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
   }
-  if(propegate_to_ancestors | length(onto$parents[[which]]) != 0){
-    for(parent in onto$parents[[which]]){
-      onto <- add_annotation(parent, onto, annotation_name, annotation_value,
-                             allow_repeat_annotations = allow_repeat_annotations)
+
+  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
+  if(length(transitive_ids)>0){
+    for( tid in transitive_ids ){
+      #print(paste(onto$name[which], tid))
+      onto <- add_annotation(id=tid, onto=onto, 
+                             annotation_name = annotation_name,
+                             annotation_value= annotation_value,
+                             transitive_relations = transitive_relations,
+                             propegate_to_parents = propegate_to_parents,
+                             visited_ids=visited_ids )
     }
   }
   return(onto)
+  
 }
 
-
 for(i in 1:nrow(temp_ds)){
-  print(i)
+  if(i %% 10 == 1){print(i)}
   onto_id <- str_replace(str_extract(temp_ds$biosample_ontology[i],"UBERON_[0-9]*"),"_",":")
   if(is.na(onto_id)){next}
   temp_onto <- add_annotation(onto_id, temp_onto,
                               annotation_name = "data_cols",
-                              annotation_value = i )
+                              annotation_value = i,
+                              transitive_relations=c("is_a","part_of"),
+                              propegate_to_parents=TRUE )
   # col_id <- i
   
 }
 
-
+### need to modify to enable extracting PART_OF relations here...... O_o
 ### get table of onto term and all descendants
 get_desc_summary_table <- function(id,onto, level=1){
   which <- which(onto$id==id) 
@@ -1128,12 +1170,12 @@ get_desc_summary_table <- function(id,onto, level=1){
   temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
                                   dimnames = list(NULL, names(onto))))
   for(el in names(onto)){
-    if( is.list(onto[[el]][which] )){
-      if(length(onto[[el]][which]) > 0){
+    if( is.list(onto[[el]][[which]] )){
+      if(length(onto[[el]][[which]]) > 0){
        temp_df[el] <- sapply(onto[[el]][which], paste, collapse=",")
       } else { temp_df[el] <- NA }
     } else{
-      temp_df[el] <- onto[[el]][which]
+      temp_df[el] <- paste0(onto[[el]][which],",")
     } 
   }
   temp_df <- cbind(temp_df, data.frame(level=level))
@@ -1151,12 +1193,12 @@ muscle_df$num_datasets <- sapply(str_split(muscle_df$data_cols,","), function(x)
 muscle_df_sub <- muscle_df[which(muscle_df$data_cols != ""),c("id","name","num_datasets","level")]
 muscle_df_sub <- muscle_df_sub[order(muscle_df_sub$level),]
 
-heart_chamber_df <- get_desc_summary_table("UBERON:0004151", temp_onto)
-heart_chamber_df$num_datasets <- sapply(str_split(heart_chamber_df$data_cols,","), function(x){ifelse(all(x==""),0,length(x)) })
-heart_chamber_df_sub <- heart_chamber_df[which(heart_chamber_df$data_cols != ""),c("id","name","num_datasets","level")]
-heart_chamber_df_sub <- heart_chamber_df_sub[order(heart_chamber_df_sub$level),]
+heart_df <- get_desc_summary_table("UBERON:0000948", temp_onto)
+heart_df$num_datasets <- sapply(str_split(heart_df$data_cols,","), function(x){ifelse(all(x==""),0,length(x)) })
+heart_df_sub <- heart_df[which(heart_df$data_cols != ""),c("id","name","num_datasets","level")]
+heart_df_sub <- heart_df_sub[order(heart_df_sub$level),]
 
 write.csv(muscle_df_sub, paste0(dirs$tables,"ENCODE_mesoderm_derived_RNAseq.csv"))
-write.csv(heart_chamber_df_sub, paste0(dirs$tables,"ENCODE_heart_chamber_RNAseq.csv"))
+write.csv(heart_df_sub, paste0(dirs$tables,"ENCODE_heart_RNAseq.csv"))
 
 ```
