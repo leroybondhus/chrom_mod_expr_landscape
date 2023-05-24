@@ -1170,15 +1170,19 @@ get_desc_summary_table <- function(id,onto, level=1){
   temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
                                   dimnames = list(NULL, names(onto))))
   for(el in names(onto)){
-    if( is.list(onto[[el]][[which]] )){
+    if(is.data.frame(onto[[el]][[which]])){
+      temp_df[el] <- paste0(apply(onto[[el]][[which]],1, paste0, collapse=","),collapse=";")
+    } else if( is.list(onto[[el]][[which]] )){
       if(length(onto[[el]][[which]]) > 0){
-       temp_df[el] <- sapply(onto[[el]][which], paste, collapse=",")
+       temp_df[el] <- sapply(onto[[el]][[which]], paste, collapse=",")
       } else { temp_df[el] <- NA }
     } else{
-      temp_df[el] <- paste0(onto[[el]][which],",")
+      temp_df[el] <- paste0(onto[[el]][[which]],collapse=",")
     } 
   }
   temp_df <- cbind(temp_df, data.frame(level=level))
+  
+  ### UPDATE THIS CHUNK WITH CHILDREN AND PART_OR RELATIONS
   if(length( onto$children[[which]]) > 0 ){
     for(child in onto$children[[which]]){
       temp_df <- rbind(temp_df,
