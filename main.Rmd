@@ -1159,13 +1159,24 @@ for(i in 1:nrow(temp_ds)){
   
 }
 
+# add_inverse_relation <- function(onto, relation_to_invert, inverse_relation_name=NULL){
+#   if(is.null(inverse_relation_name)){ inverse_relation_name <- paste0("INVERSE_",relation_to_invert) }
+#   for(i in 1:length(onto)){
+#     which(onto$relations[[i]]$relation == relation_to_invert)
+#     
+#   }
+# }
+
 ### need to modify to enable extracting PART_OF relations here...... O_o
 ### get table of onto term and all descendants
-get_desc_summary_table <- function(id,onto, level=1){
+get_desc_summary_table <- function(id,onto, level=1,
+                                   transitive_relations=c("has_part"),
+                                   descend_through_children=TRUE,
+                                   visited_ids=c()){
   which <- which(onto$id==id) 
   if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
   if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-  
+  visited_ids <- c(visited_ids,id)
   
   temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
                                   dimnames = list(NULL, names(onto))))
@@ -1182,13 +1193,23 @@ get_desc_summary_table <- function(id,onto, level=1){
   }
   temp_df <- cbind(temp_df, data.frame(level=level))
   
-  ### UPDATE THIS CHUNK WITH CHILDREN AND PART_OR RELATIONS
-  if(length( onto$children[[which]]) > 0 ){
-    for(child in onto$children[[which]]){
+  relation_df <- onto$relations[[which]]
+  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
+  if(descend_through_children){
+    transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
+  }
+  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
+  
+  if(length(transitive_ids) > 0 ){
+    for(tid in transitive_ids){
       temp_df <- rbind(temp_df,
-                       get_desc_summary_table(child, onto, level=level+1))
+                       get_desc_summary_table(tid, onto, level=level+1,
+                                              transitive_relations=transitive_relations,
+                                              descend_through_children=descend_through_children,
+                                              visited_ids=visited_ids))
     }
   }
+
   return(unique(temp_df))
 }
 
