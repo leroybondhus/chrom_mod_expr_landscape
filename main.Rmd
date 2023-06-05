@@ -108,6 +108,7 @@ get_descendants_plus <- function(id, onto,
     return(onto$id[which])
   }
   descendants <- id
+  visited_ids <- c(visited_ids, transitive_ids)
   for(tid in transitive_ids){
     descendants <- unique(c(descendants,
                             get_descendants_plus(tid, onto,
@@ -330,6 +331,83 @@ get_desc_summary_table <- function(id,onto, level=1,
 
   return(unique(temp_df))
 }
+
+## 
+add_inverse_relation <- function(onto, relation, inverse_relation_name=NA){
+  if(is.na(inverse_relation_name)){
+    inverse_relation_name=paste0("INVERSE(",relation,")")
+  }
+  for(i in 1:length(onto$id)){
+    complement_ids <- onto$relations[[i]]$id[which(onto$relations[[i]]$relation == relation)]
+    if(length(complement_ids)==0){next}
+    for(ci in complement_ids){
+      which <- which(onto$id==ci)
+      onto$relations[[which]] <- rbind(onto$relations[[which]],
+                                       data.frame(relation=inverse_relation_name, id=onto$id[i]))
+    }
+  }
+  return(onto)
+}
+
+
+
+add_descendants <- function(onto, descendant_relations=c(), descend_through_children=TRUE){
+  
+  onto$descendants <- vector("list",length=length(onto$id))
+  
+  add_descendants_helper <- function(id, onto, descendant_relations, descend_through_children,visited_ids=c()){
+    which <- which(onto$id==id)
+    if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+    if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+    visited_ids <- c(visited_ids, id)
+    
+    relation_df <- onto$relations[[which]]
+    all_transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
+    if(descend_through_children){
+      all_transitive_ids <- unique(c(all_transitive_ids,onto$children[[which]]))
+    }
+    if(length(all_transitive_ids) > 0){
+      onto$descendants[[which]] <- unique(c(onto$descendants[[which]],all_transitive_ids))
+    }
+    transitive_ids <- all_transitive_ids[!is.element(all_transitive_ids, visited_ids)]
+    
+    if(length(transitive_ids) == 0){
+      if(length(onto$descendants[[which]]==0)){
+        onto$descendants[[which]] <- NA 
+      }
+      return(onto)
+    }
+    
+    transitive_ids_unassigned <- onto$id[which( sapply(onto$descendants,length) == 0 & is.element(onto$id, transitive_ids))] 
+    for(tid in transitive_ids_unassigned){
+     # print(tid)
+      visited_ids <- c(visited_ids, tid)
+      onto <- add_descendants_helper(tid, onto, descendant_relations, descend_through_children, visited_ids)
+    }
+    for(tid in all_transitive_ids){
+      onto$descendants[[which]] <- unique(c(onto$descendants[[which]],
+                                            onto$descendants[[which(onto$id == tid)]]))
+    }
+    
+    #onto$descendants[[which]] <-
+    return(onto)
+  }
+  
+  
+   
+  #t1 <- Sys.time()
+  for(i in 1:length(onto$id)){
+    #t2 <- Sys.time()
+  #  print(paste(i,":",signif(t2-t1,2), units(t2-t1)))
+    #t1 <- Sys.time()
+    if(length(onto$descendants[[i]]) > 0){next}
+    onto <- add_descendants_helper(onto$id[i], onto,
+                              descendant_relations=descendant_relations,
+                              descend_through_children=descend_through_children )
+  }
+  return(onto)
+}
+
 ```
 
 ```{r, organize ontologies}
@@ -510,6 +588,8 @@ while(TRUE){
 }
 close(con)
 ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
+ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
+                                         inverse_relation_name = "has_part(SUPP_INVERSE)")
 ##### need to add inversion of "part_of" relationship to uberon - else undercounting heart
 
 ```
@@ -1128,9 +1208,21 @@ temp_res_df <- data.frame(p.value=numeric(length(ontos$uberon$ont$id)),
                           num_chrom_associated=numeric(length(ontos$uberon$ont$id)),
                           num_non_chrom_associated=numeric(length(ontos$uberon$ont$id)))
 
+ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part","has_part(SUPP_INVERSE)"))
+
+# t1 <- Sys.time()
 for(i in 1:length(ontos$uberon$ont$id)){
-  if(i %% 1000 == 1){print(i)}
-  ubs <- get_descendants(ontos$uberon$ont$id[i], ontos$uberon$ont)
+  # t2 <- Sys.time()
+  # print(paste(i,":",signif(t2-t1,2), units(t2-t1)))
+  # t1 <- t2
+  if(i %% 500 == 1){print(i)}
+  
+  ### this is slow for all uberon terms ~~ 1+ hrs guessing ... parallelize ? or speed up function
+  ### probably add a add_descendants function to add a descendants element - will blow up size of ontology but speed of access probs more important +
+  ### should be able to make dynamically to further speed up....
+  #ubs <- get_descendants_plus(ontos$uberon$ont$id[i], ontos$uberon$ont,
+   #                           descendant_relations = c("has_part","has_part(SUPP_INVERSE)"))
+  ubs <- ontos$uberon$ont$descendants[[i]]
   
   which <- which(is.element(temp_chrom$UBERON_ID, ubs))
   temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
@@ -1181,13 +1273,14 @@ temp_not_chrom <- temp_not_chrom[complete.cases(temp_not_chrom),]
 onto <- ontos$uberon$ont
 
 onto <- add_height(onto, descendant_relations = c("is_a","part_of"))
+### replace depth with add_depth function..... oi__io
 onto$depth <- numeric(length=length(onto$id))
 ## NEED TO GENERALIZE GET HEIGHT AND GET DEPTH TO ACCOMODATE IS_A AND HAS_PART RELATIONS
 
 for(i in 1:length(onto$id)){
   if(i %% 500 == 0){print(i)}
   #onto$height[i] <- get_height_plus(onto$id[i],onto, descendant_relations = c("is_a","part_of"))
-  onto$depth[i] <- get_depth_plus(onto$id[i],onto, ascendant_relations = c("has_part"))
+  onto$depth[i] <- get_depth_plus(onto$id[i],onto, ascendant_relations = c("has_part")) ## c("has_part","has_part(SUPP_INVERSE)")
 }
 
 onto$is_signif <- rep(F,length(onto$id))
@@ -1199,78 +1292,78 @@ for( layer in 1:max(onto$height)){
     if(i %% 250 == 0){print(i)}
     i <- i+1
     ubs <- get_descendants_plus(onto$id[el], onto,
-                                descendant_relations = c("is_a","has_part"))
-  
+                                descendant_relations = c("has_part", "has_part(SUPP_INVERSE)"))
+
     which <- which(is.element(temp_chrom$UBERON_ID, ubs))
     temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
     which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
     temp_not_chrom_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
-  
+
       ### Use all genes or only those with some HP association ?
     which <-  which(!is.element(temp_chrom$UBERON_ID, ubs))
     temp_chrom_not_ub <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
     which <-  which(!is.element(temp_not_chrom$UBERON_ID, ubs))
     temp_not_chrom_not_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
-    
+
     temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
                                   c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
-    
+
     is_signif <- temp_res$p.value < 0.05
     if(!is_signif){next}
-    ## get list of signif children - these form the mask set.. 
+    ## get list of signif children - these form the mask set..
     ## actually.. probs want all signif descendants? Probs don't
     ## need to deal with children of signif children, but children of
     ## insignif children may themselves have substantial signal/ be signif...
-    ## and then drive association at later ancestor level.. 
-    
+    ## and then drive association at later ancestor level..
+
     #children_subset <- which(is.element(onto$id, onto$children[[el]]))
-    
+
     # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
-    # 
+    #
     # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
-    # signif_descendants <- onto$id[which_children_signif] 
+    # signif_descendants <- onto$id[which_children_signif]
     # signif_descendants <- signif_descendants[which(!is.element(signif_descendants,onto$id[el]))] # remove _self_ from descendants
-    
+
+    ### NEED TO UPDATE get_mask_set TO WORK WITH OTHER TRANSITIVE RELATIONS
     signif_descendants <- get_mask_set(onto$id[el], onto)
-    
+
     if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
       for( child in signif_descendants){
-        ubs <- onto$id[el] ## want to retain any that are directly associated with _self_.. 
+        ubs <- onto$id[el] ## want to retain any that are directly associated with _self_..
         ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
         ## only include most specific instance and NOT also all ancestors of that instance ..
         for( other_child in signif_descendants){
           if( other_child == child){next}
-          ubs <- c(ubs, get_descendants(other_child, onto))
-        } 
-  
+          ubs <- c(ubs, onto$descendants[[which(onto$id==other_child)]])
+        }
+
         which <- which(is.element(temp_chrom$UBERON_ID, ubs))
         temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
         which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
         temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
-      
+
           ### Use all genes or only those with some HP association ?
         which <-  which(!is.element(temp_chrom$UBERON_ID, ubs))
         temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
         which <-  which(!is.element(temp_not_chrom$UBERON_ID, ubs))
         temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
-        
+
         temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
                                       c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
-        is_signif <- temp_res$p.value < 0.05 
+        is_signif <- temp_res$p.value < 0.05
         if(!is_signif){break}
       }
-      
+
     }
     onto$is_signif[el] <- is_signif
   }
 }
 save.image()
 
-temp_df <- cbind(data.frame(id=onto$id, name=onto$name, is_signif=onto$is_signif,
+temp_df <- cbind(data.frame(id=onto$id, name=onto$name,
                             height=onto$height, depth=onto$depth),
                  temp_res_df)
 rownames(temp_df) <- temp_df$id
-
 ### want to be able to get all most specific descendants... plot as a tree or hierarchy
 ### networkd3
 
@@ -1282,22 +1375,38 @@ names(onto$parents) <- onto$id
 temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
 colnames(temp_edges) <- c("from","to")
 temp_edges$edge_type <- "is_a"
+
+ascendant_relations = c("part_of")
+for(i in 1:length(onto$id)){
+  if(i %% 2e3 == 1){print(i)}
+  rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendant_relations))]
+  rs <- onto$relations[[i]]$relation[which(is.element(onto$relations[[i]]$relation, ascendant_relations))]
+  if(length(rids)==0){next}
+  temp_edges <- rbind(temp_edges, 
+                        data.frame(from=onto$id[i],to=rids,edge_type=rs))
+}
+temp_edges <- unique(temp_edges)
 temp_vertices <- onto$id
 
 ## select subset of hpo ids to plot
-ids <- get_descendants(onto$id[which(onto$name=="heart morphology")] , onto)
-ids <- get_descendants(onto$id[which(onto$name=="dermis")] , onto)
+ids <- onto$descendants[[which(onto$name=="heart")]]
+ids <- unique(c(onto$children[[which(onto$name=="cardiac chamber")]],
+                onto$children[[which(onto$name=="cardiac septum")]],
+                onto$children[[which(onto$name=="cardiac valve")]]))
+
+ids <- onto$descendants[[which(onto$name=="skin epidermis")]]
+ids <- ids[which(!is.na(ids))]
 which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
-temp_edges_subset <- temp_edges[which,]
+temp_edges_subset <- unique(temp_edges[which,c("from","to")])
 temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
                             signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
                             or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
                             depth=temp_df$depth[match(ids,temp_df$id)])
 temp_vertices$label <- NA
-which <- which(temp_vertices$depth <= 6 )
+which <- which(temp_vertices$depth <= 9 )
 temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
 
-temp_graph <- graph_from_data_frame(temp_edges_subset[,c("from","to")], vertices=temp_vertices)
+temp_graph <- graph_from_data_frame(temp_edges_subset, vertices=temp_vertices)
 ggraph(temp_graph, layout = "circlepack",weight=size)+
   geom_node_circle(aes(fill=signif_val))+
   geom_node_label(aes(label=label,fill=signif_val), size=2)+#, position = position_dodge())+
