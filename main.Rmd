@@ -284,6 +284,52 @@ get_mask_set <- function(id, onto){ #}, mask_self=T){
   }
   return(unique(mask_set))
 }
+
+### need to modify to enable extracting PART_OF relations here...... O_o
+### get table of onto term and all descendants
+get_desc_summary_table <- function(id,onto, level=1,
+                                   transitive_relations=c("has_part"),
+                                   descend_through_children=TRUE,
+                                   visited_ids=c()){
+  which <- which(onto$id==id) 
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  visited_ids <- c(visited_ids,id)
+  
+  temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
+                                  dimnames = list(NULL, names(onto))))
+  for(el in names(onto)){
+    if(is.data.frame(onto[[el]][[which]])){
+      temp_df[el] <- paste0(apply(onto[[el]][[which]],1, paste0, collapse=","),collapse=";")
+    } else if( is.list(onto[[el]][[which]] )){
+      if(length(onto[[el]][[which]]) > 0){
+       temp_df[el] <- sapply(onto[[el]][[which]], paste, collapse=",")
+      } else { temp_df[el] <- NA }
+    } else{
+      temp_df[el] <- paste0(onto[[el]][[which]],collapse=",")
+    } 
+  }
+  temp_df <- cbind(temp_df, data.frame(level=level))
+  
+  relation_df <- onto$relations[[which]]
+  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
+  if(descend_through_children){
+    transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
+  }
+  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
+  
+  if(length(transitive_ids) > 0 ){
+    for(tid in transitive_ids){
+      temp_df <- rbind(temp_df,
+                       get_desc_summary_table(tid, onto, level=level+1,
+                                              transitive_relations=transitive_relations,
+                                              descend_through_children=descend_through_children,
+                                              visited_ids=visited_ids))
+    }
+  }
+
+  return(unique(temp_df))
+}
 ```
 
 ```{r, organize ontologies}
@@ -372,6 +418,7 @@ ontos$hpo$ont <- list(
 #  namespace = character(length = num_terms ),
   parents = vector("list", num_terms),
   children = vector("list", num_terms),
+  relations = vector("list", num_terms),
   is_obsolete = rep(FALSE, num_terms)
 )
 
@@ -395,7 +442,13 @@ while(TRUE){
 }
 close(con)
 ontos$hpo$ont <- add_children_from_parents(ontos$hpo$ont)
-
+ontos$hpo$ont$height <- numeric(length=length(ontos$hpo$ont$id))
+ontos$hpo$ont$depth <- numeric(length=length(ontos$hpo$ont$id))
+for(i in 1:length(ontos$hpo$ont$id)){
+  if(i %% 500 == 0){print(i)}
+  ontos$hpo$ont$height[i] <- get_height(ontos$hpo$ont$id[i],ontos$hpo$ont)
+  ontos$hpo$ont$depth[i] <- get_depth(ontos$hpo$ont$id[i],ontos$hpo$ont)
+}
 
 ## set up uberon ontology ###
 ontos$uberon <- list()
@@ -457,7 +510,7 @@ while(TRUE){
 }
 close(con)
 ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
-
+##### need to add inversion of "part_of" relationship to uberon - else undercounting heart
 
 ```
 
@@ -563,10 +616,29 @@ colnames(temp) <- c("UBERON_ID","HPO_ID")
 temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
 temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
 onto_maps$HPO_UBERON$map <- temp[,c("HPO_ID","UBERON_ID")]
+onto_maps$HPO_UBERON$map <- onto_maps$HPO_UBERON$map[is.element(onto_maps$HPO_UBERON$map$HPO_ID, ontos$hpo$ont$id),]
+## 
+### fill in missing uberon terms from map - find deepest HPO term with some UBERON mapped to it
+for(i in 1:nrow(onto_maps$HPO_UBERON$map)){
+  if(i %% 1e3 == 0){print(i)}
+  if(!is.na(onto_maps$HPO_UBERON$map$UBERON_ID[i])){next}
+  ancestors  <- get_ancestors(onto_maps$HPO_UBERON$map$HPO_ID[i], ontos$hpo$ont)
+  which <- which(is.element(ontos$hpo$ont$id,ancestors))
+  temp_df <- data.frame(id = ontos$hpo$ont$id[which],
+                        name=ontos$hpo$ont$name[which],
+                        height=ontos$hpo$ont$height[which],
+                        depth=ontos$hpo$ont$depth[which])
+  temp_df$UBERON <- onto_maps$HPO_UBERON$map$UBERON_ID[match(temp_df$id, onto_maps$HPO_UBERON$map$HPO_ID)]
+  temp_df <- temp_df[complete.cases(temp_df),]
+  if(nrow(temp_df)==0){next}
+  onto_maps$HPO_UBERON$map$UBERON_ID[i] <- temp_df$UBERON[which.max(temp_df$depth)[1]] 
+}
 
 
 onto_maps$HPO_UBERON_GENE <- list()
 onto_maps$HPO_UBERON_GENE$map <- merge(onto_maps$HPO_OMIM_GENE$map, onto_maps$HPO_UBERON$map)
+
+
 
 ```
 
@@ -1035,7 +1107,7 @@ c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```{r, experimental ontology layered analysis, uberon}
 
 
-## for each HPO, test enrichment of chrom modifiers in set
+## for each UBERON, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
 
 
@@ -1049,27 +1121,27 @@ temp_not_chrom <- onto_maps$HPO_UBERON_GENE$map[-which,]
 temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
 temp_chrom <- temp_chrom[complete.cases(temp_chrom),]
 temp_not_chrom <- temp_not_chrom[complete.cases(temp_not_chrom),]
-temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
-                          odds_ratio=numeric(length(ontos$hpo$ont$id)),
-                          odds_ratio_lb=numeric(length(ontos$hpo$ont$id)),
-                          odds_ratio_ub=numeric(length(ontos$hpo$ont$id)),
-                          num_chrom_associated=numeric(length(ontos$hpo$ont$id)),
-                          num_non_chrom_associated=numeric(length(ontos$hpo$ont$id)))
+temp_res_df <- data.frame(p.value=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio_lb=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio_ub=numeric(length(ontos$uberon$ont$id)),
+                          num_chrom_associated=numeric(length(ontos$uberon$ont$id)),
+                          num_non_chrom_associated=numeric(length(ontos$uberon$ont$id)))
 
-for(i in 1:length(ontos$hpo$ont$id)){
+for(i in 1:length(ontos$uberon$ont$id)){
   if(i %% 1000 == 1){print(i)}
-  hps <- get_descendants(ontos$hpo$ont$id[i], ontos$hpo$ont)
+  ubs <- get_descendants(ontos$uberon$ont$id[i], ontos$uberon$ont)
   
-  which <- which(is.element(temp_chrom$HPO_ID, hps))
-  temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
-  which <- which(is.element(temp_not_chrom$HPO_ID, hps))
-  temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_chrom$UBERON_ID, ubs))
+  temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
+  temp_not_chrom_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
 
     ### Use all genes or only those with some HP association ?
-  which <-  which(!is.element(temp_chrom$HPO_ID, hps))
-  temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
-  which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
-  temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_chrom$UBERON_ID, hps))
+  temp_chrom_not_ub <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_not_chrom$UBERON_ID, hps))
+  temp_not_chrom_not_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
   
   ## chrom and hp
   
@@ -1077,16 +1149,16 @@ for(i in 1:length(ontos$hpo$ont$id)){
   ## not chrom and hp
   ## not chrom and not hp
   
-  temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
-                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+  temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
+                                  c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
   
   ## Odds Ratio
   temp_res_df$p.value[i] <- temp_res$p.value
   temp_res_df$odds_ratio[i] <- temp_res$estimate
   temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
   temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
-  temp_res_df$num_chrom_associated[i] <- temp_chrom_hp
-  temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_hp 
+  temp_res_df$num_chrom_associated[i] <- temp_chrom_ub
+  temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_ub 
 }
 save.image()
 
@@ -1617,51 +1689,7 @@ for(i in 1:nrow(temp_ds)){
 #   }
 # }
 
-### need to modify to enable extracting PART_OF relations here...... O_o
-### get table of onto term and all descendants
-get_desc_summary_table <- function(id,onto, level=1,
-                                   transitive_relations=c("has_part"),
-                                   descend_through_children=TRUE,
-                                   visited_ids=c()){
-  which <- which(onto$id==id) 
-  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
-  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-  visited_ids <- c(visited_ids,id)
-  
-  temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
-                                  dimnames = list(NULL, names(onto))))
-  for(el in names(onto)){
-    if(is.data.frame(onto[[el]][[which]])){
-      temp_df[el] <- paste0(apply(onto[[el]][[which]],1, paste0, collapse=","),collapse=";")
-    } else if( is.list(onto[[el]][[which]] )){
-      if(length(onto[[el]][[which]]) > 0){
-       temp_df[el] <- sapply(onto[[el]][[which]], paste, collapse=",")
-      } else { temp_df[el] <- NA }
-    } else{
-      temp_df[el] <- paste0(onto[[el]][[which]],collapse=",")
-    } 
-  }
-  temp_df <- cbind(temp_df, data.frame(level=level))
-  
-  relation_df <- onto$relations[[which]]
-  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
-  if(descend_through_children){
-    transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
-  }
-  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-  
-  if(length(transitive_ids) > 0 ){
-    for(tid in transitive_ids){
-      temp_df <- rbind(temp_df,
-                       get_desc_summary_table(tid, onto, level=level+1,
-                                              transitive_relations=transitive_relations,
-                                              descend_through_children=descend_through_children,
-                                              visited_ids=visited_ids))
-    }
-  }
 
-  return(unique(temp_df))
-}
 
 muscle_df <- get_desc_summary_table("UBERON:0004120", temp_onto)
 muscle_df$num_datasets <- sapply(str_split(muscle_df$data_cols,","), function(x){ifelse(all(x==""),0,length(x)) })
