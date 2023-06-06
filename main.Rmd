@@ -592,6 +592,10 @@ ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
                                          inverse_relation_name = "has_part(SUPP_INVERSE)")
 ##### need to add inversion of "part_of" relationship to uberon - else undercounting heart
 
+### NOTE: UBERON IMPROPER ANNOTATIONS: 
+##### remove: UBERON:0005984 has_part UBERON:0001021: subendocardium layer has_part nerve
+##### remove: UBERON:0003983 has_part UBERON:0007181:  conus arteriosus has_part serosa of infundibulum of uterine tube
+##### remove: UBERON:0003983 has_part UBERON:0007182:  conus arteriosus has_part muscle layer of infundibulum of uterine tube
 ```
 
 
