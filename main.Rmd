@@ -317,18 +317,30 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
   }
   
   
-  for(i in 1:10){ #length(onto$id)){
-    print(i)
-    #if(i%%100==1){print(i)}
+  for(i in 1:length(onto$id)){
+    #print(i)
+    if(i%%1000==1){print(i)}
     if(onto$depth[i] > 0){next}
     onto <- add_depth_helper(onto$id[i], onto,
                               ascendant_relations=ascendant_relations,
                               ascend_through_parents=ascend_through_parents)
   }
+  
+  inf_check_num = 1
+  while(length(which(is.infinite(onto$depth))) > 0){
+    print(paste("fixing prelim inf depth assignments: iteration", inf_check_num))
+    inf_ids <- onto$id[which(is.infinite(onto$depth))]
+    for(inf_id in inf_ids){
+      onto <- add_depth_helper(inf_id, onto,
+                               ascendant_relations=ascendant_relations,
+                               ascend_through_parents=ascend_through_parents)
+    }
+  }
+  
   return(onto)
 }
 
-#onto <- add_depth(onto, ascendant_relations = c("has_part(SUPP_INVERSE)"))
+onto <- add_depth(onto, ascendant_relations = c("has_part(SUPP_INVERSE)"))
 
 get_mask_set <- function(id, onto){ #}, mask_self=T){
   which <- which(onto$id==id)
