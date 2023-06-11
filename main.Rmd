@@ -40,7 +40,7 @@ if(!file.exists(files$OMIM_GENE)){
   }
   download.file(OMIM_genemap2_URL, files$OMIM_GENE)
 }
-     
+rm(OMIM_genemap2_URL)     
 ```
 
 ```{r load libraries}
@@ -75,49 +75,49 @@ add_children_from_parents <- function(onto){
   return(onto)
 }
 
-get_descendants <- function(id, onto){
-  which <- which(onto$id==id)
-  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-  if(length(onto$children[[which]]) == 0){
-    return(onto$id[which])
-  }
-  descendants <- id
-  for(child in onto$children[[which]]){
-    descendants <- unique(c(descendants, get_descendants(child, onto)))
-  }
-  return(descendants)
-}
+# get_descendants <- function(id, onto){
+#   which <- which(onto$id==id)
+#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+#   if(length(onto$children[[which]]) == 0){
+#     return(onto$id[which])
+#   }
+#   descendants <- id
+#   for(child in onto$children[[which]]){
+#     descendants <- unique(c(descendants, get_descendants(child, onto)))
+#   }
+#   return(descendants)
+# }
 
-get_descendants_plus <- function(id, onto,
-                                 descendant_relations=c(),
-                                 descend_through_children=TRUE,
-                                 visited_ids=c()){
-  which <- which(onto$id==id)
-  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-  visited_ids <- c(visited_ids, id)
-  
-  relation_df <- onto$relations[[which]]
-  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
-  if(descend_through_children){
-   transitive_ids <- unique(c(transitive_ids, onto$children[[which]])) 
-  }
-  transitive_ids <- transitive_ids[!is.element(transitive_ids,visited_ids)]
-  if(length(transitive_ids) == 0){
-    return(onto$id[which])
-  }
-  descendants <- id
-  visited_ids <- c(visited_ids, transitive_ids)
-  for(tid in transitive_ids){
-    descendants <- unique(c(descendants,
-                            get_descendants_plus(tid, onto,
-                                                 descendant_relations = descendant_relations,
-                                                 descend_through_children = descend_through_children,
-                                                 visited_ids = visited_ids)))
-  }
-  return(descendants)
-}
+# get_descendants_plus <- function(id, onto,
+#                                  descendant_relations=c(),
+#                                  descend_through_children=TRUE,
+#                                  visited_ids=c()){
+#   which <- which(onto$id==id)
+#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
+#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
+#   visited_ids <- c(visited_ids, id)
+#   
+#   relation_df <- onto$relations[[which]]
+#   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
+#   if(descend_through_children){
+#    transitive_ids <- unique(c(transitive_ids, onto$children[[which]])) 
+#   }
+#   transitive_ids <- transitive_ids[!is.element(transitive_ids,visited_ids)]
+#   if(length(transitive_ids) == 0){
+#     return(onto$id[which])
+#   }
+#   descendants <- id
+#   visited_ids <- c(visited_ids, transitive_ids)
+#   for(tid in transitive_ids){
+#     descendants <- unique(c(descendants,
+#                             get_descendants_plus(tid, onto,
+#                                                  descendant_relations = descendant_relations,
+#                                                  descend_through_children = descend_through_children,
+#                                                  visited_ids = visited_ids)))
+#   }
+#   return(descendants)
+# }
 
 get_ancestors <- function(id, onto){
   which <- which(onto$id==id)
@@ -133,160 +133,82 @@ get_ancestors <- function(id, onto){
   return(ancestors)
 }
 
-get_height <- function(id, onto){
-  which <- which(onto$id==id)
-  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-  if(length(onto$children[[which]]) == 0){
-    return(1)
-  }
-  max_child_height <- 0
-  for(child in onto$children[[which]]){
-    max_child_height <- max(max_child_height, get_height(child, onto))
-  }
-  return(max_child_height+1)
-}
 
-## may need dynamic programming speed up here... 
-# get_height_plus <- function(id, onto,
-#                             descendant_relations=c(),
-#                             descend_through_children=TRUE,
-#                             visited_ids=c()){
-#   which <- which(onto$id==id)
-#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-#   visited_ids <- c(visited_ids,id)
-#   
-#   relation_df <- onto$relations[[which]]
-#   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
-#   if(descend_through_children){
-#     transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
-#   }
-#   transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-#   
-#   if(length(transitive_ids) == 0){
-#     return(1)
-#   }
-#   
-#   max_child_height <- 0
-#   for(tid in transitive_ids){
-#     print(tid)
-#     visited_ids=c(visited_ids,tid)
-#     max_child_height <- max(max_child_height,
-#                             get_height_plus(tid, onto,
-#                                             descendant_relations=descendant_relations,
-#                                             descend_through_children=descend_through_children,
-#                                             visited_ids=visited_ids))
-#     visited_ids=c(visited_ids,tid)
-#   }
-#   return(max_child_height+1)
-# }
-
-add_height <- function(onto, descendant_relations=c(), descend_through_children=TRUE){
-  
+add_height <- function(onto, descendant_relations=c(), descend_through_children=TRUE, min_or_max=function(x){max(x)}){
   onto$height <- numeric(length=length(onto$id))
   
-  add_height_helper <- function(id, onto, descendant_relations, descend_through_children,visited_ids=c()){
+  add_height_helper <- function(id, onto, descendant_relations, descend_through_children, visited_ids=c()){
     which <- which(onto$id==id)
     if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
     if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-    visited_ids <- c(visited_ids, id)
-    
     relation_df <- onto$relations[[which]]
     transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
     if(descend_through_children){
       transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
     }
-    transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-    
     if(length(transitive_ids) == 0){ 
       onto$height[which] <- 1
       return(onto)
     }
-    
-    transitive_ids_unassigned <- onto$id[which(onto$height == 0 & is.element(onto$id, transitive_ids))] 
-    for(tid in transitive_ids_unassigned){
-      visited_ids <- c(visited_ids, tid)
-      onto <- add_height_helper(tid, onto, descendant_relations, descend_through_children, visited_ids)
+    transitive_and_visited_ids <- transitive_ids[which(is.element(transitive_ids, visited_ids))]
+    for(tid in transitive_and_visited_ids){
+      if(onto$height[which(onto$id==tid)]==0){
+        onto$height[which(onto$id==tid)] <- -min_or_max(c(-Inf,Inf))
+      }
     }
-    onto$height[which] <- max(onto$height[which(is.element(onto$id, transitive_ids))])+1
+    transitive_ids_unassigned <- onto$id[which(onto$height == 0 & is.element(onto$id, transitive_ids))]
+    while(length(transitive_ids_unassigned) > 0 ){
+      tid <- transitive_ids_unassigned[1]
+      onto <- add_height_helper(tid, onto, descendant_relations, descend_through_children,
+                                visited_ids = c(visited_ids,id,tid))
+      transitive_ids_unassigned <- onto$id[which(onto$height == 0 & is.element(onto$id, transitive_ids))]
+    }
+    
+    onto$height[which] <- min_or_max(onto$height[which(is.element(onto$id, transitive_ids))])+1
     return(onto)
   }
-  
-  
   for(i in 1:length(onto$id)){
     #print(i)
-    if(onto$height[i] > 0){next}
+    if(i %% 1000 == 1){print(i)}
+    if(onto$height[i] != 0){next}
     onto <- add_height_helper(onto$id[i], onto,
                               descendant_relations=descendant_relations,
                               descend_through_children=descend_through_children )
   }
+  inf_check_num = 1
+  while(length(which(is.infinite(onto$height))) > 0){
+    print(paste("fixing prelim inf height assignments: iteration", inf_check_num))
+    inf_check_num <- inf_check_num+1
+    inf_ids <- onto$id[which(is.infinite(onto$height))]
+    print(paste("num inf: ", length(inf_ids)))
+    for(inf_id in inf_ids){
+      onto <- add_height_helper(inf_id, onto,
+                               descendant_relations=descendant_relations,
+                               descend_through_children=descend_through_children)
+    }
+    if(inf_check_num > 10){stop("stopping: possible infinite loop - check logic in ontology and that from descendant_relations used")}
+  }
   return(onto)
 }
+onto <- ontos$hpo$ont
+onto <- add_height(onto)
 
-get_depth <- function(id, onto){
-  which <- which(onto$id==id)
-  if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-  if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-  if(length(onto$parents[[which]]) == 0){
-    return(1)
-  }
-  max_parent_depth <- 0
-  for(parent in onto$parents[[which]]){
-    max_parent_depth <- max(max_parent_depth, get_depth(parent, onto))
-  }
-  return(max_parent_depth+1)
-}
-
-## may need dynamic programming speed up here... 
-# get_depth_plus <- function(id, onto,
-#                       ascendant_relations=c(),
-#                       ascend_through_parents=TRUE,
-#                       visited_ids=c()){
-#   which <- which(onto$id==id)
-#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-#   visited_ids <- c(visited_ids,id)
-#   if(length(onto$parents[[which]]) == 0){
-#     return(1)
-#   }
-#   relation_df <- onto$relations[[which]]
-#   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, ascendant_relations))]
-#   if(ascend_through_parents){
-#     transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
-#   }
-#   transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-#   
-#   max_parent_depth <- 0
-#   for(tid in transitive_ids){
-#     max_parent_depth <- max(max_parent_depth,
-#                             get_depth_plus(tid, onto,
-#                                            ascendant_relations=ascendant_relations,
-#                                            ascend_through_parents=ascend_through_parents,
-#                                            visited_ids=visited_ids))
-#   }
-#   return(max_parent_depth+1)
-# }
 
 add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE, min_or_max=function(x){min(x)} ){
   onto$depth <- numeric(length=length(onto$id))
-  
   add_depth_helper <- function(id, onto, ascendant_relations, ascend_through_parents, visited_ids=c()){
     which <- which(onto$id==id)
     if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
     if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-    
     relation_df <- onto$relations[[which]]
     transitive_ids <- relation_df$id[which(is.element(relation_df$relation, ascendant_relations))]
     if(ascend_through_parents){
       transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
     }
-    
-    if(length(transitive_ids) == 0){ 
+    if(length(transitive_ids) == 0){
       onto$depth[which] <- 1
       return(onto)
     }
-
     ## flips sign so that all infinite loops always lose eventual comparison
     transitive_and_visited_ids <- transitive_ids[which(is.element(transitive_ids, visited_ids))]
     for(tid in transitive_and_visited_ids){
@@ -294,41 +216,27 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
         onto$depth[which(onto$id==tid)] <- -min_or_max(c(-Inf,Inf))
       }
     }
-        
     transitive_ids_unassigned <- onto$id[which(onto$depth == 0 & is.element(onto$id, transitive_ids))]
-    ## below line should no longer be needed since all visited ids should now be filtered out by "onto$depth == 0" in above line 
-    #transitive_ids_unassigned <- transitive_ids_unassigned[!is.element(transitive_ids_unassigned, visited_ids)]
-    
-    
     while(length(transitive_ids_unassigned) > 0 ){
       tid  <- transitive_ids_unassigned[1]
       onto <- add_depth_helper(tid, onto, ascendant_relations, ascend_through_parents,
                                visited_ids=c(visited_ids, id, tid))
       transitive_ids_unassigned <- onto$id[which(onto$depth == 0 & is.element(onto$id, transitive_ids))]
-      transitive_ids_unassigned <- transitive_ids_unassigned[!is.element(transitive_ids_unassigned, visited_ids)]
     }
-    ### issue that may still be some ids unassigned but that were "visited" earlier (i.e. gray nodes)
-    ### can ignore these for assignment since they should always lose or technically be infinite 
-    
     onto$depth[which] <- min_or_max(onto$depth[which(is.element(onto$id, transitive_ids) )])+1 # & onto$depth >0)])+1
-    
-    
     return(onto)
   }
-  
-  
   for(i in 1:length(onto$id)){
-    #print(i)
     if(i%%1000==1){print(i)}
-    if(onto$depth[i] > 0){next}
+    if(onto$depth[i] != 0 & !is.infinite(onto$depth[i])){next}
     onto <- add_depth_helper(onto$id[i], onto,
                               ascendant_relations=ascendant_relations,
                               ascend_through_parents=ascend_through_parents)
   }
-  
   inf_check_num = 1
   while(length(which(is.infinite(onto$depth))) > 0){
-    print(paste("fixing prelim inf depth assignments: iteration", inf_check_num))
+    print(paste("fixing prelim inf depth assignments: iteration", inf_check_num, ": num inf:",length(which(is.infinite(onto$depth)))))
+    inf_check_num <- inf_check_num+1
     inf_ids <- onto$id[which(is.infinite(onto$depth))]
     for(inf_id in inf_ids){
       onto <- add_depth_helper(inf_id, onto,
@@ -336,11 +244,12 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
                                ascend_through_parents=ascend_through_parents)
     }
   }
-  
   return(onto)
 }
 
-onto <- add_depth(onto, ascendant_relations = c("has_part(SUPP_INVERSE)"))
+
+onto <- ontos$uberon$ont 
+ontos$uberon$ont <- add_depth(onto, ascendant_relations = c("part_of"))
 
 get_mask_set <- function(id, onto){ #}, mask_self=T){
   which <- which(onto$id==id)
@@ -370,8 +279,7 @@ get_desc_summary_table <- function(id,onto, level=1,
   which <- which(onto$id==id) 
   if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
   if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-  visited_ids <- c(visited_ids,id)
-  
+
   temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
                                   dimnames = list(NULL, names(onto))))
   for(el in names(onto)){
@@ -386,28 +294,26 @@ get_desc_summary_table <- function(id,onto, level=1,
     } 
   }
   temp_df <- cbind(temp_df, data.frame(level=level))
-  
+
   relation_df <- onto$relations[[which]]
   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
   if(descend_through_children){
     transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
   }
   transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-  
   if(length(transitive_ids) > 0 ){
     for(tid in transitive_ids){
       temp_df <- rbind(temp_df,
                        get_desc_summary_table(tid, onto, level=level+1,
                                               transitive_relations=transitive_relations,
                                               descend_through_children=descend_through_children,
-                                              visited_ids=visited_ids))
+                                              visited_ids=c(visited_ids,tid,id)))
     }
   }
-
   return(unique(temp_df))
 }
 
-## 
+
 add_inverse_relation <- function(onto, relation, inverse_relation_name=NA){
   if(is.na(inverse_relation_name)){
     inverse_relation_name=paste0("INVERSE(",relation,")")
@@ -427,15 +333,12 @@ add_inverse_relation <- function(onto, relation, inverse_relation_name=NA){
 
 
 add_descendants <- function(onto, descendant_relations=c(), descend_through_children=TRUE){
-  
   onto$descendants <- vector("list",length=length(onto$id))
-  
   add_descendants_helper <- function(id, onto, descendant_relations, descend_through_children,visited_ids=c()){
     which <- which(onto$id==id)
     if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
     if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
     visited_ids <- c(visited_ids, id)
-    
     relation_df <- onto$relations[[which]]
     all_transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
     if(descend_through_children){
@@ -445,15 +348,13 @@ add_descendants <- function(onto, descendant_relations=c(), descend_through_chil
       onto$descendants[[which]] <- unique(c(onto$descendants[[which]],all_transitive_ids))
     }
     transitive_ids <- all_transitive_ids[!is.element(all_transitive_ids, visited_ids)]
-    
     if(length(transitive_ids) == 0){
       if(length(onto$descendants[[which]]==0)){
         onto$descendants[[which]] <- NA 
       }
       return(onto)
     }
-    
-    transitive_ids_unassigned <- onto$id[which( sapply(onto$descendants,length) == 0 & is.element(onto$id, transitive_ids))] 
+    transitive_ids_unassigned <- onto$id[which( sapply(onto$descendants,length) == 0 & is.element(onto$id, transitive_ids))]
     for(tid in transitive_ids_unassigned){
      # print(tid)
       visited_ids <- c(visited_ids, tid)
@@ -463,18 +364,11 @@ add_descendants <- function(onto, descendant_relations=c(), descend_through_chil
       onto$descendants[[which]] <- unique(c(onto$descendants[[which]],
                                             onto$descendants[[which(onto$id == tid)]]))
     }
-    
-    #onto$descendants[[which]] <-
     return(onto)
   }
   
-  
-   
-  #t1 <- Sys.time()
   for(i in 1:length(onto$id)){
-    #t2 <- Sys.time()
-  #  print(paste(i,":",signif(t2-t1,2), units(t2-t1)))
-    #t1 <- Sys.time()
+    if(i %% 1000 == 0){print(i)}
     if(length(onto$descendants[[i]]) > 0){next}
     onto <- add_descendants_helper(onto$id[i], onto,
                               descendant_relations=descendant_relations,
@@ -504,7 +398,7 @@ while(TRUE){
   if(length(line)==0){break}
   num_terms <- num_terms + grepl("^\\[Term\\]$",line)
 }
-close(con)
+close(con);rm(con,line)
 
 ontos$go$ont <- list(
   id=character(length = num_terms ),
@@ -512,6 +406,7 @@ ontos$go$ont <- list(
   namespace = character(length = num_terms ),
   parents = vector("list", num_terms),
   children = vector("list", num_terms),
+  relations = vector("list", num_terms),
   is_obsolete = rep(FALSE, num_terms)
 )
 
@@ -535,12 +430,12 @@ while(TRUE){
     ontos$go$ont$is_obsolete[term_num] <- TRUE 
   }
 }
-close(con)
+close(con);rm(con,term_num,num_terms,line)
 
 ### replace is_a with parents
 ### add children attribute to each term for ease of navigation up and down ontology
 ontos$go$ont <- add_children_from_parents(ontos$go$ont)
-
+ontos$go$ont <- add_descendants(ontos$go$ont)
 ##### done: read in and set up ontology ####
 
 
@@ -563,12 +458,11 @@ while(TRUE){
   if(length(line)==0){break}
   num_terms <- num_terms + grepl("^\\[Term\\]$",line)
 }
-close(con)
+close(con);rm(con,line)
 
 ontos$hpo$ont <- list(
   id=character(length = num_terms ),
   name=character(length = num_terms ),
-#  namespace = character(length = num_terms ),
   parents = vector("list", num_terms),
   children = vector("list", num_terms),
   relations = vector("list", num_terms),
@@ -593,15 +487,11 @@ while(TRUE){
     ontos$hpo$ont$is_obsolete[term_num] <- TRUE 
   }
 }
-close(con)
+close(con);rm(con,term_num,num_terms)
 ontos$hpo$ont <- add_children_from_parents(ontos$hpo$ont)
-ontos$hpo$ont$height <- numeric(length=length(ontos$hpo$ont$id))
-ontos$hpo$ont$depth <- numeric(length=length(ontos$hpo$ont$id))
-for(i in 1:length(ontos$hpo$ont$id)){
-  if(i %% 500 == 0){print(i)}
-  ontos$hpo$ont$height[i] <- get_height(ontos$hpo$ont$id[i],ontos$hpo$ont)
-  ontos$hpo$ont$depth[i] <- get_depth(ontos$hpo$ont$id[i],ontos$hpo$ont)
-}
+ontos$hpo$ont <- add_depth(ontos$hpo$ont)
+ontos$hpo$ont <- add_height(ontos$hpo$ont)
+ontos$hpo$ont <- add_descendants(ontos$hpo$ont)
 
 ## set up uberon ontology ###
 ontos$uberon <- list()
@@ -610,7 +500,6 @@ ontos$uberon$URL <- "https://github.com/obophenotype/uberon/releases/download/v2
 files$uberon_obo <- paste0(dirs$temp_data,"uberon-full.obo")
 download.file(ontos$uberon$URL,files$uberon_obo)
 
-
 con <- file(files$uberon_obo,open="r")
 num_terms <- 0
 while(TRUE){
@@ -618,7 +507,7 @@ while(TRUE){
   if(length(line)==0){break}
   num_terms <- num_terms + grepl("^id:.*UBERON:",line)
 }
-close(con)
+close(con);rm(con,line)
 
 ontos$uberon$ont <- list(
   id=character(length = num_terms ),
@@ -653,6 +542,9 @@ while(TRUE){
     temp_relation  <- str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")
     temp_df <- data.frame(relation = str_remove(temp_relation, " .*"),
                           id = str_extract(temp_relation, "UBERON:[0-9]+"))
+    temp_gci_relation <- str_remove(str_remove(str_extract(line,"gci_relation.*\""),"gci_relation=\""),"\"")
+    ## if gci_relation exists and does not match temp_df$relation skip
+    if(!is.na(temp_gci_relation) & temp_gci_relation != temp_df$relation){next} 
     ontos$uberon$ont$relations[term_num][[1]] <- rbind(ontos$uberon$ont$relations[term_num][[1]],
                                                        temp_df) 
       # c(ontos$uberon$ont$parents[term_num][[1]],
@@ -661,26 +553,44 @@ while(TRUE){
     ontos$uberon$ont$is_obsolete[term_num] <- TRUE 
   }
 }
-close(con)
-ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
-ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
-                                         inverse_relation_name = "has_part(SUPP_INVERSE)")
-##### need to add inversion of "part_of" relationship to uberon - else undercounting heart
+close(con);rm(con, line, term_num, num_terms, 
+               temp_relation, is_uberon, temp_df)
 
-### NOTE: UBERON IMPROPER ANNOTATIONS: 
-## This might be error of my interpretation of "has_part" ##### remove: UBERON:0005984 has_part UBERON:0001021: subendocardium layer has_part nerve 
-##### remove: UBERON:0003983 has_part UBERON:0007181:  conus arteriosus has_part serosa of infundibulum of uterine tube
-##### remove: UBERON:0003983 has_part UBERON:0007182:  conus arteriosus has_part muscle layer of infundibulum of uterine tube
+### NOTE: FIX UBERON IMPROPER ANNOTATIONS: 
 
-# which <- which(ontos$uberon$ont$id=="UBERON:0005984")
-# which_keep <- which(!(grepl("UBERON:0001021",ontos$uberon$ont$relations[[which]]$id) &
-#                   grepl("has_part",ontos$uberon$ont$relations[[which]]$relation)))
-# ontos$uberon$ont$relations[[which]] <- ontos$uberon$ont$relations[[which]][which_keep,]
+##### remove: UBERON:0003983 has_part UBERON:0007181 ## conus arteriosus has_part serosa of infundibulum of uterine tube
+##### remove: UBERON:0003983 has_part UBERON:0007182 ## conus arteriosus has_part muscle layer of infundibulum of uterine tube
+##### consider removal: UBERON:0005984 has_part UBERON:0001021: subendocardium layer has_part nerve ##
+######### above may be my misunderstanding of UBERON has_part annotation precise meaning ###
+##### remove: UBERON:0001378 part_of UBERON:0001377  ## quadriceps femoris has_part rectus femoris ## preserve is_a relation
+##### remove: UBERON:0001379 part_of UBERON:0001377  ## quadriceps femoris has_part vastus lateralis ## preserve is_a relation 
+##### remove: UBERON:0001380 part_of UBERON:0001377  ## quadriceps femoris has_part vastus medialis ## preserve is_a relation
+##### remove: UBERON:0014847 part_of UBERON:0001377  ## quadriceps femoris has_part vastus intermedius ## preserve is_a relation
+
 
 which <- which(ontos$uberon$ont$id=="UBERON:0003983")
 which_keep <- which(!(grepl("UBERON:000718[12]",ontos$uberon$ont$relations[[which]]$id) &
                   grepl("has_part",ontos$uberon$ont$relations[[which]]$relation)))
 ontos$uberon$ont$relations[[which]] <- ontos$uberon$ont$relations[[which]][which_keep,]
+
+for(id in c("UBERON:0001378","UBERON:0001379","UBERON:0001380","UBERON:0014847")){
+  which <- which(ontos$uberon$ont$id==id)
+  which_keep <- which(!(grepl("UBERON:0001377",ontos$uberon$ont$relations[[which]]$id) &
+                          grepl("part_of",ontos$uberon$ont$relations[[which]]$relation)))
+  ontos$uberon$ont$relations[[which]] <- ontos$uberon$ont$relations[[which]][which_keep,]
+}
+rm(which, which_keep, id)
+#################
+
+
+ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
+ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
+                                         inverse_relation_name = "has_part(SUPP_INV(part_of))")
+ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendant_relations = c("part_of"))
+ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
+ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
+
+save.image()
 
 
 ```
@@ -696,7 +606,7 @@ con <- file(files$OMIM_GENE,open="r")
 temp_header <- readLines(con, 4)[4]
 temp_header <- str_remove(temp_header,"# ")
 temp_header <- str_split_1(temp_header,"\t")
-close(con)
+close(con);rm(con)
 onto_maps$OMIM_GENE$map <- read.delim2(files$OMIM_GENE, header=FALSE, comment.char="#")
 colnames(onto_maps$OMIM_GENE$map) <- str_replace_all(temp_header,"[[:space:]]","_")
 onto_maps$OMIM_GENE$map <- onto_maps$OMIM_GENE$map[complete.cases(onto_maps$OMIM_GENE$map),]
@@ -715,6 +625,7 @@ temp$temp_str <- NULL
 temp$Phenotype <-  str_remove(temp$Phenotype,", [0-9]{6}.*")
 
 onto_maps$OMIM_GENE$map <- temp
+rm(temp,temp_header)
 
 onto_maps$HPO_OMIM <- list()
 ##### try other file......
@@ -729,12 +640,13 @@ colnames(onto_maps$HPO_OMIM$map)[which(colnames(onto_maps$HPO_OMIM$map)=="databa
 colnames(onto_maps$HPO_OMIM$map)[which(colnames(onto_maps$HPO_OMIM$map)=="hpo_id")] <- "HPO_ID"
 
 
+
 onto_maps$HPO_OMIM_GENE <- list()
 temp1 <- onto_maps$HPO_OMIM$map[,c("OMIM_ID","HPO_ID")]
 temp2 <- onto_maps$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID")]
 temp2$OMIM_ID <- paste0("OMIM:",temp2$OMIM_ID)
 onto_maps$HPO_OMIM_GENE$map <- merge(temp1,temp2)
-
+rm(temp1,temp2)
 
 
 ### HPO to UBERON
@@ -778,7 +690,7 @@ while(TRUE){
     on_HPO_term <- FALSE
   }
 }
-close(con)
+close(con);rm(con, line, on_HPO_term, term_num, num_terms)
 
 onto_maps$HPO_UBERON$map$UBERON_terms[sapply(onto_maps$HPO_UBERON$map$UBERON_terms, is.null)] <- NA 
 names(onto_maps$HPO_UBERON$map$UBERON_terms) <- onto_maps$HPO_UBERON$map$HPO_id
@@ -804,12 +716,12 @@ for(i in 1:nrow(onto_maps$HPO_UBERON$map)){
   if(nrow(temp_df)==0){next}
   onto_maps$HPO_UBERON$map$UBERON_ID[i] <- temp_df$UBERON[which.max(temp_df$depth)[1]] 
 }
-
+rm(temp, temp_df, ancestors, i, which)
 
 onto_maps$HPO_UBERON_GENE <- list()
 onto_maps$HPO_UBERON_GENE$map <- merge(onto_maps$HPO_OMIM_GENE$map, onto_maps$HPO_UBERON$map)
 
-
+save.image()
 
 ```
 
@@ -824,19 +736,27 @@ gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name"
                  mart = ensembl, useCache = F)
 
 ## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
+# temp <- tempfile()
+# download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz")) 
+# gene_sets$genes_all_go <- read.table( temp, skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
+
+
 for(chr in c(as.character(1:22),"X","Y","MT" )){
+  print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
                              "ensembl_transcript_id","transcript_length",
                              "chromosome_name", "exon_chrom_start","exon_chrom_end","rank"),
                 filters = "chromosome_name",
                 values = chr,
                 mart = ensembl, useCache = F)
+  print("transcript info")
   temp2 <- getBM(attributes=c('ensembl_gene_id',
                              "ensembl_transcript_id",
                              "transcript_is_canonical"),
                 filters = "chromosome_name",
                 values = chr,
                 mart = ensembl, useCache = F)
+  print("canon labels")
   temp <- merge(temp, temp2)
   gene_sets$genes_all_transcript <- rbind(gene_sets$genes_all_transcript, temp)
   
@@ -844,6 +764,7 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
                 filters = "chromosome_name",
                 values = chr,
                 mart = ensembl, useCache = F)
+  print("go terms")
   gene_sets$genes_all_go <- rbind(gene_sets$genes_all_go, temp)
   
 }
@@ -868,17 +789,6 @@ gene_sets$human_chromatin_modifiers$go_terms = c( "histone acetyltransferase act
 
 
 ## for each term in chrom_go_terms, check which genes are associated with term (and any of it's descendants)
-#### for each term, get all descendant terms
-go_funcs <- list()
-go_funcs$get_descendants <- function(id,go){
-  which <- which(go$id == id)
-  descendants <- go$id[which] ### a term is considered a descendant of itself
-  if( length(go$children[[which]])==0 ){return(descendants)}
-  for(child in go$children[[which]]){
-    descendants <- unique(c(descendants, go_funcs$get_descendants(child, go) ))
-  }
-  return(descendants)
-}
 
 gene_sets$human_chromatin_modifiers$go_ids <- character(length = length(gene_sets$human_chromatin_modifiers$go_terms))
 gene_sets$human_chromatin_modifiers$gene_subsets <- vector("list",length(gene_sets$human_chromatin_modifiers$go_terms))
@@ -890,7 +800,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
   gene_sets$human_chromatin_modifiers$go_ids[i] <- term_id
   
   ## genes which have GO id for current term or any of it's descendants
-  descendants <- go_funcs$get_descendants(term_id, ontos$go$ont)
+  descendants <-ontos$go$ont$descendants[[which]]
   gene_sets$human_chromatin_modifiers$gene_subsets[[i]] <-
     unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, descendants ))])
   
@@ -905,7 +815,8 @@ gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(u
 ## celegans
 ## fly 
 ## chromatin modifier
-
+rm(temp,temp2, chr,descendants,i,term_id, which)
+save.image()
 
 ```
 
@@ -1072,8 +983,9 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   ### GET all associated with Mendelian disorder (e.g. v pLI)
 
 }
+```
 
-
+```{r}
 ## for each HPO, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
 
@@ -1093,8 +1005,7 @@ temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
 
 for(i in 1:length(ontos$hpo$ont$id)){
   if(i %% 1000 == 1){print(i)}
-  hps <- get_descendants(ontos$hpo$ont$id[i], ontos$hpo$ont)
-  
+  hps <- c(ontos$hpo$ont$id[i],ontos$hpo$ont$descendants[[i]])
   which <- which(is.element(temp_chrom$HPO_ID, hps))
   temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
   which <- which(is.element(temp_not_chrom$HPO_ID, hps))
@@ -1139,15 +1050,6 @@ temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
 temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
 onto <- ontos$hpo$ont
 
-onto$height <- numeric(length=length(onto$id))
-onto$depth <- numeric(length=length(onto$id))
-for(i in 1:length(onto$id)){
-  if(i %% 500 == 0){print(i)}
-  onto$height[i] <- get_height(onto$id[i],onto)
-  onto$depth[i] <- get_depth(onto$id[i],onto)
-}
-
-
 onto$is_signif <- rep(F,length(onto$id))
 for( layer in 1:max(onto$height)){
   print(paste0("layer is: ",layer ))
@@ -1156,7 +1058,7 @@ for( layer in 1:max(onto$height)){
   for( el in els_in_layer ){
     if(i %% 250 == 0){print(i)}
     i <- i+1
-    hps <- get_descendants(onto$id[el], onto)
+    hps <-  c(onto$id[el],onto$descendants[[el]])
   
     which <- which(is.element(temp_chrom$HPO_ID, hps))
     temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
@@ -1197,7 +1099,7 @@ for( layer in 1:max(onto$height)){
         ## only include most specific instance and NOT also all ancestors of that instance ..
         for( other_child in signif_descendants){
           if( other_child == child){next}
-          hps <- c(hps, get_descendants(other_child, onto))
+          hps <- c(hps, onto$descendants[[which(onto$id==other_child)]])
         } 
   
         which <- which(is.element(temp_chrom$HPO_ID, hps))
@@ -1242,35 +1144,32 @@ temp_edges$edge_type <- "is_a"
 temp_vertices <- onto$id
 
 ## select subset of hpo ids to plot
-ids <- get_descendants(onto$id[which(onto$name=="Abnormal heart morphology")] , onto)
-ids <- get_descendants(onto$id[which(onto$name=="Abnormal hair morphology")] , onto)
+which <- which(onto$name=="Abnormal heart morphology")
+ids <- c(onto$id[which], onto$descendants[[which]])
+which <- which((onto$name=="Abnormal hair morphology"))
+ids <- c(onto$id[which], onto$descendants[[which]])
 which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
 temp_edges_subset <- temp_edges[which,]
 temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
                             signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
                             or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
-                            depth=temp_df$depth[match(ids,temp_df$id)])
+                            depth=temp_df$depth[match(ids,temp_df$id)],
+                            height=temp_df$height[match(ids,temp_df$id)])
 temp_vertices$label <- NA
-which <- which(temp_vertices$depth <= 6 )
+which <- which(temp_vertices$height >= 4 |
+                 temp_vertices$signif_val > 2 ) #which(temp_vertices$depth <= 6 )
 temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
 
 temp_graph <- graph_from_data_frame(temp_edges_subset[,c("from","to")], vertices=temp_vertices)
 ggraph(temp_graph, layout = "circlepack",weight=size)+
   geom_node_circle(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2)+#, position = position_dodge())+
+  geom_node_label(aes(label=label,fill=signif_val), size=2,repel = TRUE) +# position = position_dodge())+
   scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
                        breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
                        guide="colorbar"
                        )
 
 
-ggraph(temp_graph, layout = "circlepack",weight=size)+
-  geom_node_(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2)+#, position = position_dodge())+
-  scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
-                       breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
-                       guide="colorbar"
-                       )
 c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```
 
@@ -1280,9 +1179,6 @@ c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 
 ## for each UBERON, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
-
-
-
 
 
 which <- which(is.element(onto_maps$HPO_UBERON_GENE$map$Ensembl_Gene_ID,
@@ -1299,7 +1195,7 @@ temp_res_df <- data.frame(p.value=numeric(length(ontos$uberon$ont$id)),
                           num_chrom_associated=numeric(length(ontos$uberon$ont$id)),
                           num_non_chrom_associated=numeric(length(ontos$uberon$ont$id)))
 
-ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INVERSE)"))
+#ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INVERSE)"))
 
 # t1 <- Sys.time()
 for(i in 1:length(ontos$uberon$ont$id)){
@@ -1363,18 +1259,6 @@ temp_not_chrom <- temp_not_chrom[complete.cases(temp_not_chrom),]
 
 onto <- ontos$uberon$ont
 
-onto <- add_height(onto, descendant_relations = c("is_a","part_of"))
-### replace depth with add_depth function..... oi__io
-options(expressions=30000)
-onto <- add_depth(onto, ascendant_relations = c("has_part(SUPP_INVERSE)"))
-## NEED TO GENERALIZE GET HEIGHT AND GET DEPTH TO ACCOMODATE IS_A AND HAS_PART RELATIONS
-
-for(i in 1:length(onto$id)){
-  if(i %% 500 == 0){print(i)}
-  #onto$height[i] <- get_height_plus(onto$id[i],onto, descendant_relations = c("is_a","part_of"))
-  onto$depth[i] <- get_depth_plus(onto$id[i],onto, ascendant_relations = c("has_part(SUPP_INVERSE)"))
-}
-
 onto$is_signif <- rep(F,length(onto$id))
 for( layer in 1:max(onto$height)){
   print(paste0("layer is: ",layer ))
@@ -1383,8 +1267,7 @@ for( layer in 1:max(onto$height)){
   for( el in els_in_layer ){
     if(i %% 250 == 0){print(i)}
     i <- i+1
-    ubs <- get_descendants_plus(onto$id[el], onto,
-                                descendant_relations = c("has_part(SUPP_INVERSE)"))
+    ubs <- c(onto$id[el],onto$descendants[[el]])
 
     which <- which(is.element(temp_chrom$UBERON_ID, ubs))
     temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
@@ -1468,7 +1351,7 @@ temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))])
 colnames(temp_edges) <- c("from","to")
 temp_edges$edge_type <- "is_a"
 
-ascendant_relations = c("part_of")
+ascendant_relations = c("has_part(SUPP_INV(part_of))")
 for(i in 1:length(onto$id)){
   if(i %% 2e3 == 1){print(i)}
   rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendant_relations))]
@@ -1486,35 +1369,29 @@ ids <- onto$descendants[[which(onto$name=="heart")]]
 #                 onto$children[[which(onto$name=="cardiac septum")]],
 #                 onto$children[[which(onto$name=="cardiac valve")]]))
 
-ids <- onto$descendants[[which(onto$name=="skin epidermis")]]
+
 ids <- ids[which(!is.na(ids))]
 which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
 temp_edges_subset <- unique(temp_edges[which,c("from","to")])
 temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
                             signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
                             or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
-                            depth=temp_df$depth[match(ids,temp_df$id)])
+                            depth=temp_df$depth[match(ids,temp_df$id)],
+                            height=temp_df$height[match(ids,temp_df$id)])
 temp_vertices$label <- NA
-which <- which(temp_vertices$depth <= 9 )
+which <- which(temp_vertices$depth <= 10 )
 temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
 
+
 temp_graph <- graph_from_data_frame(temp_edges_subset, vertices=temp_vertices)
-ggraph(temp_graph, layout = "circlepack",weight=size)+
+ggraph(temp_graph, layout = "circlepack", weight=size)+
   geom_node_circle(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2)+#, position = position_dodge())+
+  geom_node_label(aes(label=label,fill=signif_val), size=2,repel = TRUE)+#, position = position_dodge())+
   scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
                        breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
                        guide="colorbar"
                        )
 
-
-ggraph(temp_graph, layout = "circlepack",weight=size)+
-  geom_node_(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2)+#, position = position_dodge())+
-  scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
-                       breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
-                       guide="colorbar"
-                       )
 c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```
 
