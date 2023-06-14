@@ -45,7 +45,8 @@ rm(OMIM_genemap2_URL)
 
 ```{r load libraries}
 req_packages <- list(
-  standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML"),
+  standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
+               "ggiraph","ggraph","igraph","collapsibleTree"),
   biocmanager = c("Gviz","biomaRt")
 )
 for(std_package in req_packages$standard ){
@@ -75,49 +76,6 @@ add_children_from_parents <- function(onto){
   return(onto)
 }
 
-# get_descendants <- function(id, onto){
-#   which <- which(onto$id==id)
-#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-#   if(length(onto$children[[which]]) == 0){
-#     return(onto$id[which])
-#   }
-#   descendants <- id
-#   for(child in onto$children[[which]]){
-#     descendants <- unique(c(descendants, get_descendants(child, onto)))
-#   }
-#   return(descendants)
-# }
-
-# get_descendants_plus <- function(id, onto,
-#                                  descendant_relations=c(),
-#                                  descend_through_children=TRUE,
-#                                  visited_ids=c()){
-#   which <- which(onto$id==id)
-#   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
-#   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
-#   visited_ids <- c(visited_ids, id)
-#   
-#   relation_df <- onto$relations[[which]]
-#   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, descendant_relations))]
-#   if(descend_through_children){
-#    transitive_ids <- unique(c(transitive_ids, onto$children[[which]])) 
-#   }
-#   transitive_ids <- transitive_ids[!is.element(transitive_ids,visited_ids)]
-#   if(length(transitive_ids) == 0){
-#     return(onto$id[which])
-#   }
-#   descendants <- id
-#   visited_ids <- c(visited_ids, transitive_ids)
-#   for(tid in transitive_ids){
-#     descendants <- unique(c(descendants,
-#                             get_descendants_plus(tid, onto,
-#                                                  descendant_relations = descendant_relations,
-#                                                  descend_through_children = descend_through_children,
-#                                                  visited_ids = visited_ids)))
-#   }
-#   return(descendants)
-# }
 
 get_ancestors <- function(id, onto){
   which <- which(onto$id==id)
@@ -190,18 +148,16 @@ add_height <- function(onto, descendant_relations=c(), descend_through_children=
   }
   return(onto)
 }
-onto <- ontos$hpo$ont
-onto <- add_height(onto)
 
 
-add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE, min_or_max=function(x){min(x)} ){
+add_depth <- function(onto, ascendent_relations=c(), ascend_through_parents=TRUE, min_or_max=function(x){min(x)} ){
   onto$depth <- numeric(length=length(onto$id))
-  add_depth_helper <- function(id, onto, ascendant_relations, ascend_through_parents, visited_ids=c()){
+  add_depth_helper <- function(id, onto, ascendent_relations, ascend_through_parents, visited_ids=c()){
     which <- which(onto$id==id)
     if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
     if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
     relation_df <- onto$relations[[which]]
-    transitive_ids <- relation_df$id[which(is.element(relation_df$relation, ascendant_relations))]
+    transitive_ids <- relation_df$id[which(is.element(relation_df$relation, ascendent_relations))]
     if(ascend_through_parents){
       transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
     }
@@ -219,7 +175,7 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
     transitive_ids_unassigned <- onto$id[which(onto$depth == 0 & is.element(onto$id, transitive_ids))]
     while(length(transitive_ids_unassigned) > 0 ){
       tid  <- transitive_ids_unassigned[1]
-      onto <- add_depth_helper(tid, onto, ascendant_relations, ascend_through_parents,
+      onto <- add_depth_helper(tid, onto, ascendent_relations, ascend_through_parents,
                                visited_ids=c(visited_ids, id, tid))
       transitive_ids_unassigned <- onto$id[which(onto$depth == 0 & is.element(onto$id, transitive_ids))]
     }
@@ -230,7 +186,7 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
     if(i%%1000==1){print(i)}
     if(onto$depth[i] != 0 & !is.infinite(onto$depth[i])){next}
     onto <- add_depth_helper(onto$id[i], onto,
-                              ascendant_relations=ascendant_relations,
+                              ascendent_relations=ascendent_relations,
                               ascend_through_parents=ascend_through_parents)
   }
   inf_check_num = 1
@@ -240,16 +196,12 @@ add_depth <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE
     inf_ids <- onto$id[which(is.infinite(onto$depth))]
     for(inf_id in inf_ids){
       onto <- add_depth_helper(inf_id, onto,
-                               ascendant_relations=ascendant_relations,
+                               ascendent_relations=ascendent_relations,
                                ascend_through_parents=ascend_through_parents)
     }
   }
   return(onto)
 }
-
-
-onto <- ontos$uberon$ont 
-ontos$uberon$ont <- add_depth(onto, ascendant_relations = c("part_of"))
 
 get_mask_set <- function(id, onto){ #}, mask_self=T){
   which <- which(onto$id==id)
@@ -312,6 +264,58 @@ get_desc_summary_table <- function(id,onto, level=1,
   }
   return(unique(temp_df))
 }
+
+
+get_desc_tree <- function(id,onto, level=1,
+                          descendent_relations=c(),  ### descendent and ascendent need to be pairs... 
+                          ascendent_relations=c(),   ### descendent and ascendent need to be pairs... 
+                          descend_through_children=TRUE,
+                          ascend_through_parents=TRUE,
+                          visited_ids=c(),
+                          prefix=c(),
+                          max_level=Inf){
+  which <- which(onto$id==id) 
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  
+  relation_df <- onto$relations[[which]]
+  
+  if(level==1){
+    temp_df$term_parent <- NA
+    temp_df$term <- onto$id[which]
+    temp_df$level <- level
+    temp_df <- data.frame(term_parent = NA, term =id, level=level)
+  } else {
+    ascendent_ids <- relation_df$id[which(is.element(relation_df$relation, ascendent_relations))]
+    if(ascend_through_parents){
+      ascendent_ids <- unique(c(ascendent_ids,onto$parents[[which]]))
+    }
+    ascendent_ids <- ascendent_ids[which(is.element(ascendent_ids, visited_ids))]
+    temp_df <- data.frame(term_parent=ascendent_ids,term=id,level=level)
+  }
+  
+  descendant_ids <- relation_df$id[which(is.element(relation_df$relation, descendent_relations))]
+  if(descend_through_children){
+    descendant_ids <- unique(c(descendant_ids,onto$children[[which]]))
+  }
+  descendant_ids <- descendant_ids[!is.element(descendant_ids, visited_ids)]
+  if(length(descendant_ids) > 0 & level < max_level){
+    for(tid in descendant_ids){
+      temp_df <- rbind(temp_df,
+                       get_desc_tree(tid, onto, level=level+1,
+                                     descendent_relations=descendent_relations,
+                                     ascendent_relations=ascendent_relations,
+                                     descend_through_children=descend_through_children,
+                                     ascend_through_parents=ascend_through_parents,
+                                     visited_ids=c(visited_ids,tid,id),
+                                     prefix = paste0(prefix,",",id),
+                                     max_level = max_level))
+    }
+  }
+  temp_df <- temp_df[order(temp_df$level),]
+  return(unique(temp_df))
+}
+
 
 
 add_inverse_relation <- function(onto, relation, inverse_relation_name=NA){
@@ -586,7 +590,7 @@ rm(which, which_keep, id)
 ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
 ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
                                          inverse_relation_name = "has_part(SUPP_INV(part_of))")
-ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendant_relations = c("part_of"))
+ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of"))
 ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
 ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
 
@@ -1039,9 +1043,6 @@ save.image()
 ## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
 ## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
 
-```
-
-```{r, experimental ontology layered analysis, hpo}
 
 which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
            gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
@@ -1123,12 +1124,18 @@ for( layer in 1:max(onto$height)){
     onto$is_signif[el] <- is_signif
   }
 }
-save.image()
+
 
 temp_df <- cbind(data.frame(id=onto$id, name=onto$name, is_signif=onto$is_signif,
                             height=onto$height, depth=onto$depth),
                  temp_res_df)
 rownames(temp_df) <- temp_df$id
+
+ontos$hpo$chrom_enrichments <- temp_df
+save.image()
+filename <- paste0(dirs$tables,"chrom_modifiers_HPO_enrichments.csv")
+write.csv(ontos$hpo$chrom_enrichments, file=filename)
+
 
 ### want to be able to get all most specific descendants... plot as a tree or hierarchy
 ### networkd3
@@ -1136,41 +1143,103 @@ rownames(temp_df) <- temp_df$id
 library(igraph)
 library(ggraph)
 library(ggiraph)
-names(onto$parents) <- onto$id
+
+onto <- ontos$hpo$ont
+temp_df <- ontos$hpo$chrom_enrichments
 ## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
+names(onto$parents) <- onto$id
 temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
 colnames(temp_edges) <- c("from","to")
 temp_edges$edge_type <- "is_a"
 temp_vertices <- onto$id
 
 ## select subset of hpo ids to plot
-which <- which(onto$name=="Abnormal heart morphology")
-ids <- c(onto$id[which], onto$descendants[[which]])
-which <- which((onto$name=="Abnormal hair morphology"))
-ids <- c(onto$id[which], onto$descendants[[which]])
-which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
-temp_edges_subset <- temp_edges[which,]
-temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
-                            signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
-                            or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
-                            depth=temp_df$depth[match(ids,temp_df$id)],
-                            height=temp_df$height[match(ids,temp_df$id)])
-temp_vertices$label <- NA
-which <- which(temp_vertices$height >= 4 |
-                 temp_vertices$signif_val > 2 ) #which(temp_vertices$depth <= 6 )
-temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
+phen_names <- c("Abnormal heart morphology", "Abnormal hair morphology")
+for(phen_name in phen_names){
+  which <- which(onto$name==phen_name)
+  ids <- c(onto$id[which], onto$descendants[[which]])
+  
+  desc_sum_table <- get_desc_summary_table(onto$id[which],onto)
+  desc_sum_table <- merge(desc_sum_table, ontos$hpo$chrom_enrichments)
+  desc_sum_table <- desc_sum_table[,grep("parents|children|relations|is_obsolete|descendants",colnames(desc_sum_table),invert = T)]
+  desc_sum_table <- desc_sum_table[order(desc_sum_table$level),]
 
-temp_graph <- graph_from_data_frame(temp_edges_subset[,c("from","to")], vertices=temp_vertices)
-ggraph(temp_graph, layout = "circlepack",weight=size)+
-  geom_node_circle(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2,repel = TRUE) +# position = position_dodge())+
-  scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
-                       breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
-                       guide="colorbar"
-                       )
+  filename <- paste0(dirs$tables,str_replace(onto$id[which],":","_"),"_desc_summ_table.csv")
+  write.csv(desc_sum_table, file=filename)
+  
+  ids <- c(onto$id[which], onto$descendants[[which]])
+  which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
+  temp_edges_subset <- temp_edges[which,]
+  temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
+                              signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
+                              or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
+                              depth=temp_df$depth[match(ids,temp_df$id)],
+                              height=temp_df$height[match(ids,temp_df$id)])
+  temp_vertices$label <- NA
+  which <- which(temp_vertices$height >= 4 |
+                   temp_vertices$signif_val > 2 ) #which(temp_vertices$depth <= 6 )
+  temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
+  
+  temp_graph <- graph_from_data_frame(temp_edges_subset[,c("from","to")], vertices=temp_vertices)
+  gg <- ggraph(temp_graph, layout = "circlepack",weight=size)+
+    geom_node_circle(aes(fill=signif_val))+
+    geom_node_label(aes(label=label,fill=signif_val), size=3,repel = TRUE) +# position = position_dodge())+
+    scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
+                         breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
+                         guide="colorbar"
+                         )
+  filename <- paste0(dirs$figures,str_replace(onto$id[which(onto$name==phen_name)],":","_"),"_circlePack.png")
+  png(filename = filename, units = "in", height = 8, width = 9, res=320)
+  plot(gg)
+  dev.off()
+  
+  
+  desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==phen_name)], onto,
+                                 descendent_relations =  "has_part(SUPP_INV(part_of))",
+                                 ascendent_relations = "part_of",
+                                 max_level = 4)
+  which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
+                           desc_sum_table$num_non_chrom_associated != 0) 
+  desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
+                               desc_sum_table[which_assoc,which(colnames(desc_sum_table)!="level")],
+                               by.x="term", by.y="id"))
+  
+  
+  desc_sum_tree_merge <- desc_sum_tree_merge[,c(2,1,3:ncol(desc_sum_tree_merge))]
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="height")] <- "_height_"
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="name")] <- "_name_"
+  desc_sum_tree_merge$size <- log2(desc_sum_tree_merge$num_chrom_associated + 1)+1
+  desc_sum_tree_merge$signif <- signif(-log10(desc_sum_tree_merge$p.value),2)
+  desc_sum_tree_merge$signif[which(abs(desc_sum_tree_merge$signif) < 1e-10)] <- 0
+  temp_colors <- colorRamp(c("white","red"))(desc_sum_tree_merge$signif / max(desc_sum_tree_merge$signif))
+  colors <- rgb(temp_colors / 255)
+  desc_sum_tree_merge$color <- colors 
+  desc_sum_tree_merge$term_parent <- desc_sum_tree_merge$`_name_`[match(
+    desc_sum_tree_merge$term_parent, desc_sum_tree_merge$term 
+  )]
+  desc_sum_tree_merge$term <- desc_sum_tree_merge$`_name_`
+  
+  temp_html_plot <- collapsibleTreeNetwork(
+    desc_sum_tree_merge,
+    attribute = "signif",
+    fill = "color", 
+    nodeSize = "size",
+    collapsed = FALSE,
+    zoomable = FALSE
+  )
+
+  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"HPO_",
+                                                      str_replace_all(phen_name," ","_"),"_ctn.html"))
+  
+}
+
+save.image()
+#c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 
 
-c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
+  ############
+ 
+  
 ```
 
 
@@ -1333,29 +1402,35 @@ for( layer in 1:max(onto$height)){
     onto$is_signif[el] <- is_signif
   }
 }
-save.image()
-
 temp_df <- cbind(data.frame(id=onto$id, name=onto$name,
-                            height=onto$height, depth=onto$depth),
+                            height=onto$height, depth=onto$depth, is_signif=onto$is_signif),
                  temp_res_df)
 rownames(temp_df) <- temp_df$id
+ontos$uberon$chrom_enrichments <- temp_df
+save.image()
+filename <- paste0(dirs$tables,"chrom_modifiers_UBERON_enrichments.csv")
+write.csv(ontos$uberon$chrom_enrichments, file=filename)
+
 ### want to be able to get all most specific descendants... plot as a tree or hierarchy
 ### networkd3
 
 library(igraph)
 library(ggraph)
 library(ggiraph)
+
+onto <- ontos$uberon$ont
+temp_df <- ontos$uberon$chrom_enrichments
 names(onto$parents) <- onto$id
 ## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
 temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
 colnames(temp_edges) <- c("from","to")
 temp_edges$edge_type <- "is_a"
 
-ascendant_relations = c("has_part(SUPP_INV(part_of))")
+ascendent_relations = c("has_part(SUPP_INV(part_of))")
 for(i in 1:length(onto$id)){
   if(i %% 2e3 == 1){print(i)}
-  rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendant_relations))]
-  rs <- onto$relations[[i]]$relation[which(is.element(onto$relations[[i]]$relation, ascendant_relations))]
+  rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
+  rs <- onto$relations[[i]]$relation[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
   if(length(rids)==0){next}
   temp_edges <- rbind(temp_edges, 
                         data.frame(from=onto$id[i],to=rids,edge_type=rs))
@@ -1364,42 +1439,107 @@ temp_edges <- unique(temp_edges)
 temp_vertices <- onto$id
 
 ## select subset of hpo ids to plot
-ids <- onto$descendants[[which(onto$name=="heart")]]
+ids_l <- list()
+ids_l$heart <- ids <- c(onto$id[which(onto$name=="heart")], onto$descendants[[which(onto$name=="heart")]])
+ids_l$brain <- intersect(c(onto$id[which(onto$name=="brain")], onto$descendants[[which(onto$name=="brain")]]),
+                 onto$id[which(onto$height>=4)])
+
 # ids <- unique(c(onto$children[[which(onto$name=="cardiac chamber")]],
 #                 onto$children[[which(onto$name=="cardiac septum")]],
 #                 onto$children[[which(onto$name=="cardiac valve")]]))
 
+for(ids_name in names(ids_l)){
+  ids <- ids_l[[ids_name]]
+  ids <- ids[which(!is.na(ids))]
+  which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
+  temp_edges_subset <- unique(temp_edges[which,c("from","to")])
+  
+  
+  
+  desc_sum_table <- get_desc_summary_table(onto$id[which(onto$name == ids_name)],onto, transitive_relations = "has_part(SUPP_INV(part_of))")
+  desc_sum_table <- merge(desc_sum_table, ontos$uberon$chrom_enrichments)
+  desc_sum_table <- desc_sum_table[,grep("parents|children|relations|is_obsolete|descendants",colnames(desc_sum_table),invert = T)]
+  desc_sum_table <- desc_sum_table[order(desc_sum_table$level),]
 
-ids <- ids[which(!is.na(ids))]
-which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
-temp_edges_subset <- unique(temp_edges[which,c("from","to")])
-temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
-                            signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
-                            or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
-                            depth=temp_df$depth[match(ids,temp_df$id)],
-                            height=temp_df$height[match(ids,temp_df$id)])
-temp_vertices$label <- NA
-which <- which(temp_vertices$depth <= 10 )
-temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
+  filename <- paste0(dirs$tables,str_replace(onto$id[which(onto$name == ids_name)],":","_"),"_desc_summ_table.csv")
+  write.csv(desc_sum_table, file=filename)
+  
+  
+  temp_vertices <- data.frame(name=ids, size=(temp_df$num_chrom_associated[match(ids,temp_df$id)]+1)*10,
+                              signif_val=-log10(temp_df$p.value[match(ids,temp_df$id)]),
+                              or_lb = temp_df$odds_ratio_lb[match(ids,temp_df$id)],
+                              depth=temp_df$depth[match(ids,temp_df$id)],
+                              height=temp_df$height[match(ids,temp_df$id)])
+  temp_vertices$label <- NA
+  which <- which(temp_vertices$height >= 5 | 
+                   temp_vertices$signif_val > 1.3)
+  temp_vertices$label[which] <- onto$name[match(temp_vertices$name[which], onto$id)]
+  
+  
+  temp_graph <- graph_from_data_frame(temp_edges_subset, vertices=temp_vertices)
+  gg <- ggraph(temp_graph, layout = "circlepack", weight=size)+
+    geom_node_circle(aes(fill=signif_val))+
+    geom_node_label(aes(label=label,fill=signif_val), size=3,repel = TRUE)+#, position = position_dodge())+
+    scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
+                         breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
+                         guide="colorbar"
+                         )
+  
+  filename <- paste0(dirs$figures,str_replace(onto$id[which(onto$name==ids_name)],":","_"),"_circlePack.png")
+  png(filename = filename, units = "in", height = 8, width = 9, res=320)
+  plot(gg)
+  dev.off()
+  
+  
+  ############
+  desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==ids_name)], onto,
+                                 descendent_relations =  "has_part(SUPP_INV(part_of))",
+                                 ascendent_relations = "part_of",
+                                 max_level = 4)
+  which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
+                           desc_sum_table$num_non_chrom_associated != 0) 
+  desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
+                               desc_sum_table[which_assoc,which(colnames(desc_sum_table)!="level")],
+                               by.x="term", by.y="id"))
+  
+  
+  desc_sum_tree_merge <- desc_sum_tree_merge[,c(2,1,3:ncol(desc_sum_tree_merge))]
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="height")] <- "_height_"
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="name")] <- "_name_"
+  desc_sum_tree_merge$size <- log2(desc_sum_tree_merge$num_chrom_associated + 1)+1
+  desc_sum_tree_merge$signif <- signif(-log10(desc_sum_tree_merge$p.value),2)
+  desc_sum_tree_merge$signif[which(abs(desc_sum_tree_merge$signif) < 1e-10)] <- 0
+  temp_colors <- colorRamp(c("white","red"))(desc_sum_tree_merge$signif / max(desc_sum_tree_merge$signif))
+  colors <- rgb(temp_colors / 255)
+  desc_sum_tree_merge$color <- colors 
+  desc_sum_tree_merge$term_parent <- desc_sum_tree_merge$`_name_`[match(
+    desc_sum_tree_merge$term_parent, desc_sum_tree_merge$term 
+  )]
+  desc_sum_tree_merge$term <- desc_sum_tree_merge$`_name_`
+  
+  temp_html_plot <- collapsibleTreeNetwork(
+    desc_sum_tree_merge,
+    attribute = "signif",
+    fill = "color", 
+    nodeSize = "size",
+    collapsed = FALSE,
+    zoomable = FALSE
+  )
 
+  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"UBERON_",ids_name,"_ctn.html"))
+  
+  ############
 
-temp_graph <- graph_from_data_frame(temp_edges_subset, vertices=temp_vertices)
-ggraph(temp_graph, layout = "circlepack", weight=size)+
-  geom_node_circle(aes(fill=signif_val))+
-  geom_node_label(aes(label=label,fill=signif_val), size=2,repel = TRUE)+#, position = position_dodge())+
-  scale_fill_gradientn(colours = c("grey40","#ffaaaa", "red","yellow"),
-                       breaks = c(0,1.3, 2, 3, max(temp_vertices$signif_val) ),
-                       guide="colorbar"
-                       )
-
-c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
+  ##################
+}
+#c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```
 
 
 ```{r, }
-library(circlepackeR)
-##https://adeelk93.github.io/collapsibleTree/
-# Install package from CRAN:
+# library(circlepackeR)
+# ##https://adeelk93.github.io/collapsibleTree/
+# # Install package from CRAN:
 
 library(collapsibleTree)
 ##phenotype complexity/diversity of genes -> system of affect complexity/diversity
