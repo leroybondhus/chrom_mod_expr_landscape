@@ -5,7 +5,7 @@ date: "2023-01-27"
 author: "Leroy Bondhus"
 ---
 
-```{r set up dir structure}
+```{r, set up dir structure}
                          
 dirs <- list(data="./data/",
              results = "./results/",
@@ -23,7 +23,7 @@ files <- list()
 date <- format(Sys.time(),"%Y%m%d")
 ```
 
-```{r setup note}
+```{r, setup note}
 #### NOTE : USER HAS TO REQUEST ACCESS TO A LINK FROM OMIM DIRECTLY TO GET THIS FILE #####
 ####        ONCE THIS IS DONE REPLACE "NULL" BELOW WITH THE URL TO genemap2.txt FILE #####
 
@@ -43,7 +43,7 @@ if(!file.exists(files$OMIM_GENE)){
 rm(OMIM_genemap2_URL)     
 ```
 
-```{r load libraries}
+```{r, load libraries}
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
                "ggiraph","ggraph","igraph","collapsibleTree"),
@@ -59,7 +59,6 @@ rm(req_packages)
 
 date <- format(Sys.time(),"%Y%m%d")
 ```
-
 
 ```{r, ontos helper functions}
 ## assume ontology is list of elements of equal length
@@ -220,8 +219,6 @@ get_mask_set <- function(id, onto){ #}, mask_self=T){
   return(unique(mask_set))
 }
 
-
-
 ### need to modify to enable extracting PART_OF relations here...... O_o
 ### get table of onto term and all descendants
 get_desc_summary_table <- function(id,onto, level=1,
@@ -316,8 +313,6 @@ get_desc_tree <- function(id,onto, level=1,
   return(unique(temp_df))
 }
 
-
-
 add_inverse_relation <- function(onto, relation, inverse_relation_name=NA){
   if(is.na(inverse_relation_name)){
     inverse_relation_name=paste0("INVERSE(",relation,")")
@@ -377,6 +372,44 @@ add_descendants <- function(onto, descendant_relations=c(), descend_through_chil
     onto <- add_descendants_helper(onto$id[i], onto,
                               descendant_relations=descendant_relations,
                               descend_through_children=descend_through_children )
+  }
+  return(onto)
+}
+
+### cycle in is_a, part_of graph ? i.e. not a DAG?   
+add_annotation <- function(id, onto, annotation_name,annotation_value,
+                           transitive_relations=c("is_a","part_of"),
+                           propegate_to_parents=TRUE,
+                           visited_ids= c()){
+  annotation_index <- which(names(onto)==annotation_name)
+  if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
+  if(length(annotation_index)>1){stop(paste("annotation_name", annotation_name, "ambiguous in ontology"))}
+  which <- which(onto$id==id)
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  
+  onto[[annotation_index]][[which]] <- unique(c(onto[[annotation_index]][[which]], annotation_value))
+  ## set up and use blacklist of visited_ids
+  #transitive_ids <- transitive_ids[which(transitive_ids != id)]
+  visited_ids <- c(visited_ids,id)
+  
+  relation_df <- onto$relations[[which]]
+  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
+  if(propegate_to_parents){
+    transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
+  }
+
+  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
+  if(length(transitive_ids)>0){
+    for( tid in transitive_ids ){
+      #print(paste(onto$name[which], tid))
+      onto <- add_annotation(id=tid, onto=onto, 
+                             annotation_name = annotation_name,
+                             annotation_value= annotation_value,
+                             transitive_relations = transitive_relations,
+                             propegate_to_parents = propegate_to_parents,
+                             visited_ids=visited_ids )
+    }
   }
   return(onto)
 }
@@ -599,8 +632,6 @@ save.image()
 
 ```
 
-
-
 ```{r, organize onto_maps}
 onto_maps <- list()
 onto_maps$OMIM_GENE <- list()
@@ -728,7 +759,6 @@ onto_maps$HPO_UBERON_GENE$map <- merge(onto_maps$HPO_OMIM_GENE$map, onto_maps$HP
 save.image()
 
 ```
-
 
 ```{r, organize gene sets}
 ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
@@ -989,7 +1019,7 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 }
 ```
 
-```{r}
+```{r, test hpo enrichments}
 ## for each HPO, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
 
@@ -1241,7 +1271,6 @@ save.image()
  
   
 ```
-
 
 ```{r, experimental ontology layered analysis, uberon}
 
@@ -1535,64 +1564,7 @@ for(ids_name in names(ids_l)){
 #c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```
 
-
-```{r, }
-# library(circlepackeR)
-# ##https://adeelk93.github.io/collapsibleTree/
-# # Install package from CRAN:
-
-library(collapsibleTree)
-##phenotype complexity/diversity of genes -> system of affect complexity/diversity
-
-org <- data.frame(
-    Manager = c(
-        NA, "Ana", "Ana", "Bill", "Bill", "Bill", "Claudette", "Claudette", "Danny",
-        "Fred", "Fred", "Grace", "Larry", "Larry", "Nicholas", "Nicholas"
-    ),
-    Employee = c(
-        "Ana", "Bill", "Larry", "Claudette", "Danny", "Erika", "Fred", "Grace",
-        "Henri", "Ida", "Joaquin", "Kate", "Mindy", "Nicholas", "Odette", "Peter"
-    ),
-    Title = c(
-        "President", "VP Operations", "VP Finance", "Director", "Director", "Scientist",
-        "Manager", "Manager", "Jr Scientist", "Operator", "Operator", "Associate",
-        "Analyst", "Director", "Accountant", "Accountant"
-    )
-)
-
-org$Color <- org$Title
-levels(org$Color) <- colorspace::rainbow_hcl(11)
-collapsibleTreeNetwork(
-  org,
-  attribute = "Title",
-  fill = "Color",
-  nodeSize = "leafCount",
-  collapsed = FALSE,
-  zoomable=FALSE
-)
-
-
-species <- read.csv("https://apps.fs.usda.gov/fia/datamart/CSV/REF_SPECIES_GROUP.csv")
-
-collapsibleTree(
-  species,
-  hierarchy = c("REGION", "CLASS", "NAME"),
-  zoomable = F,
-  fill = c(
-    # The root
-    "seashell",
-    # Unique regions
-    rep("brown", 2),rep("red",2),
-    # Unique classes per region
-    rep("khaki", length(unique(paste(species$REGION, species$CLASS)))),
-    # Unique names per region
-    rep("forestgreen", length(unique(paste(species$NAME, species$REGION))))
-  )
-)
-```
-
-
-```{r DRAFT extract protein complex associations}
+```{r, DRAFT extract protein complex associations}
 
 
 ### xml structure --- dissect xml in R to recapitulate each complex and it's member species
@@ -1639,11 +1611,10 @@ for(f in temp_files){
 
 ```
 
-```{r consider gene_families level analyses }
+```{r, consider gene_families level analyses }
 ## https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/csv/genefamily_db_tables/
 
 ```
-
 
 ```{r, organize datasets}
 
@@ -1656,7 +1627,6 @@ dataset_list <- list()
 
 
 ```
-
 
 ```{r, read encode mouse ref RNAseq}
 library(jsonlite)
@@ -1727,7 +1697,6 @@ data_list_concat$coldata <- as.data.frame(data_list_concat$coldata)
 dataset_list$ENCODE_MM_DEV <- list(mat = data_list_concat$TPM, coldata=data_list_concat$coldata)
 rm(data_list)
 ```
-
 
 ```{r, read encode human ref RNAseq}
 library(jsonlite)
@@ -1816,7 +1785,7 @@ dataset_list$ENCODE_HH <- list(mat = data_list_concat$TPM, coldata=data_list_con
 rm(data_list)
 ```
 
-```{r}
+```{r, embed datasets into uberon ontology}
 temp_onto <- ontos$uberon$ont
 temp_onto$data_cols <- vector(mode = "list", length=length(temp_onto$id))
 temp_ds <- dataset_list$ENCODE_MM_DEV$coldata
@@ -1848,44 +1817,7 @@ temp_ds <- dataset_list$ENCODE_HH$coldata
 #   return(onto)
 # }
 
-### cycle in is_a, part_of graph ? i.e. not a DAG?   
-add_annotation <- function(id, onto, annotation_name,annotation_value,
-                           transitive_relations=c("is_a","part_of"),
-                           propegate_to_parents=TRUE,
-                           visited_ids= c()){
-  annotation_index <- which(names(onto)==annotation_name)
-  if(length(annotation_index)==0){stop(paste("annotation_name", annotation_name, "does not exist in ontology"))}
-  if(length(annotation_index)>1){stop(paste("annotation_name", annotation_name, "ambiguous in ontology"))}
-  which <- which(onto$id==id)
-  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
-  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
-  
-  onto[[annotation_index]][[which]] <- unique(c(onto[[annotation_index]][[which]], annotation_value))
-  ## set up and use blacklist of visited_ids
-  #transitive_ids <- transitive_ids[which(transitive_ids != id)]
-  visited_ids <- c(visited_ids,id)
-  
-  relation_df <- onto$relations[[which]]
-  transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
-  if(propegate_to_parents){
-    transitive_ids <- unique(c(transitive_ids,onto$parents[[which]]))
-  }
 
-  transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-  if(length(transitive_ids)>0){
-    for( tid in transitive_ids ){
-      #print(paste(onto$name[which], tid))
-      onto <- add_annotation(id=tid, onto=onto, 
-                             annotation_name = annotation_name,
-                             annotation_value= annotation_value,
-                             transitive_relations = transitive_relations,
-                             propegate_to_parents = propegate_to_parents,
-                             visited_ids=visited_ids )
-    }
-  }
-  return(onto)
-  
-}
 
 for(i in 1:nrow(temp_ds)){
   if(i %% 10 == 1){print(i)}
