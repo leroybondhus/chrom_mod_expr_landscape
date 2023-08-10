@@ -38,8 +38,11 @@ ggl[["barcodes"]] <- ggplot(df, aes(x=log10(gene_length),xend=log10(gene_length)
   facet_grid(chrom_subset_name ~ . )+
   theme(strip.text.y = element_text(angle = 0))
   
-plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl$composite
 
+filename <- paste0(dirs$figures, "gene_size__partition_by_chromModType.png")
+save_plot(filename = filename, ggl$composite)
 ```
 
 ```{r, transcript length barcode plot, pretty}
@@ -76,11 +79,15 @@ ggl[["barcodes"]] <- ggplot(df, aes(x=log10(transcript_length),xend=log10(transc
   facet_grid(chrom_subset_name ~ . )+
   theme(strip.text.y = element_text(angle = 0))
   
-plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl$composite
 
+filename <- paste0(dirs$figures, "transcript_size__partition_by_chromModType.png")
+save_plot(filename = filename, ggl$composite)
 ```
 
-```{r, first and last exon v all exons, in progress}
+```{r, first and last exon v all exons, pretty}
+library(cowplot)
 
 df <- data.frame(ensembl_gene_id = character(),
                  exon_length = character(),
@@ -118,137 +125,157 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 ggl <- list()
 df$is_last <- df$rank_from_end == 1 & df$rank != 1
 df$is_first <- df$rank == 1 & df$rank_from_end != 1
-ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(exon_length), color=is_last))+
-  coord_cartesian(xlim = c(0, 5))+
+
+df$first_last_single_middle <- "middle"  
+df$first_last_single_middle[which(df$exon_count==1)] <- "single"  
+df$first_last_single_middle[which(df$is_first)] <- "first"
+df$first_last_single_middle[which(df$is_last)] <- "last"
+
+ggl[["all_density"]] <- ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(exon_length), color=first_last_single_middle))+
+  coord_cartesian(xlim = c(0, 5.5))+
   geom_density(alpha=0.5)+
   barcode_theme+
   theme(axis.title.x = element_blank())
+table(df$first_last_single_middle)
 
-ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(exon_length), color=is_first))+
-  coord_cartesian(xlim = c(0, 5))+
-  geom_density(alpha=0.5)+
+ggl[["barcodes"]] <- ggplot(df, aes(x=log10(exon_length),xend=log10(exon_length),
+               y=0.25*as.numeric(as.factor(first_last_single_middle)),
+               yend=0.25*as.numeric(as.factor(first_last_single_middle))+0.25,
+               color=first_last_single_middle))+
+  geom_segment(alpha=0.5)+
+  coord_cartesian(ylim = c(0.25,1.25), xlim = c(0, 5.5))+
   barcode_theme+
-  theme(axis.title.x = element_blank())
+  facet_grid(chrom_subset_name ~ . )+
+  theme(strip.text.y = element_text(angle = 0))
+  
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl$composite
 
-
+filename <- paste0(dirs$figures, "exon_size__group_by_fmls__partition_by_chromModType.png")
+save_plot(filename = filename, ggl$composite)
 ```
 
 
+```{r, DRAFT extract protein complex associations}
+library(cowplot)
 
-```{r, look at basic chromatin modifier summary statistics}
+### xml structure --- dissect xml in R to recapitulate each complex and it's member species
+files$human_complexes <- paste0(dirs$temp_data,"human_complexes.zip")
+dirs$human_complexes <- str_remove(files$human_complexes,".zip")
 
-## gene length
-## transcript length
-## exon count
-## exon size
-ggl <- list()
-for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
+## Note : complexes are curated for known interactions and function (?) so may be more restrictive definition than others
+if(sum(grepl("\\.xml",list.files(dirs$human_complexes)))==0){
+  download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip", files$human_complexes )
+  system(paste0("unzip ",files$human_complexes, " -d ", dirs$temp_data))
+  system(paste0("mv ", dirs$temp_data, "human ", dirs$human_complexes))
+}
+
+temp_files <- list.files(dirs$human_complexes, full.names = T)
+temp_files <- temp_files[grep("\\.xml",temp_files)]
+
+complex <- list()
+i = 1
+for(f in temp_files){
+  if( i %% 20 ==1 ){print(paste0(basename(f),": ",i, " of ", length(temp_files)))}
+  complex_metrics <- xmlParse(f)
+  complex_metrics <- xmlToList(complex_metrics)
+  i <- i+1
+  
+  complex_name <- complex_metrics$entry$interactionList$abstractInteraction$names$shortLabel
+  complex_id <- paste0(complex_metrics$entry$interactionList$abstractInteraction$xref$primaryRef,collapse="__")
+  complex[[complex_name]] <- list(name = complex_name,
+                                  id = complex_id,
+                                  members = c())
+  for(interactor in complex_metrics$entry$interactorList){
+    temp <- sapply(interactor$xref, function(x){paste0(x,collapse="__")} )
+    temp <- temp[grep("ENSG.*gene",temp)]
+    if(length(temp)==0){next}
+    complex[[complex_name]]$members <- c(complex[[complex_name]]$members,
+                                         str_extract(temp,"ENSG[0-9]*"))
+  }  
+}
+
+### FOR EACH CHROM MODIFIER -> ID NUM OF COMPLEX SPECIES AND THEIR RESPECTIVE NUMBER OF TOTAL UNIQUE SUBUNITS ID'D
+### PLOT SUMMARY DISTRIBUTION FOR ALL GENES
+### BARCODE PLOT
+
+df <- data.frame(ensembl_gene_id = character(),
+                 complex_name = character(),
+                 complex_partners = character(),
+                 complex_partner_count  = numeric(),
+                 complex_count = numeric(),
+                 chrom_subset_name = character())
+
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  ## get current subset of genes
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]]
   chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
   if(length(chrom_subset)==0){next}
-  ## gene length density + barcode plots
-  df <- gene_sets$genes_all[which(is.element(gene_sets$genes_all$ensembl_gene_id, chrom_subset )),]
-  df$gene_length <- df$end_position - df$start_position
+  ## map current subset to table with exon info
   
-  temp_name <- paste0(chrom_subset_name, ": ", "gene_length density")
-  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length)))+
-    ggtitle(temp_name)+
-    geom_density(alpha=0.5)
+  temp_list <- list(gene_id=chrom_subset)
+  temp_list$complex_names <- vector(mode = "list", length=length(temp_list$gene_id))
+  temp_list$complex_partners <- vector(mode = "list", length=length(temp_list$gene_id))
   
-  temp_name <- paste0(chrom_subset_name, ": ", "gene_length barcode")
-  ggl[[temp_name]] <- ggplot(df, aes(x=log10(gene_length),xend=log10(gene_length), y=0,yend=1))+
-    ggtitle(temp_name)+
-    geom_segment(alpha=0.5)+
-    coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
-    barcode_theme
+  for(j in 1:length(complex)){
+    temp_modifiers <- complex[[j]]$members[is.element(complex[[j]]$members, temp_list$gene_id)]
+    if(length(temp_modifiers)==0){next}
+    for(k in 1:length(temp_modifiers)){
+      which <- which(temp_list$gene_id == temp_modifiers[k])
+      temp_list$complex_names[[which]] <- c(temp_list$complex_names[[which]],complex[[j]]$name)
+      temp_list$complex_partners[[which]] <- c(temp_list$complex_partners[[which]],list(complex[[j]]$members))
+    }
+  }
+  if(all(sapply(temp_list$complex_names,function(x){all(is.null(x))}))){next}
+  names(temp_list$complex_names) <- names(temp_list$complex_partners) <- temp_list$gene_id
+  # temp_list2 <- temp_list
+  # temp_list2$complex_names <- NULL
   
-  ## transcript length density + barcode plot
-  df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
-  df <- unique(df[,c("ensembl_gene_id", "transcript_length")])
+  temp_list$complex_partners_concat <- sapply(temp_list$complex_partners,function(x){sapply(x, paste,collapse=",")})
+  temp_list$complex_partners_count <- lapply(temp_list$complex_partners,function(x){sapply(x,length)})
   
-  temp_name <- paste0(chrom_subset_name, ": ", "transcript_length density")
-  ggl[[temp_name]] <- ggplot(df, aes(x=log10(transcript_length)))+
-    ggtitle(temp_name)+
-    geom_density(alpha=0.5)
-  
-  temp_name <- paste0(chrom_subset_name, ": ", "transcript_length barcode")
-  ggl[[temp_name]] <-  ggplot(df, aes(x=log10(transcript_length),xend=log10(transcript_length), y=0,yend=1))+
-    ggtitle(temp_name)+
-    geom_segment(alpha=0.5)+
-    coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
-    barcode_theme
-   
-  
-  
-  ## exon length  plot
-  df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
-  #df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, sample(unique(gene_sets$genes_all$ensembl_gene_id),45) )),]
-  df$exon_length <- df$exon_chrom_end - df$exon_chrom_start
-  df$gene_factor_num <- as.numeric(as.factor(df$ensembl_gene_id))
-  temp_name <- paste0(chrom_subset_name, ": ", "exon_length")
-  ggl[[temp_name]] <- ggplot(df, aes(x=log10(exon_length),y=gene_factor_num))+
-    ggtitle(temp_name)+
-    geom_point(fill="grey20") +
-    coord_cartesian( xlim = c(1, 4))+
-    barcode_theme
-  
-  
-  ## exon count plot
-  temp_df <- as.data.frame(table(df$ensembl_transcript_id))
-  colnames(temp_df)[1] <- "ensembl_transcript_id"
-  colnames(temp_df)[2] <- "exon_count"
-  df <- merge(df, temp_df, sort=FALSE)
-  
-  ## test 2d plot of exon count by min size
-  
-  temp <- split(df$exon_length, df$ensembl_transcript_id)
-  temp <- sapply(temp, function(x) rank(-x, ties.method = "last"))
-  df$exon_length_rank <- unsplit(temp, df$ensembl_transcript_id)
-  
-  temp <- split(df$exon_length, df$exon_length_rank) 
-  temp <- sapply(temp, sort, decreasing=T)
-  temp <- melt(temp)
-  temp2 <- split(temp$value, temp$L1)
-  num_genes <- length(unique(df$ensembl_gene_id))
-  temp2 <- sapply(temp2, function(x) (1:length(x))/num_genes )
-  temp2 <- unsplit(temp2, temp$L1)
-  temp$percentile <- temp2
-  temp$L1 <- as.numeric(temp$L1)
-  temp <- temp[order(temp$L1, temp$percentile),]
-  temp$L1 <- as.factor(temp$L1)
-  colnames(temp) <- c("exon_length","exon_rank_by_length","percentile")
-  temp_name <- paste0(chrom_subset_name, ": ", "genes_w_N_exons_of_size_or_greater")
-  ggl[[temp_name]] <- ggplot(temp, aes(log10(exon_length), percentile, group=exon_rank_by_length, color=exon_rank_by_length))+
-    ggtitle(temp_name)+
-    geom_line()
-  
-  temp <- split(df$rank, df$ensembl_transcript_id)
-  temp <-sapply(temp, function(x) order(-x))
-  temp <- unsplit(temp, df$ensembl_transcript_id)
-  df$rank_from_end <- temp
-  temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank")
-  ggl[[temp_name]] <- ggplot(df, aes(rank, log10(exon_length) ))+
-    ggtitle(temp_name)+
-    geom_point(alpha=0.5)
-  temp_name <- paste0(chrom_subset_name, ": ", "exon_length v rank_from_end")
-  ggl[[temp_name]] <- ggplot(df, aes(rank_from_end, log10(exon_length) ))+
-    ggtitle(temp_name)+
-    geom_point(alpha=0.5)
-  
+  temp_df <- melt(temp_list$complex_names[!sapply(temp_list$complex_names,is.null)], value.name="complex_name")
+  temp_df_2 <- melt(temp_list$complex_partners_concat[!sapply(temp_list$complex_names,is.null)], value.name="complex_partners")
+  temp_df <- cbind(temp_df, temp_df_2[,1,drop=F])
+  temp_df_2 <- melt(temp_list$complex_partners_count[!sapply(temp_list$complex_names,is.null)], value.name="complex_partner_count")
+  temp_df <- cbind(temp_df, temp_df_2[,1,drop=F])
+  colnames(temp_df)[which(colnames(temp_df)=="L1")] <- "ensembl_gene_id"
+  temp_df <- cbind(temp_df, data.frame(complex_count=as.numeric(table(temp_df$ensembl_gene_id)[temp_df$ensembl_gene_id])))
+  temp_df$chrom_subset_name <- chrom_subset_name
+  df <- rbind(df, temp_df)
 }
 
-dirs$gene_arch_summary_figs <- paste0(dirs$figures,"gene_arch_summary_figures/")
-if(!dir.exists(dirs$gene_arch_summary_figs)){dir.create(dirs$gene_arch_summary_figs)}
-for(i in 1:length(ggl)){
+
+ggl <- list()
+ggl[["complex_partner_count"]] <- ggplot(df, aes(x=complex_partner_count))+
+  geom_histogram(bins=100, alpha=0.7, fill="grey20")+
+  theme_classic()+
+  theme(strip.text.y = element_text(angle = 0),
+        panel.border = element_rect(fill=NA,color="grey50"))+
+  facet_grid(chrom_subset_name ~ ., scales="free_y")
+
+ggl[["complex_count"]] <- ggplot(unique(df[,c("ensembl_gene_id",
+                                              "complex_count",
+                                              "chrom_subset_name")]),
+                                 aes(x=complex_count))+
+  geom_histogram(bins=100, alpha=0.7, fill="grey20")+
+  theme_classic()+
+  theme(strip.text.y = element_text(angle = 0),
+        panel.border = element_rect(fill=NA,color="grey50"))+
+  facet_grid(chrom_subset_name ~ ., scales="free_y")
   
-  temp_filename <- paste0(dirs$gene_arch_summary_figs,names(ggl)[i],".png")
-  temp_filename <- str_replace_all(temp_filename,"[ \t:]","_")
-  w <- 7
-  h <- ifelse(grepl("barcode", temp_filename), 3, 5)
-  ggsave(temp_filename, ggl[[i]], device = "png", width=w, height=h)
-}
+
+filename <- paste0(dirs$figures, "complex_partner_count__partition_by_chromModType.png")
+ggsave(filename, ggl$complex_partner_count, height = 6, width =8, units="in" )
+filename <- paste0(dirs$figures, "complex_count__partition_by_chromModType.png")
+ggsave(filename, ggl$complex_count, height = 6, width =8, units="in")
+```
+
+```{r, consider gene_families level analyses }
+## https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/csv/genefamily_db_tables/
 
 ```
+
 
 ```{r, look at basic disease association statistics }
 
@@ -289,54 +316,3 @@ for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 }
 ```
 
-```{r, DRAFT extract protein complex associations}
-
-
-### xml structure --- dissect xml in R to recapitulate each complex and it's member species
-files$human_complexes <- paste0(dirs$temp_data,"human_complexes.zip")
-#download.file("http://ftp.ebi.ac.uk/pub/databases/intact/complex/current/psi30/human.zip", files$human_complexes )
-dirs$human_complexes <- str_remove(files$human_complexes,".zip")
-#system(paste0("unzip ",files$human_complexes, " -d ", dirs$temp_data))
-#system(paste0("mv ", dirs$temp_data, "human ", dirs$human_complexes))
-
-temp_files <- list.files(dirs$human_complexes, full.names = T)
-complex <- list()
-i = 1
-for(f in temp_files){
-  if( i %% 20 ==1 ){print(paste0(basename(f),": ",i, " of ", length(temp_files)))}
-  complex_metrics <- xmlParse(f)
-  complex_metrics <- xmlToList(complex_metrics)
-  i <- i+1
-  
-  complex_name <- complex_metrics$entry$interactionList$abstractInteraction$names$shortLabel
-  complex_id <- paste0(complex_metrics$entry$interactionList$abstractInteraction$xref$primaryRef,collapse="__")
-  complex[[complex_name]] <- list(name = complex_name,
-                                  id = complex_id,
-                                  members = c())
-  for(interactor in complex_metrics$entry$interactorList){
-    temp <- sapply(interactor$xref, function(x){paste0(x,collapse="__")} )
-    temp <- temp[grep("ENSG.*gene",temp)]
-    if(length(temp)==0){next}
-    complex[[complex_name]]$members <- c(complex[[complex_name]]$members,
-                                         str_extract(temp,"ENSG[0-9]*"))
-  }  
-}
-
-### FOR EACH CHROM MODIFIER -> ID NUM OF COMPLEX SPECIES AND THEIR RESPECTIVE NUMBER OF TOTAL UNIQUE SUBUNITS ID'D
-### PLOT SUMMARY DISTRIBUTION FOR ALL GENES
-### BARCODE PLOT
-
-
-# ggplot(df, aes(log2(transcript_length, )))+
-#   geom_histogram(bins=500, alpha=0.7, fill="grey20")+
-#   coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
-#   barcode_theme
-    #theme_bw()+
-
-
-```
-
-```{r, consider gene_families level analyses }
-## https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/csv/genefamily_db_tables/
-
-```
