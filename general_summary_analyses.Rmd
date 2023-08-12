@@ -276,43 +276,69 @@ ggsave(filename, ggl$complex_count, height = 6, width =8, units="in")
 
 ```
 
+### basic disease association statistics
 
-```{r, look at basic disease association statistics }
+```{r, gnomad knockout/knockdown inheritance mode }
 
 ### look at pLI
 
 temp <- tempfile()
+#For information on constraint, see The mutational constraint spectrum quantified from variation in 141,456 humans. Nature 581, 434–443 (2020). Descriptions of the fields in these files can be found in the Supplementary Dataset 11 section on pages 74-77 of the Supplementary Information.
 download.file("https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz",temp)
 lof_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
 
-temp <- tempfile()
-download.file("http://geneontology.org/gene-associations/goa_human_complex.gaf.gz",temp)
-go_complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+# temp <- tempfile()
+# download.file("http://geneontology.org/gene-associations/goa_human_complex.gaf.gz",temp)
+# go_complex_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
 
-ggl2 <- list()
-for(i in 14){ #  1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
+df <- data.frame(ensembl_gene_id = character(),
+                 ensembl_transcript_id = character(),
+                 pLI = character(),
+                 pRec  = numeric(),
+                 pNull = numeric(),
+                 chrom_subset_name = character())
+### will convert df to percentile to visualize for each group proportion with >99%, >90%, >50%, >10%, >1%, <1%
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  ## get current subset of genes
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]]
   chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
-  if(length(chrom_subset)==0){next}
-  
-  df <- lof_metrics[which(is.element(lof_metrics$gene_id, chrom_subset)),] 
-  id_cols <- c("gene","gene_id","gene_type")
-  var_cols <- c("oe_mis","oe_syn","oe_lof","no_lofs","obs_het_lof","obs_hom_lof", "pLI","oe_lof_upper","syn_z","mis_z","lof_z")
-  df_melt <- melt(df, id.vars=id_cols, measure.vars = var_cols)
-  
-  temp_name <- paste0(chrom_subset_name, ": ", "gene_length density")
-  ggplot(df_melt[grep("oe", df_melt$variable),],aes(x=variable, y=value))+
-    geom_violin() 
-  ggplot(df_melt[grep("_z", df_melt$variable),],aes(x=variable, y=value))+
-    geom_violin()
-  ggplot(df_melt[grep("pLI", df_melt$variable),],aes(y=value))+
-    geom_histogram()
-  ggplot(df_melt[grep("oe_lof_upper", df_melt$variable),],aes(y=value))+
-    geom_histogram()
-  
-  
-  ### GET all associated with Mendelian disorder (e.g. v pLI)
-
+  which <- which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset) &
+                   is.element(gene_sets$genes_all_transcript$external_gene_name, lof_metrics$gene)) 
+  temp_map <- unique(gene_sets$genes_all_transcript[which, c("ensembl_gene_id","external_gene_name")])
+  if(nrow(temp_map)==0){next}
+  ## map current subset to table with exon info
+ 
+  temp_df <- merge(temp_map, lof_metrics, by.x="external_gene_name", by.y="gene") 
+  temp_df <- unique(temp_df[,c("external_gene_name", "ensembl_gene_id","pLI","pRec","pNull")])
+  temp_df$chrom_subset_name <- chrom_subset_name
+  df <- rbind(df, temp_df)
 }
+raw_df <- df
+temp_probs <-  rev(c(0.99,0.90,0.50,0.10,0.01,0))
+df <- merge(data.frame(prob = temp_probs),
+            data.frame(inheritance = c("pLI","pRec","pNull") ))
+df <- merge(df,data.frame(chrom_subset_name = unique(raw_df$chrom_subset_name) ))
+df$prop <- -1
+for(i in 1:nrow(df)){
+  prob <- df$prob[i]
+  chrom_subset_name <- df$chrom_subset_name[i]
+  inh <- df$inheritance[i]
+  
+  temp <- raw_df[which(raw_df$chrom_subset_name==chrom_subset_name),inh]
+  df$prop[i] <-  sum(temp >= prob,na.rm = T)/ length(temp)
+}
+df$prob <- factor(df$prob, levels = temp_probs)
+ggl <- list()
+ggl[["inheritance"]] <- ggplot(df, aes(x=inheritance, fill=prob, y=prop))+
+  geom_col(stat="identity", position=position_identity(), width = 0.99,)+
+  scale_fill_manual(values=c("lightblue1","lightblue2","lightblue3","lightblue4","grey30","grey20"))+
+  theme_classic()+
+  theme(strip.text.y = element_text(angle = 0))+
+  facet_grid(chrom_subset_name ~ .)
+
+filename <- paste0(dirs$figures, "pLI_pNull_pRec_by_chromModType.png")
+ggsave(filename, ggl$inheritance, height = 6, width = 5, units="in" )
+
+
 ```
 
