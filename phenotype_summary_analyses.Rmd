@@ -140,3 +140,491 @@ ggsave(filename, ggl$mendelian, height = 6, width = 5, units="in" )
 
 
 ```
+
+
+```{r, test hpo enrichments}
+## for each HPO, test enrichment of chrom modifiers in set
+## plot by signif and OR, add labels (padj by bonferroni)
+
+
+
+which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_lb=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_ub=numeric(length(ontos$hpo$ont$id)),
+                          num_chrom_associated=numeric(length(ontos$hpo$ont$id)),
+                          num_non_chrom_associated=numeric(length(ontos$hpo$ont$id)))
+
+for(i in 1:length(ontos$hpo$ont$id)){
+  if(i %% 1000 == 1){print(i)}
+  hps <- c(ontos$hpo$ont$id[i],ontos$hpo$ont$descendants[[i]])
+  which <- which(is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+    ### Use all genes or only those with some HP association ?
+  which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+  ## chrom and hp
+  
+  ## chrom and not hp
+  ## not chrom and hp
+  ## not chrom and not hp
+  
+  temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+  
+  ## Odds Ratio
+  temp_res_df$p.value[i] <- temp_res$p.value
+  temp_res_df$odds_ratio[i] <- temp_res$estimate
+  temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
+  temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
+  temp_res_df$num_chrom_associated[i] <- temp_chrom_hp
+  temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_hp 
+}
+
+## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
+## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
+
+
+which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+onto <- ontos$hpo$ont
+
+onto$is_signif <- rep(F,length(onto$id))
+for( layer in 1:max(onto$height)){
+  print(paste0("layer is: ",layer ))
+  els_in_layer <- which(onto$height==layer)
+  i = 1
+  for( el in els_in_layer ){
+    if(i %% 250 == 0){print(i)}
+    i <- i+1
+    hps <-  c(onto$id[el],onto$descendants[[el]])
+  
+    which <- which(is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+      ### Use all genes or only those with some HP association ?
+    which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+    
+    temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+    
+    is_signif <- temp_res$p.value < 0.05
+    if(!is_signif){next}
+    ## get list of signif children - these form the mask set.. 
+    ## actually.. probs want all signif descendants? Probs don't
+    ## need to deal with children of signif children, but children of
+    ## insignif children may themselves have substantial signal/ be signif...
+    ## and then drive association at later ancestor level.. 
+    
+    #children_subset <- which(is.element(onto$id, onto$children[[el]]))
+    
+    # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
+    # 
+    # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
+    # signif_descendants <- onto$id[which_children_signif] 
+    # signif_descendants <- signif_descendants[which(!is.element(signif_descendants,onto$id[el]))] # remove _self_ from descendants
+    
+    signif_descendants <- get_mask_set(onto$id[el], onto)
+    
+    if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
+      for( child in signif_descendants){
+        hps <- onto$id[el] ## want to retain any that are directly associated with _self_.. 
+        ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
+        ## only include most specific instance and NOT also all ancestors of that instance ..
+        for( other_child in signif_descendants){
+          if( other_child == child){next}
+          hps <- c(hps, onto$descendants[[which(onto$id==other_child)]])
+        } 
+  
+        which <- which(is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+      
+          ### Use all genes or only those with some HP association ?
+        which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+        
+        temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                      c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+        is_signif <- temp_res$p.value < 0.05 
+        if(!is_signif){break}
+      }
+      
+    }
+    onto$is_signif[el] <- is_signif
+  }
+}
+
+
+temp_df <- cbind(data.frame(id=onto$id, name=onto$name, is_signif=onto$is_signif,
+                            height=onto$height, depth=onto$depth),
+                 temp_res_df)
+rownames(temp_df) <- temp_df$id
+
+ontos$hpo$chrom_enrichments <- temp_df
+
+filename <- paste0(dirs$tables,"chrom_modifiers_HPO_enrichments.csv")
+write.csv(ontos$hpo$chrom_enrichments, file=filename)
+
+
+### want to be able to get all most specific descendants... plot as a tree or hierarchy
+### networkd3
+
+library(igraph)
+library(ggraph)
+library(ggiraph)
+
+onto <- ontos$hpo$ont
+temp_df <- ontos$hpo$chrom_enrichments
+## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
+names(onto$parents) <- onto$id
+temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
+colnames(temp_edges) <- c("from","to")
+temp_edges$edge_type <- "is_a"
+temp_vertices <- onto$id
+
+## select subset of hpo ids to plot
+phen_names <- c("Abnormal heart morphology", "Abnormal hair morphology")
+for(phen_name in phen_names){
+  which <- which(onto$name==phen_name)
+  ids <- c(onto$id[which], onto$descendants[[which]])
+  
+  desc_sum_table <- get_desc_summary_table(onto$id[which],onto)
+  desc_sum_table <- merge(desc_sum_table, ontos$hpo$chrom_enrichments)
+  desc_sum_table <- desc_sum_table[,grep("parents|children|relations|is_obsolete|descendants",colnames(desc_sum_table),invert = T)]
+  desc_sum_table <- desc_sum_table[order(desc_sum_table$level),]
+
+  filename <- paste0(dirs$tables,str_replace(onto$id[which],":","_"),"_desc_summ_table.csv")
+  write.csv(desc_sum_table, file=filename)
+  
+  
+  desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==phen_name)], onto,
+                                 descendent_relations =  "has_part(SUPP_INV(part_of))",
+                                 ascendent_relations = "part_of",
+                                 max_level = 4)
+  which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
+                           desc_sum_table$num_non_chrom_associated != 0) 
+  desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
+                               desc_sum_table[which_assoc,which(colnames(desc_sum_table)!="level")],
+                               by.x="term", by.y="id"))
+  
+  
+  desc_sum_tree_merge <- desc_sum_tree_merge[,c(2,1,3:ncol(desc_sum_tree_merge))]
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="height")] <- "_height_"
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="name")] <- "_name_"
+  desc_sum_tree_merge$size <- log2(desc_sum_tree_merge$num_chrom_associated + 1)+1
+  desc_sum_tree_merge$signif <- signif(-log10(desc_sum_tree_merge$p.value),2)
+  desc_sum_tree_merge$signif[which(abs(desc_sum_tree_merge$signif) < 1e-10)] <- 0
+  temp_colors <- colorRamp(c("white","red"))(desc_sum_tree_merge$signif / max(desc_sum_tree_merge$signif))
+  colors <- rgb(temp_colors / 255)
+  desc_sum_tree_merge$color <- colors 
+  desc_sum_tree_merge$term_parent <- desc_sum_tree_merge$`_name_`[match(
+    desc_sum_tree_merge$term_parent, desc_sum_tree_merge$term 
+  )]
+  desc_sum_tree_merge$term <- desc_sum_tree_merge$`_name_`
+  
+  temp_html_plot <- collapsibleTreeNetwork(
+    desc_sum_tree_merge,
+    attribute = "signif",
+    fill = "color", 
+    nodeSize = "size",
+    collapsed = FALSE,
+    zoomable = FALSE
+  )
+
+  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"HPO_",
+                                                      str_replace_all(phen_name," ","_"),"_ctn.html"))
+  
+}
+
+```
+
+```{r, experimental ontology layered analysis, uberon}
+
+
+## for each UBERON, test enrichment of chrom modifiers in set
+## plot by signif and OR, add labels (padj by bonferroni)
+
+
+which <- which(is.element(onto_maps$HPO_UBERON_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- onto_maps$HPO_UBERON_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_UBERON_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+temp_chrom <- temp_chrom[complete.cases(temp_chrom),]
+temp_not_chrom <- temp_not_chrom[complete.cases(temp_not_chrom),]
+temp_res_df <- data.frame(p.value=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio_lb=numeric(length(ontos$uberon$ont$id)),
+                          odds_ratio_ub=numeric(length(ontos$uberon$ont$id)),
+                          num_chrom_associated=numeric(length(ontos$uberon$ont$id)),
+                          num_non_chrom_associated=numeric(length(ontos$uberon$ont$id)))
+
+#ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INVERSE)"))
+
+# t1 <- Sys.time()
+for(i in 1:length(ontos$uberon$ont$id)){
+  # t2 <- Sys.time()
+  # print(paste(i,":",signif(t2-t1,2), units(t2-t1)))
+  # t1 <- t2
+  if(i %% 500 == 1){print(i)}
+  
+  ### this is slow for all uberon terms ~~ 1+ hrs guessing ... parallelize ? or speed up function
+  ### probably add a add_descendants function to add a descendants element - will blow up size of ontology but speed of access probs more important +
+  ### should be able to make dynamically to further speed up....
+  #ubs <- get_descendants_plus(ontos$uberon$ont$id[i], ontos$uberon$ont,
+   #                           descendant_relations = c("has_part","has_part(SUPP_INVERSE)"))
+  ubs <- ontos$uberon$ont$descendants[[i]]
+  
+  which <- which(is.element(temp_chrom$UBERON_ID, ubs))
+  temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
+  temp_not_chrom_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+    ### Use all genes or only those with some HP association ?
+  which <-  which(!is.element(temp_chrom$UBERON_ID, hps))
+  temp_chrom_not_ub <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_not_chrom$UBERON_ID, hps))
+  temp_not_chrom_not_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+  ## chrom and hp
+  
+  ## chrom and not hp
+  ## not chrom and hp
+  ## not chrom and not hp
+  
+  temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
+                                  c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
+  
+  ## Odds Ratio
+  temp_res_df$p.value[i] <- temp_res$p.value
+  temp_res_df$odds_ratio[i] <- temp_res$estimate
+  temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
+  temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
+  temp_res_df$num_chrom_associated[i] <- temp_chrom_ub
+  temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_ub 
+}
+
+
+## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
+## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
+
+
+
+
+
+
+which <- which(is.element(onto_maps$HPO_UBERON_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- onto_maps$HPO_UBERON_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_UBERON_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+temp_chrom <- temp_chrom[complete.cases(temp_chrom),]
+temp_not_chrom <- temp_not_chrom[complete.cases(temp_not_chrom),]
+
+onto <- ontos$uberon$ont
+
+onto$is_signif <- rep(F,length(onto$id))
+for( layer in 1:max(onto$height)){
+  print(paste0("layer is: ",layer ))
+  els_in_layer <- which(onto$height==layer)
+  i = 1
+  for( el in els_in_layer ){
+    if(i %% 250 == 0){print(i)}
+    i <- i+1
+    ubs <- c(onto$id[el],onto$descendants[[el]])
+
+    which <- which(is.element(temp_chrom$UBERON_ID, ubs))
+    temp_chrom_ub <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
+    temp_not_chrom_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+      ### Use all genes or only those with some HP association ?
+    which <-  which(!is.element(temp_chrom$UBERON_ID, ubs))
+    temp_chrom_not_ub <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <-  which(!is.element(temp_not_chrom$UBERON_ID, ubs))
+    temp_not_chrom_not_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+    temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
+                                  c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
+
+    is_signif <- temp_res$p.value < 0.05
+    if(!is_signif){next}
+    ## get list of signif children - these form the mask set..
+    ## actually.. probs want all signif descendants? Probs don't
+    ## need to deal with children of signif children, but children of
+    ## insignif children may themselves have substantial signal/ be signif...
+    ## and then drive association at later ancestor level..
+
+    #children_subset <- which(is.element(onto$id, onto$children[[el]]))
+
+    # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
+    #
+    # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
+    # signif_descendants <- onto$id[which_children_signif]
+    # signif_descendants <- signif_descendants[which(!is.element(signif_descendants,onto$id[el]))] # remove _self_ from descendants
+
+    ### NEED TO UPDATE get_mask_set TO WORK WITH OTHER TRANSITIVE RELATIONS
+    signif_descendants <- get_mask_set(onto$id[el], onto)
+
+    if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
+      for( child in signif_descendants){
+        ubs <- onto$id[el] ## want to retain any that are directly associated with _self_..
+        ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
+        ## only include most specific instance and NOT also all ancestors of that instance ..
+        for( other_child in signif_descendants){
+          if( other_child == child){next}
+          ubs <- c(ubs, onto$descendants[[which(onto$id==other_child)]])
+        }
+
+        which <- which(is.element(temp_chrom$UBERON_ID, ubs))
+        temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <- which(is.element(temp_not_chrom$UBERON_ID, ubs))
+        temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+          ### Use all genes or only those with some HP association ?
+        which <-  which(!is.element(temp_chrom$UBERON_ID, ubs))
+        temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <-  which(!is.element(temp_not_chrom$UBERON_ID, ubs))
+        temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+        temp_res <- fisher.test(x=cbind(c(temp_chrom_ub, temp_chrom_not_ub),
+                                      c(temp_not_chrom_ub, temp_not_chrom_not_ub)))
+        is_signif <- temp_res$p.value < 0.05
+        if(!is_signif){break}
+      }
+
+    }
+    onto$is_signif[el] <- is_signif
+  }
+}
+temp_df <- cbind(data.frame(id=onto$id, name=onto$name,
+                            height=onto$height, depth=onto$depth, is_signif=onto$is_signif),
+                 temp_res_df)
+rownames(temp_df) <- temp_df$id
+ontos$uberon$chrom_enrichments <- temp_df
+
+filename <- paste0(dirs$tables,"chrom_modifiers_UBERON_enrichments.csv")
+write.csv(ontos$uberon$chrom_enrichments, file=filename)
+
+### want to be able to get all most specific descendants... plot as a tree or hierarchy
+### networkd3
+
+library(igraph)
+library(ggraph)
+library(ggiraph)
+
+onto <- ontos$uberon$ont
+temp_df <- ontos$uberon$chrom_enrichments
+names(onto$parents) <- onto$id
+## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
+temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
+colnames(temp_edges) <- c("from","to")
+temp_edges$edge_type <- "is_a"
+
+ascendent_relations = c("has_part(SUPP_INV(part_of))")
+for(i in 1:length(onto$id)){
+  if(i %% 2e3 == 1){print(i)}
+  rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
+  rs <- onto$relations[[i]]$relation[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
+  if(length(rids)==0){next}
+  temp_edges <- rbind(temp_edges, 
+                        data.frame(from=onto$id[i],to=rids,edge_type=rs))
+}
+temp_edges <- unique(temp_edges)
+temp_vertices <- onto$id
+
+## select subset of hpo ids to plot
+ids_l <- list()
+ids_l$heart <- ids <- c(onto$id[which(onto$name=="heart")], onto$descendants[[which(onto$name=="heart")]])
+ids_l$brain <- intersect(c(onto$id[which(onto$name=="brain")], onto$descendants[[which(onto$name=="brain")]]),
+                 onto$id[which(onto$height>=4)])
+
+# ids <- unique(c(onto$children[[which(onto$name=="cardiac chamber")]],
+#                 onto$children[[which(onto$name=="cardiac septum")]],
+#                 onto$children[[which(onto$name=="cardiac valve")]]))
+
+for(ids_name in names(ids_l)){
+  ids <- ids_l[[ids_name]]
+  ids <- ids[which(!is.na(ids))]
+  which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
+  temp_edges_subset <- unique(temp_edges[which,c("from","to")])
+  
+  
+  
+  desc_sum_table <- get_desc_summary_table(onto$id[which(onto$name == ids_name)],onto, transitive_relations = "has_part(SUPP_INV(part_of))")
+  desc_sum_table <- merge(desc_sum_table, ontos$uberon$chrom_enrichments)
+  desc_sum_table <- desc_sum_table[,grep("parents|children|relations|is_obsolete|descendants",colnames(desc_sum_table),invert = T)]
+  desc_sum_table <- desc_sum_table[order(desc_sum_table$level),]
+
+  filename <- paste0(dirs$tables,str_replace(onto$id[which(onto$name == ids_name)],":","_"),"_desc_summ_table.csv")
+  write.csv(desc_sum_table, file=filename)
+  
+  
+  ############
+  desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==ids_name)], onto,
+                                 descendent_relations =  "has_part(SUPP_INV(part_of))",
+                                 ascendent_relations = "part_of",
+                                 max_level = 4)
+  which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
+                           desc_sum_table$num_non_chrom_associated != 0) 
+  desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
+                               desc_sum_table[which_assoc,which(colnames(desc_sum_table)!="level")],
+                               by.x="term", by.y="id"))
+  
+  
+  desc_sum_tree_merge <- desc_sum_tree_merge[,c(2,1,3:ncol(desc_sum_tree_merge))]
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="height")] <- "_height_"
+  colnames(desc_sum_tree_merge)[which(colnames(desc_sum_tree_merge)=="name")] <- "_name_"
+  desc_sum_tree_merge$size <- log2(desc_sum_tree_merge$num_chrom_associated + 1)+1
+  desc_sum_tree_merge$signif <- signif(-log10(desc_sum_tree_merge$p.value),2)
+  desc_sum_tree_merge$signif[which(abs(desc_sum_tree_merge$signif) < 1e-10)] <- 0
+  temp_colors <- colorRamp(c("white","red"))(desc_sum_tree_merge$signif / max(desc_sum_tree_merge$signif))
+  colors <- rgb(temp_colors / 255)
+  desc_sum_tree_merge$color <- colors 
+  desc_sum_tree_merge$term_parent <- desc_sum_tree_merge$`_name_`[match(
+    desc_sum_tree_merge$term_parent, desc_sum_tree_merge$term 
+  )]
+  desc_sum_tree_merge$term <- desc_sum_tree_merge$`_name_`
+  
+  temp_html_plot <- collapsibleTreeNetwork(
+    desc_sum_tree_merge,
+    attribute = "signif",
+    fill = "color", 
+    nodeSize = "size",
+    collapsed = FALSE,
+    zoomable = FALSE
+  )
+
+  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"UBERON_",ids_name,"_ctn.html"))
+  
+  ############
+
+  ##################
+}
+#c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
+```
+
+
