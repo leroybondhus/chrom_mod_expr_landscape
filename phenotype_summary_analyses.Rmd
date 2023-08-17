@@ -146,8 +146,6 @@ ggsave(filename, ggl$mendelian, height = 6, width = 5, units="in" )
 ## for each HPO, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
 
-
-
 which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
            gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
 temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
@@ -174,12 +172,7 @@ for(i in 1:length(ontos$hpo$ont$id)){
   which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
   temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
   
-  ## chrom and hp
-  
-  ## chrom and not hp
-  ## not chrom and hp
-  ## not chrom and not hp
-  
+
   temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
                                   c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
   
@@ -235,14 +228,7 @@ for( layer in 1:max(onto$height)){
     ## insignif children may themselves have substantial signal/ be signif...
     ## and then drive association at later ancestor level.. 
     
-    #children_subset <- which(is.element(onto$id, onto$children[[el]]))
-    
-    # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
-    # 
-    # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
-    # signif_descendants <- onto$id[which_children_signif] 
-    # signif_descendants <- signif_descendants[which(!is.element(signif_descendants,onto$id[el]))] # remove _self_ from descendants
-    
+
     signif_descendants <- get_mask_set(onto$id[el], onto)
     
     if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
@@ -296,20 +282,11 @@ library(igraph)
 library(ggraph)
 library(ggiraph)
 
-onto <- ontos$hpo$ont
-temp_df <- ontos$hpo$chrom_enrichments
-## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
-names(onto$parents) <- onto$id
-temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
-colnames(temp_edges) <- c("from","to")
-temp_edges$edge_type <- "is_a"
-temp_vertices <- onto$id
 
 ## select subset of hpo ids to plot
 phen_names <- c("Abnormal heart morphology", "Abnormal hair morphology")
 for(phen_name in phen_names){
   which <- which(onto$name==phen_name)
-  ids <- c(onto$id[which], onto$descendants[[which]])
   
   desc_sum_table <- get_desc_summary_table(onto$id[which],onto)
   desc_sum_table <- merge(desc_sum_table, ontos$hpo$chrom_enrichments)
@@ -351,12 +328,20 @@ for(phen_name in phen_names){
     fill = "color", 
     nodeSize = "size",
     collapsed = FALSE,
-    zoomable = FALSE
+    zoomable = FALSE,
+    width=1100,
+    height = 900
   )
 
-  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"HPO_",
-                                                      str_replace_all(phen_name," ","_"),"_ctn.html"))
+  htmlwidgets::saveWidget(temp_html_plot,
+                          file=paste0(dirs$figures,"HPO_",
+                                      str_replace_all(phen_name," ","_"),"_ctn.html"))
   
+  Sys.setenv("OPENSSL_CONF"="/dev/null")
+  webshot(paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn.html"),
+          paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn.png"),
+          vheight = 1000, vwidth = 1200 , zoom =1, delay=1.5)
+   
 }
 
 ```
@@ -393,7 +378,7 @@ for(i in 1:length(ontos$uberon$ont$id)){
   
   ### this is slow for all uberon terms ~~ 1+ hrs guessing ... parallelize ? or speed up function
   ### probably add a add_descendants function to add a descendants element - will blow up size of ontology but speed of access probs more important +
-  ### should be able to make dynamically to further speed up....
+  ### should be able to make dynamically to further speed up.... Speed ups done. Much faster ~ 5 min
   #ubs <- get_descendants_plus(ontos$uberon$ont$id[i], ontos$uberon$ont,
    #                           descendant_relations = c("has_part","has_part(SUPP_INVERSE)"))
   ubs <- ontos$uberon$ont$descendants[[i]]
@@ -430,11 +415,6 @@ for(i in 1:length(ontos$uberon$ont$id)){
 
 ## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
 ## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
-
-
-
-
-
 
 which <- which(is.element(onto_maps$HPO_UBERON_GENE$map$Ensembl_Gene_ID,
            gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
@@ -477,14 +457,6 @@ for( layer in 1:max(onto$height)){
     ## need to deal with children of signif children, but children of
     ## insignif children may themselves have substantial signal/ be signif...
     ## and then drive association at later ancestor level..
-
-    #children_subset <- which(is.element(onto$id, onto$children[[el]]))
-
-    # children_subset <- which(is.element(onto$id, get_descendants(onto$id[el],onto)))
-    #
-    # which_children_signif <- children_subset[which(onto$is_signif[children_subset])]
-    # signif_descendants <- onto$id[which_children_signif]
-    # signif_descendants <- signif_descendants[which(!is.element(signif_descendants,onto$id[el]))] # remove _self_ from descendants
 
     ### NEED TO UPDATE get_mask_set TO WORK WITH OTHER TRANSITIVE RELATIONS
     signif_descendants <- get_mask_set(onto$id[el], onto)
@@ -532,29 +504,9 @@ write.csv(ontos$uberon$chrom_enrichments, file=filename)
 ### want to be able to get all most specific descendants... plot as a tree or hierarchy
 ### networkd3
 
-library(igraph)
-library(ggraph)
-library(ggiraph)
-
-onto <- ontos$uberon$ont
-temp_df <- ontos$uberon$chrom_enrichments
-names(onto$parents) <- onto$id
-## this gives all is_a edges... need to get all part_of edges for uberon hpo is fine without
-temp_edges <- melt(onto$parents[which(!sapply(onto$parents, is.null))]) 
-colnames(temp_edges) <- c("from","to")
-temp_edges$edge_type <- "is_a"
-
-ascendent_relations = c("has_part(SUPP_INV(part_of))")
-for(i in 1:length(onto$id)){
-  if(i %% 2e3 == 1){print(i)}
-  rids <- onto$relations[[i]]$id[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
-  rs <- onto$relations[[i]]$relation[which(is.element(onto$relations[[i]]$relation, ascendent_relations))]
-  if(length(rids)==0){next}
-  temp_edges <- rbind(temp_edges, 
-                        data.frame(from=onto$id[i],to=rids,edge_type=rs))
-}
-temp_edges <- unique(temp_edges)
-temp_vertices <- onto$id
+# library(igraph)
+# library(ggraph)
+# library(ggiraph)
 
 ## select subset of hpo ids to plot
 ids_l <- list()
@@ -562,17 +514,7 @@ ids_l$heart <- ids <- c(onto$id[which(onto$name=="heart")], onto$descendants[[wh
 ids_l$brain <- intersect(c(onto$id[which(onto$name=="brain")], onto$descendants[[which(onto$name=="brain")]]),
                  onto$id[which(onto$height>=4)])
 
-# ids <- unique(c(onto$children[[which(onto$name=="cardiac chamber")]],
-#                 onto$children[[which(onto$name=="cardiac septum")]],
-#                 onto$children[[which(onto$name=="cardiac valve")]]))
-
 for(ids_name in names(ids_l)){
-  ids <- ids_l[[ids_name]]
-  ids <- ids[which(!is.na(ids))]
-  which <-which(is.element(temp_edges$from, ids) & is.element(temp_edges$to, ids))
-  temp_edges_subset <- unique(temp_edges[which,c("from","to")])
-  
-  
   
   desc_sum_table <- get_desc_summary_table(onto$id[which(onto$name == ids_name)],onto, transitive_relations = "has_part(SUPP_INV(part_of))")
   desc_sum_table <- merge(desc_sum_table, ontos$uberon$chrom_enrichments)
@@ -615,14 +557,22 @@ for(ids_name in names(ids_l)){
     fill = "color", 
     nodeSize = "size",
     collapsed = FALSE,
-    zoomable = FALSE
+    zoomable = FALSE,
+    width=1100,
+    height = 900
   )
 
-  htmlwidgets::saveWidget(temp_html_plot, file=paste0(dirs$figures,"UBERON_",ids_name,"_ctn.html"))
+  htmlwidgets::saveWidget(temp_html_plot,
+                          file=paste0(dirs$figures,"UBERON_",
+                                      str_replace_all(ids_name," ","_"),"_ctn.html"))
+  # library(webshot)
+  # webshot::install_phantomjs()
+  Sys.setenv("OPENSSL_CONF"="/dev/null")
+  webshot(paste0(dirs$figures,"UBERON_", str_replace_all(ids_name," ","_"),"_ctn.html"),
+          paste0(dirs$figures,"UBERON_", str_replace_all(ids_name," ","_"),"_ctn.png"),
+          vheight = 1000, vwidth = 1200 , zoom =1, delay=1.5)
+   
   
-  ############
-
-  ##################
 }
 #c("darkblue", "blue", "#aaaaff" ,"white", "#ffaaaa",  "red","red4", "grey20"))
 ```
