@@ -1,0 +1,50 @@
+---
+title: "ISL_brainspan_analyses"
+author: "Isabelle Liu"
+date: "2023-08-18"
+output: html_document
+---
+
+```{r, load in file}
+columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
+unique_structures <- unique(columns_meta$structure_name)
+
+uberon_names <- ontos$uberon$ont$name
+uberon_ids <- ontos$uberon$ont$id
+
+mapped_ids <- vector(mode = "character", length = length(unique_structures))
+
+
+for (i in 1:length(unique_structures)){
+  match = uberon_ids[grep(unique_structures[i], uberon_names)]
+  if(length(match) == 0){
+    mapped_ids[i] = "NA"
+  }
+  else{
+    mapped_ids[i] = uberon_ids[grep(unique_structures[i], uberon_names)]
+  }
+}
+
+# manually assign uberon ids for inexact matches
+mapped_ids[1] = "UBERON:0016540" # occipital neocortex --> occipital cortex
+mapped_ids[2] = "UBERON:0001384" # primary motor-sensory cortex (samples) --> primary motor cortex
+mapped_ids[3] = "UBERON:0006107" # amygdaloid complex --> basolateral amygdaloid nuclear complex
+mapped_ids[5] = "" # posterior (caudal) superior temporal cortex (area 22c) --> 
+mapped_ids[6] = "UBERON:0009841" # upper (rostral) rhombic lip --> upper rhombic lip
+mapped_ids[9] = "UBERON:0022438" # anterior (rostral) cingulate (medial prefrontal) cortex --> rostral anterior cingulate cortex
+mapped_ids[13] = "" # inferolateral temporal cortex (area TEv, area 20) --> 
+mapped_ids[14] = "UBERON:0002421" # hippocampus (hippocampal formation) --> hippocampal formation
+mapped_ids[15] = "" # ventrolateral prefrontal cortex
+mapped_ids[16] = "UBERON:0016530" # parietal neocortex --> parietal cortex
+mapped_ids[17] = "" # temporal neocortex --> 
+mapped_ids[18] = "" # primary auditory cortex (core) --> 
+mapped_ids[19] = "" # primary visual cortex (striate cortex, area V1/17) --> 
+mapped_ids[21] = "" # primary motor cortex (area M1, area 4) --> 
+mapped_ids[22] = "" # posteroventral (inferior) parietal cortex --> 
+mapped_ids[23] = "" # primary somatosensory cortex (area S1, areas 3,1,2) --> 
+mapped_ids[26] = "" # mediodorsal nucleus of thalamus --> 
+  
+struct_to_ids <- data.frame(unique_structures, mapped_ids)
+
+```
+
