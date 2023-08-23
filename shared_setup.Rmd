@@ -58,6 +58,11 @@ for(bioc_package in req_packages$biocmanager ){
 rm(req_packages)
 
 date <- format(Sys.time(),"%Y%m%d")
+
+
+library(webshot)
+#webshot::install_phantomjs()
+Sys.setenv("OPENSSL_CONF"="/dev/null") ## needed to get around phantomjs bug idk why ..
 ```
 
 ```{r, ontos helper functions}

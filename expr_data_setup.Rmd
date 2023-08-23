@@ -1,0 +1,384 @@
+---
+title: "expr_data_setup"
+author: "Leroy Bondhus"
+date: "2023-08-20"
+output: html_document
+---
+
+```{r}
+dataset_list <- list()
+registerDoParallel(detectCores()-2)
+files$temp_log <- paste0(dirs$temp_data,"temp.log")
+```
+
+
+```{r, encode human RNA}
+library(jsonlite)
+library(httr)
+
+# search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+# 
+search_query <- paste0("https://www.encodeproject.org/search/",
+                       "?type=Experiment&control_type!=*&status=released&perturbed=false",
+                       "&assay_title=polyA+plus+RNA-seq&assay_title=total+RNA-seq",
+                       "&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens",
+                       "&format=json&limit=all")
+#"https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
+query_result <- GET(search_query)
+query_result <- content(query_result , "text", encoding = "UTF-8")
+query_result <- fromJSON(query_result, flatten = T)
+query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
+
+##
+#data_list <- list()
+#foreach(simul_pars = simul_pars_list, .final = function(x) setNames(x, names(simul_pars_list)), .errorhandling = "pass") %dopar% {
+system(paste0("echo \"\" > ",files$temp_log))
+data_list <- foreach(i=1:nrow(query_table), .errorhandling = "pass") %dopar% {
+#for(i in 1:nrow(query_table)){
+  #if(i %% 5 == 0){print(i)}
+  system(paste0("echo \"processing: ",i, "\" >> ",files$temp_log))
+  target <- paste0("https://www.encodeproject.org/",
+                          query_table$accession[i],
+                          "/?frame=embedded&format=json")
+  target <- GET(target)
+  target_result <- content(target, "text", encoding = "UTF-8")
+  target_result <- fromJSON(target_result, flatten = TRUE)
+  temp_gene_anno <-  unique(target_result$files$genome_annotation)
+  temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
+  which <- which(target_result$files$file_format=="tsv" &
+                 target_result$files$output_type=="gene quantifications" &
+                 grepl(max(as.numeric(str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
+                       target_result$files$genome_annotation) &
+                 target_result$files$status == "released")
+  if(length(which)==0){next}
+  which_cols <- c("accession", "href","biosample_ontology",
+                "biological_replicates", "technical_replicates",
+                "biological_replicates_formatted", "donors",
+                "dataset")
+  gene_quant_files <- target_result$files[which,which_cols]
+  gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))] <- 
+    sapply(gene_quant_files[,which(unlist(lapply(gene_quant_files, is.list)))], paste )
+  target_coldata <- cbind(query_table[i,], gene_quant_files)
+  
+  for(j in 1:nrow(target_coldata)){
+    temp <- tempfile()
+    download.file(paste0("https://www.encodeproject.org/",target_coldata$href[j]), temp)
+    temp_data <- read.table(temp, skip = 0, header = TRUE, sep = "\t")
+    temp_data <- temp_data[grep("PAR_Y",temp_data$gene_id, invert=T),]
+    temp_list <- list(TPM = data.frame(TPM=temp_data$TPM),
+                      coldata = cbind(target_coldata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
+    rownames(temp_list$TPM) <- str_remove(temp_data$gene_id,"\\..*")
+  }
+  temp_list
+}
+
+data_list <- data_list[which(sapply(data_list, function(x){!all(names(x)==c("message","call"))}))]
+
+temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
+                                tpm_ncol=numeric(length=length(data_list)),
+                                coldata_nrow=numeric(length=length(data_list)))
+temp_rownames <- character()
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$coldata_nrow[i] <- nrow(data_list[[i]]$coldata)
+  temp_rownames <- unique(c(temp_rownames,rownames(data_list[[i]]$TPM)))
+}
+for(i in 1:length(data_list)){
+  temp_missing_rownames <- setdiff(temp_rownames, rownames(data_list[[i]]$TPM))
+  if(length(temp_missing_rownames)==0){next}
+  temp_df <- data.frame(TPM = rep(0, length(temp_missing_rownames)))
+  rownames(temp_df) <- temp_missing_rownames
+  data_list[[i]]$TPM <- rbind(data_list[[i]]$TPM, temp_df)
+}
+for(i in 1:length(data_list)){
+  temp_data_list_qc$tpm_nrow[i] <- nrow(data_list[[i]]$TPM)
+  temp_data_list_qc$tpm_ncol[i] <- ncol(data_list[[i]]$TPM)
+  temp_data_list_qc$coldata_nrow[i] <- nrow(data_list[[i]]$coldata)
+}
+#### fix dim mismatch issue for human data here ..... 
+if( nrow(unique(temp_data_list_qc)) != 1){stop("dimension mismatch between objects")}
+
+data_list_concat <- data_list[[1]]
+for(i in 2:length(data_list)){
+  data_list_concat$TPM <- cbind(data_list_concat$TPM, data_list[[i]]$TPM)
+  data_list_concat$coldata <- rbind(data_list_concat$coldata, data_list[[i]]$coldata)
+}
+data_list_concat$coldata <- as.data.frame(data_list_concat$coldata)
+
+dataset_list$ENCODE_HH <- list(mat = data_list_concat$TPM, coldata=data_list_concat$coldata)
+
+rm(data_list, query_result, query_table, temp_data, temp_df,
+   data_list_concat, temp_missing_rownames, search_query, temp_rownames)
+
+
+```
+
+```{r, embed in ontology}
+
+onto <- ontos$uberon$ont
+
+### is_a, part_of, develops_from ...
+
+#### development lineage building pseudocode
+### if x develops_from y , x --> y, else if x is_a y, go_to y, repeat. ##  
+### 
+### annotate ontology with is_a and part_of
+onto <- add_inverse_relation(onto, "develops_from","devolops_into(SUPP_INV(develops_from))")
+
+temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH$coldata$biosample_ontology,"UBERON.[0-9]*")
+temp_uberon_ids <- str_replace(temp_uberon_ids,"_",":")
+
+onto$encode_hh_cols <- vector("list", length(onto$id))
+for(i in 1:length(temp_uberon_ids)){
+  if(i %% 100 == 0){print(i)}
+  if(is.na(temp_uberon_ids[i])){next}
+  onto <- add_annotation(temp_uberon_ids[i], onto, "encode_hh_cols", i,
+                         transitive_relations = c("part_of", "is_a" ))
+}
+
+
+###
+save.image("./setup_w_expr_dat.RData")
+```
+
+
+
+```{r}
+
+
+```
+
+```{r collected functions used, include=FALSE}
+### slow with many samples ... prioritize for parallelization 
+calc_dot_product_similarity_matrix <- function(dat) {
+  dot_product_similarity_matrix <- matrix(0, nrow = ncol(dat), ncol = ncol(dat))
+  colnames(dot_product_similarity_matrix) <- colnames(dat)
+  rownames(dot_product_similarity_matrix) <- colnames(dat)
+  for(i in 1:ncol(dat)){
+    for(j in 1:ncol(dat)){
+      which_i <- which(!is.na(dat[,i])) ## ignore NAs
+      which_j <- which(!is.na(dat[,j])) ## ignore NAs
+      dot_product_similarity_matrix[i,j] <- sum(dat[which_i,i] * dat[which_j,j]) / (norm(dat[which_i,i],"2")*norm(dat[which_j,j],"2"))
+    }
+  }
+  return(dot_product_similarity_matrix)
+}
+
+### uses Equation 1. from paper 
+add_dist_to_parent <- function(dend, dist_to_parent=0){
+  ## note: distance to parent is fed in at the start of the function
+  attributes(dend) <- c(attributes(dend), dist_to_parent=dist_to_parent)
+  ## test if at leaf node
+  if(!is.null(attributes(dend)$leaf) && attributes(dend)$leaf){
+    return(dend)
+  }
+  for(i in 1:length(dend)){ ## length of dend should be number of child nodes
+    ## distance to parent is simply the difference in height between parent and child
+    dist_to_parent <- attributes(dend)$height - attributes(dend[[i]])$height 
+    dend[[i]] <- add_dist_to_parent(dend[[i]], 
+                                             dist_to_parent = dist_to_parent)
+  }
+  return(dend)
+}
+
+## this functions calculates and adds weights to dendrogram object using the 'dist_to_parent' attribute added previously
+## weight_of_parent parameter exists only for recursion and should not be manually adjusted without understanding it's function
+add_weights <- function(dend, weight_of_parent=0){
+  weight <- (attributes(dend)$dist_to_parent / attributes(dend)$members) + weight_of_parent 
+  attributes(dend) <- c(attributes(dend), weight=weight)
+  ## test if at leaf node
+  if(!is.null(attributes(dend)$leaf) && attributes(dend)$leaf){
+    return(dend)
+  }
+  for(i in 1:length(dend)){ ## length of dend should be number of child nodes
+    dend[[i]] <- add_weights(dend[[i]], weight_of_parent=weight)
+  }
+  return(dend)
+}
+
+## this function returns the weights from a dendrogram object that has a "weight" attribute at leaves. Also requires the order of the vector to return based on names of leaves
+get_weights <- function(dend, name_order){
+  weights <- setNames(get_leaves_attr(dend,"weight"),nm=get_leaves_attr(dend,"lab") )
+  weights <- weights[order(factor(names(weights),levels = name_order))]
+  return(weights)
+}
+
+
+# function to calculate weighted zscores given matrix and vector of weights. column names of the matrix and names of the weight vector must match
+calc_weighted_zscore_matrix <- function(mat, weights){
+  if(any( colnames(mat) != names(weights) )){stop("WARNING: mismatch in weights names and matrix colnames order")}
+  weighted_mat <- mat; weighted_mat[] <- 0
+  for (i in 1:length(weights)){
+    weighted_mat[,i] <- weights[i]*mat[,i]
+  }
+  weighted_means <- numeric(length = nrow(weighted_mat))
+  sum_of_weights <- sum(weights)
+  for (i in 1:nrow(weighted_mat)){
+    weighted_means[i] <- sum(weighted_mat[i,]) / sum_of_weights
+  }
+  weighted_var <- numeric(length=nrow(mat))
+  for (i in 1:nrow(mat)){
+    weighted_var[i] <- Hmisc::wtd.var(mat[i,],weights=weights)
+  }
+  weighted_sd <- sqrt(weighted_var)
+  for(i in 1:ncol(mat)){
+    mat[,i] <- (mat[,i]-weighted_means)/weighted_sd
+  }
+  weighted_zscores <- mat
+  return(weighted_zscores)
+}
+
+
+## only 1 similarity function tested for now, can make as list later
+similarity_func <- function(exp_mat){
+  weights <- setNames(rep(1,length(colnames(exp_mat))),colnames(exp_mat))
+  calc_dot_product_similarity_matrix(calc_weighted_zscore_matrix(exp_mat, weights))
+}
+
+## only 1 clustering fucntion tested for now, can make as a list later
+cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(hclust(as.dist(1-sim_mat), method = "average") ) ))}  
+
+```
+
+
+```{r}
+ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
+genes <- getBM(attributes=c('chromosome_name','start_position','end_position','hgnc_symbol', 'ensembl_gene_id','gene_biotype'),
+                 filters = list('biotype'=c('protein_coding','lincRNA')),
+                 mart = ensembl, useCache = F) 
+genes <- genes[which(is.element(genes$chromosome_name, c(1:22, "X", "Y", "MT")) & genes$ensembl_gene_id != "" ) ,]
+gene_sets$for_hh_expr <- genes
+rm(genes)
+```
+
+
+```{r}
+library(dendextend)
+
+# specificity_func <- specificity_measures$funcs[[measure]]
+# dot_sim <- similarity_func(exp_mat[,which])
+# sim_tree <- cluster_func(dot_sim)
+# weights <- get_weights(sim_tree, colnames(exp_mat)[which])
+# if(f_or_w == "flat"){weights[] <- 1}
+# balanced <- specificity_func(exp_mat[,which], weights)
+
+
+
+### sandox - determine reasonable summary analysis pipeline
+
+onto_name <- "mesoderm-derived structure"
+onto_id <- onto$id[which(onto$name == onto_name)]
+encode_hh_cols <- onto$encode_hh_cols[[which(onto$id==onto_id)]]
+
+mat <- dataset_list$ENCODE_HH$mat[,encode_hh_cols]
+coldat <- dataset_list$ENCODE_HH$coldata[encode_hh_cols,]
+colnames(mat) <- make.unique(coldat$accession)
+
+### select rows (e.g. remove mitochondria)
+which <- which(gene_sets$for_hh_expr$chromosome_name != "MT" )
+mat_cleaned <- mat[which(is.element(rownames(mat),
+                                    gene_sets$for_hh_expr$ensembl_gene_id[which])),]
+### normalize : re-calculate TPM, log10+1 transform, median normalize
+for(i in 1:ncol(mat_cleaned)){
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+  ## set all very low counts to zero to avoid variable read depth issues
+  mat_cleaned[,i] [which(mat_cleaned[,i]  < 1)] <- 0
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+}
+mat_cleaned <- log10(mat_cleaned+1)
+median_normalize <- TRUE
+if(median_normalize){
+  for(i in 1:ncol(mat_cleaned)){
+    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
+  }
+}
+
+### perform similarity reweighting 
+
+dot_sim <- similarity_func(mat_cleaned)
+colnames(mat_cleaned) <- make.unique(
+  dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name[encode_hh_cols])
+rownames(dot_sim) <- colnames(dot_sim) <-make.unique(
+  dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name[encode_hh_cols]) 
+
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(mat_cleaned))
+#### .... what we want here rn is also just a weighted mean and stdev for the ontology term (?)
+#### .... this branches off here from what specificty was about.. can also measure specificity but..
+#### .... not goal rn......
+# balanced <- calc_weighted_zscore_matrix(mat_cleaned, weights)
+
+weighted_means <- apply(mat_cleaned, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(mat_cleaned, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+
+
+
+```
+
+
+```{r}
+
+# mat <- dataset_list$ENCODE_HH$mat[,encode_hh_cols]
+# coldat <- dataset_list$ENCODE_HH$coldata[encode_hh_cols,]
+# colnames(mat) <- make.unique(coldat$accession)
+
+### select rows (e.g. remove mitochondria)
+which <- which(gene_sets$for_hh_expr$chromosome_name != "MT" )
+mat <- dataset_list$ENCODE_HH$mat
+coldat <- dataset_list$ENCODE_HH$coldata
+colnames(mat) <- make.unique(coldat$accession)
+
+mat_cleaned <- mat[which(is.element(rownames(mat),
+                                    gene_sets$for_hh_expr$ensembl_gene_id[which])),]
+### normalize : re-calculate TPM, log10+1 transform, median normalize
+for(i in 1:ncol(mat_cleaned)){
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+  ## set all very low counts to zero to avoid variable read depth issues
+  mat_cleaned[,i] [which(mat_cleaned[,i]  < 1)] <- 0
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+}
+mat_cleaned <- log10(mat_cleaned+1)
+median_normalize <- TRUE
+if(median_normalize){
+  for(i in 1:ncol(mat_cleaned)){
+    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
+  }
+}
+colnames(mat_cleaned) <- make.unique(
+  dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name)
+
+onto_name <- "mesoderm-derived structure"
+onto_id <- onto$id[which(onto$name == onto_name)]
+encode_hh_cols_1 <- onto$encode_hh_cols[[which(onto$id==onto_id)]]
+onto_name <- "endoderm-derived structure"
+onto_id <- onto$id[which(onto$name == onto_name)]
+encode_hh_cols_2 <- onto$encode_hh_cols[[which(onto$id==onto_id)]]
+onto_name <- "ectoderm-derived structure"
+onto_id <- onto$id[which(onto$name == onto_name)]
+encode_hh_cols_3 <- onto$encode_hh_cols[[which(onto$id==onto_id)]]
+### perform similarity reweighting 
+
+temp_mat <- mat_cleaned[,encode_hh_cols_1]
+dot_sim <- similarity_func(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+
+temp_mat <- mat_cleaned[,encode_hh_cols_2]
+dot_sim <- similarity_func(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+
+temp_mat <- mat_cleaned[,encode_hh_cols_3]
+dot_sim <- similarity_func(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+
+save.image("./post_wtd_onto_test.RData")
+```
