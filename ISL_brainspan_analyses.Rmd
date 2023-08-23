@@ -44,7 +44,7 @@ mapped_ids[22] = "UBERON:0006088" # posteroventral (inferior) parietal cortex --
 mapped_ids[23] = "UBERON:0008933" # primary somatosensory cortex (area S1, areas 3,1,2) --> primary somatosensory cortex
 mapped_ids[26] = "UBERON:0002739" # mediodorsal nucleus of thalamus --> medial dorsal nucleus of thalamus
   
-struct_to_ids <- data.frame(unique_structures, mapped_ids)
+struct_to_ids <- cbind(unique_structures, mapped_ids)
 
 ```
 
