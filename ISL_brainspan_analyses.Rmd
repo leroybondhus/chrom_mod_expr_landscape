@@ -5,8 +5,10 @@ date: "2023-08-18"
 output: html_document
 ---
 
-```{r, load in file}
+```{r, load in files}
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
+expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"))
+
 unique_structures <- unique(columns_meta$structure_name)
 
 uberon_names <- ontos$uberon$ont$name
@@ -45,6 +47,34 @@ mapped_ids[23] = "UBERON:0008933" # primary somatosensory cortex (area S1, areas
 mapped_ids[26] = "UBERON:0002739" # mediodorsal nucleus of thalamus --> medial dorsal nucleus of thalamus
   
 struct_to_ids <- cbind(unique_structures, mapped_ids)
+
+```
+
+```{r, add_annotation function}
+
+# modeled off expr_data_setup code
+# note that onto <- ontos$uberon$ont directly from main or phenotype_summary_analyses
+onto <- ontos$uberon$ont
+
+# create vector with uberon IDs in order of columns_meta
+mapped_uberon_ids <- vector("list", length(columns_meta$structure_name))
+
+for (i in 1:length(columns_meta$structure_name)){
+  mapped_uberon_ids[i] = struct_to_ids$mapped_ids [grep(columns_meta$structure_name[i],struct_to_ids$unique_structures, fixed = TRUE)]
+}
+
+# split strings for elements with multiple Uberon IDs
+for (i in 1:length(mapped_uberon_ids)){
+  mapped_uberon_ids[i] = str_split(mapped_uberon_ids[i], ",")
+}
+
+onto$brainspan_cols <- vector("list", length(onto$id))
+for(i in 1:length(columns_meta$structure_name)){
+  if(i %% 100 == 0){print(i)}
+  if(is.na(mapped_uberon_ids[i])){next}
+  onto <- add_annotation(mapped_uberon_ids, onto, "brainspan_cols", i,
+                         transitive_relations = c("part_of", "is_a" ))
+}
 
 ```
 
