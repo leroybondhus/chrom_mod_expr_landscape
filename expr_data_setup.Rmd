@@ -129,21 +129,55 @@ save.image("./post_full_mat.Rdata") ## next aggregate common samples into median
 ```
 
 
-```{r, preprocesss datasets}
-## seperate out different assay types.... probs should do this earlier...
+```{r}
+ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
+genes <- getBM(attributes=c('chromosome_name','start_position','end_position','hgnc_symbol', 'ensembl_gene_id','gene_biotype'),
+                 filters = list('biotype'=c('protein_coding','lincRNA')),
+                 mart = ensembl, useCache = F) 
+genes <- genes[which(is.element(genes$chromosome_name, c(1:22, "X", "Y", "MT")) & genes$ensembl_gene_id != "" ) ,]
+gene_sets$for_hh_expr <- genes
+rm(genes)
+```
 
-which <- which(dataset_list$ENCODE_HH$coldata$assay_title=="polyA plus RNA-seq")
-dataset_list$ENCODE_HH_totalRNA <- list(mat = dataset_list$ENCODE_HH$mat[,which],
-                                        coldata = dataset_list$ENCODE_HH$coldata[which,])
-which <- which(dataset_list$ENCODE_HH$coldata$assay_title=="total RNA-seq")
-dataset_list$ENCODE_HH_polyARNA <- list(mat=dataset_list$ENCODE_HH$mat[,which],
-                                        coldata = dataset_list$ENCODE_HH$coldata[which,])
-dataset_list$ENCODE_HH <- NULL
+```{r}
+# mat <- dataset_list$ENCODE_HH$mat[,ehh]
+# coldata <- dataset_list$ENCODE_HH$coldata[ehh,]
+# colnames(mat) <- make.unique(coldata$accession)
+
+### select rows (e.g. remove mitochondria)
+which <- which(gene_sets$for_hh_expr$chromosome_name != "MT" )
+mat <- dataset_list$ENCODE_HH$mat
+coldata <- dataset_list$ENCODE_HH$coldata
+colnames(mat) <- make.unique(coldata$accession)
+
+mat_cleaned <- mat[which(is.element(rownames(mat),
+                                    gene_sets$for_hh_expr$ensembl_gene_id[which])),]
+### normalize : re-calculate TPM, log10+1 transform, median normalize
+for(i in 1:ncol(mat_cleaned)){
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+  ## set all very low counts to zero to avoid variable read depth issues
+  mat_cleaned[,i] [which(mat_cleaned[,i]  < 1)] <- 0
+  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
+}
+mat_cleaned <- log10(mat_cleaned+1)
+median_normalize <- TRUE
+if(median_normalize){
+  for(i in 1:ncol(mat_cleaned)){
+    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
+  }
+}
+colnames(mat_cleaned) <- make.unique(
+  dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name)
+
+dataset_list$ENCODE_HH$median_norm_mat <- mat_cleaned
+```
+
+
+
+```{r, preprocesss datasets}
+## seperate out different assay types.... probs should do this earlier..
 
 ### aggregate on common 
-
-age_groups <- 1
-unique(dataset_list$ENCODE_HH_totalRNA$coldata$life_stage_age)
 
 convert_str_to_rel_age <- function(in_str){
   base_age_min <- base_age_max <- 0
@@ -172,19 +206,67 @@ convert_str_to_rel_age <- function(in_str){
                         max_age_est=NA))
     }
   }
+  max_age_est <- max(quant_values*num_values+base_age_max)
+  if(is_neonat &  max_age_est < 30*9){
+    max_age_est <- 30*9
+  }
   return(data.frame(min_age_est=min(quant_values*num_values+base_age_min),
               mean_age_est=mean(quant_values*num_values+(base_age_min+base_age_max)/2 ),
-              max_age_est=max(quant_values*num_values+base_age_max)))
-  
+              max_age_est=max_age_est ))
 }
 
-temp_time_ests <- NULL
-for(i in 1:length(dataset_list$ENCODE_HH_totalRNA$coldata$life_stage_age)){
-   temp_time_ests <- rbind(temp_time_ests,
-                           convert_str_to_rel_age(dataset_list$ENCODE_HH_totalRNA$coldata$life_stage_age[i]))
+convert_range_to_ordered_factor <- function(in_str){
+  df <- unique(str_split_fixed(in_str,"-",2))
+  df <- df[order(as.numeric(df[,1]),as.numeric(df[,2])),]
+  out_fctr <- paste(df[,1],df[,2],sep="-")
+  out_fctr <- str_replace(out_fctr, "-$|^-","")
+  return(factor(in_str, levels=out_fctr))
 }
-dataset_list$ENCODE_HH_totalRNA$coldata$min_age_est <- temp_time_ests$min_age_est
-dataset_list$ENCODE_HH_totalRNA$coldata$max_age_est <- temp_time_ests$max_age_est
+
+coldata <- dataset_list$ENCODE_HH$coldata
+mat <- dataset_list$ENCODE_HH$median_norm_mat
+
+temp_time_ests <- NULL
+for(i in 1:length(coldata$life_stage_age)){
+   temp_time_ests <- rbind(temp_time_ests,
+                           convert_str_to_rel_age(coldata$life_stage_age[i]))
+}
+coldata$min_age_est <- temp_time_ests$min_age_est
+coldata$max_age_est <- temp_time_ests$max_age_est
+
+
+coldata <- coldata[,c("biosample_ontology","biosample_ontology.term_name","min_age_est","max_age_est")]
+
+age_group_cuts <- c(0,2^c(0:16))
+
+coldata$age_group <- -1
+for(i in 1:nrow(coldata)){
+  min_val <- coldata$min_age_est[i]
+  which_min <- which( min_val < age_group_cuts[2:length(age_group_cuts)] & 
+                        min_val >= age_group_cuts[1:(length(age_group_cuts)-1)])
+  max_val <- coldata$max_age_est[i]
+  which_max <- which( max_val < age_group_cuts[2:length(age_group_cuts)] & 
+                        max_val >= age_group_cuts[1:(length(age_group_cuts)-1)])+1
+  coldata$age_group[i] <- paste0(c(age_group_cuts[which_min],age_group_cuts[which_max]),collapse = "-")
+}
+
+
+coldata$age_group <- convert_range_to_ordered_factor(coldata$age_group)
+
+coldata$min_age_est <- NULL
+coldata$max_age_est <- NULL
+coldata$onto_w_age <-
+  paste0(coldata$biosample_ontology, coldata$age_group)
+
+temp_coldata <- unique(coldata)
+temp_mat <- matrix(nrow = nrow(mat),ncol=nrow(temp_coldata),dimnames = list(rownames(mat),NULL)) 
+for(i in 1:nrow(temp_coldata)){
+  which_col <- which(coldata$onto_w_age == temp_coldata$onto_w_age[i])
+  temp_mat[,i] <- rowMeans(mat[,which_col,drop=F])
+}
+
+dataset_list$ENCODE_HH$agg_med_norm__mat <- temp_mat
+dataset_list$ENCODE_HH$agg_med_norm__coldata <- temp_coldata
 ```
 
 
@@ -200,17 +282,16 @@ onto <- ontos$uberon$ont
 ### annotate ontology with is_a and part_of
 onto <- add_inverse_relation(onto, "develops_from","devolops_into(SUPP_INV(develops_from))")
 
-temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH_totalRNA$coldata$biosample_ontology,"UBERON.[0-9]*")
+temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"UBERON.[0-9]*")
 temp_uberon_ids <- str_replace(temp_uberon_ids,"_",":")
 
-onto$ehh_totalRNA <- vector("list", length(onto$id))
+onto$ehh <- vector("list", length(onto$id))
 for(i in 1:length(temp_uberon_ids)){
   if(i %% 100 == 0){print(i)}
   if(is.na(temp_uberon_ids[i])){next}
-  onto <- add_annotation(temp_uberon_ids[i], onto, "ehh_totalRNA", i,
+  onto <- add_annotation(temp_uberon_ids[i], onto, "ehh", i,
                          transitive_relations = c("part_of", "is_a" ))
 }
-
 
 ###
 save.image("./setup_w_expr_dat.RData")
@@ -324,16 +405,6 @@ cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(h
 ```
 
 
-```{r}
-ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
-genes <- getBM(attributes=c('chromosome_name','start_position','end_position','hgnc_symbol', 'ensembl_gene_id','gene_biotype'),
-                 filters = list('biotype'=c('protein_coding','lincRNA')),
-                 mart = ensembl, useCache = F) 
-genes <- genes[which(is.element(genes$chromosome_name, c(1:22, "X", "Y", "MT")) & genes$ensembl_gene_id != "" ) ,]
-gene_sets$for_hh_expr <- genes
-rm(genes)
-```
-
 
 ```{r}
 library(dendextend)
@@ -351,107 +422,143 @@ library(dendextend)
 
 onto_name <- "mesoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh <- onto$ehh[[which(onto$id==onto_id)]]
 
-mat <- dataset_list$ENCODE_HH_totalRNA$mat[,ehh_totalRNA]
-coldat <- dataset_list$ENCODE_HH_totalRNA$coldata[ehh_totalRNA,]
-colnames(mat) <- make.unique(coldat$accession)
-
-### select rows (e.g. remove mitochondria)
-which <- which(gene_sets$for_hh_expr$chromosome_name != "MT" )
-mat_cleaned <- mat[which(is.element(rownames(mat),
-                                    gene_sets$for_hh_expr$ensembl_gene_id[which])),]
-### normalize : re-calculate TPM, log10+1 transform, median normalize
-for(i in 1:ncol(mat_cleaned)){
-  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
-  ## set all very low counts to zero to avoid variable read depth issues
-  mat_cleaned[,i] [which(mat_cleaned[,i]  < 1)] <- 0
-  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
-}
-mat_cleaned <- log10(mat_cleaned+1)
-median_normalize <- TRUE
-if(median_normalize){
-  for(i in 1:ncol(mat_cleaned)){
-    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
-  }
-}
-
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh]
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh,]
+colnames(mat) <- make.unique(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group))
 ### perform similarity reweighting 
 
-dot_sim <- similarity_func(mat_cleaned)
-colnames(mat_cleaned) <- make.unique(
-  dataset_list$ENCODE_HH_totalRNA$coldata$biosample_ontology.term_name[ehh_totalRNA])
-rownames(dot_sim) <- colnames(dot_sim) <-make.unique(
-  dataset_list$ENCODE_HH_totalRNA$coldata$biosample_ontology.term_name[ehh_totalRNA]) 
+dot_sim <- similarity_func(mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(mat) 
 
 sim_tree <- cluster_func(dot_sim)
-weights <- get_weights(sim_tree, colnames(mat_cleaned))
+weights <- get_weights(sim_tree, colnames(mat))
 #### .... what we want here rn is also just a weighted mean and stdev for the ontology term (?)
 #### .... this branches off here from what specificty was about.. can also measure specificity but..
 #### .... not goal rn......
 # balanced <- calc_weighted_zscore_matrix(mat_cleaned, weights)
 
-weighted_means <- apply(mat_cleaned, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
-weighted_sds <- apply(mat_cleaned, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+weighted_means <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+
+library(factoextra)
+res.pca <- prcomp(t(mat))
+fviz_eig(res.pca)
+fviz_pca_ind(res.pca, repel = TRUE)
+```
 
 
+```{r}
+library(factoextra)
+### PCA
+### HEATMAP w CLUSTERING 
+### SPECIFICITY
+
+###process### ALL BIOSAMPLE
+###process### ALL MESODERM
+###process### ALL HEART
+##standby## iterate over set of dataset/subsets -> ALL_GENE v CHROM_GENE
+##standby## iterate over set of dataset/subsets -> ALL_GENE v EACH(CHROM_GENE_SUBSET)
+### HEART
+### HEART LATERALITY_GENE
+### HEART CHROM_GENE
+
+
+onto_terms <- c("anatomical entity","mesoderm-derived structure","heart")
+#gene_domain_names <- c("all","all_chrom_modifiers") 
+#gene_set_names <- c("all","all_chrom_modifiers","EACH(chrom_subset)","laterality","CHD")
+
+gss <- gene_sets$human_chromatin_modifiers$gene_subsets
+gss$all <- gene_sets$genes_all$ensembl_gene_id
+gene_domain_names <- c("all","all_chrom_modifiers") 
+gene_set_names <- sort(names(gss))
+
+
+ehh_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+ehh_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+for(onto_term_index in 1:length(onto_terms)){
+  for(gene_set_name_index in 1:2){ #length(gene_set_names)){
+    
+    temp_cols <- onto$ehh[[which(onto$name==onto_terms[onto_term_index])]]
+    temp_rows <- which(is.element(rownames(ehh_mat),gss[[gene_set_names[gene_set_name_index]]]))
+    temp_mat <- ehh_mat[temp_rows,temp_cols]
+    temp_coldata <- ehh_coldata[temp_cols,]
+    
+    colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group))
+    ### perform similarity reweighting 
+    
+    dot_sim <- similarity_func(temp_mat)
+    rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) 
+    sim_tree <- cluster_func(dot_sim)
+    weights <- get_weights(sim_tree, colnames(temp_mat))
+    
+    weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+    weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+    
+    
+    res.pca <- prcomp(t(temp_mat))
+    fviz_eig(res.pca)
+    fviz_pca_ind(res.pca,axes = c(1,2),repel = TRUE, labelsize=3)  
+    fviz_pca_ind(res.pca,axes = c(2,3),repel = TRUE, labelsize=3)
+    fviz_pca_ind(res.pca,axes = c(3,4),repel = TRUE, labelsize=3)
+    
+    heatmap(t(temp_mat),scale="none")
+    ### PCA
+    ### HEATMAP w CLUSTERING 
+    ### SPECIFICITY
+
+  }
+}
+
+
+length(onto$ehh[[which(onto$name==onto_terms[1])]])
+length(onto$ehh[[which(onto$name==onto_terms[2])]])
+length(onto$ehh[[which(onto$name==onto_terms[3])]])
+
+
+
+
+
+
+###### ALL BIOSAMPLE (ENCODE)
+###### ALL BRAIN (ENCODE)
+##### DEVELOPMENTAL TRAJECTORY (BRAINSPAN) w SUPP COMPARE ENCODE w BRAINSPAN
+### BRAIN
+### SYNDROME ASSOCIATED w w/o CHROM
+### NEURODEV ASSOCIATED w w/o CHROM
+### AUTISM ASSOCIATED w w/o CHROM
+
+
+
+######### HOW TO COMPARE VAR ALL v VAR CHROM ?? 
 
 ```
 
 
 ```{r}
-
-# mat <- dataset_list$ENCODE_HH_totalRNA$mat[,ehh_totalRNA]
-# coldat <- dataset_list$ENCODE_HH_totalRNA$coldata[ehh_totalRNA,]
-# colnames(mat) <- make.unique(coldat$accession)
-
-### select rows (e.g. remove mitochondria)
-which <- which(gene_sets$for_hh_expr$chromosome_name != "MT" )
-mat <- dataset_list$ENCODE_HH_totalRNA$mat
-coldat <- dataset_list$ENCODE_HH_totalRNA$coldata
-colnames(mat) <- make.unique(coldat$accession)
-
-mat_cleaned <- mat[which(is.element(rownames(mat),
-                                    gene_sets$for_hh_expr$ensembl_gene_id[which])),]
-### normalize : re-calculate TPM, log10+1 transform, median normalize
-for(i in 1:ncol(mat_cleaned)){
-  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
-  ## set all very low counts to zero to avoid variable read depth issues
-  mat_cleaned[,i] [which(mat_cleaned[,i]  < 1)] <- 0
-  mat_cleaned[,i] <- (mat_cleaned[,i]*1e6 / sum(mat_cleaned[,i]))
-}
-mat_cleaned <- log10(mat_cleaned+1)
-median_normalize <- TRUE
-if(median_normalize){
-  for(i in 1:ncol(mat_cleaned)){
-    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
-  }
-}
-colnames(mat_cleaned) <- make.unique(
-  dataset_list$ENCODE_HH_totalRNA$coldata$biosample_ontology.term_name)
-
-
-## Compare to permutations ::  
+## TO DO :: Compare to permutations ::  
 onto_name <- "mesoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_1 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_1 <- onto$ehh[[which(onto$id==onto_id)]]
 onto_name <- "endoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_2 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_2 <- onto$ehh[[which(onto$id==onto_id)]]
 onto_name <- "ectoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_3 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_3 <- onto$ehh[[which(onto$id==onto_id)]]
 ### perform similarity reweighting 
 
-temp_mat <- mat_cleaned[,ehh_totalRNA_1]
+temp_mat <- mat_cleaned[,ehh_1]
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldat <- dataset_list$ENCODE_HH_totalRNA$coldata 
-df1 <- data.frame(biosample = temp_coldat$biosample_ontology.term_name[ehh_totalRNA_1],
+temp_coldata <- dataset_list$ENCODE_HH$coldata 
+df1 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_1],
                  weights = weights)
 
 ggplot(df1, aes(x=biosample))+
@@ -479,15 +586,15 @@ heatmap(dot_sim)
 dev.off()
 
 
-temp_mat <- mat_cleaned[,ehh_totalRNA_2]
+temp_mat <- mat_cleaned[,ehh_2]
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldat <- dataset_list$ENCODE_HH_totalRNA$coldata 
-df2 <- data.frame(biosample = temp_coldat$biosample_ontology.term_name[ehh_totalRNA_2],
+temp_coldata <- dataset_list$ENCODE_HH$coldata 
+df2 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_2],
                  weights = weights)
 
 ggplot(df2, aes(x=biosample))+
@@ -514,15 +621,15 @@ heatmap(dot_sim)
 dev.off()
 
 
-temp_mat <- mat_cleaned[,ehh_totalRNA_3]
+temp_mat <- mat_cleaned[,ehh_3]
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldat <- dataset_list$ENCODE_HH_totalRNA$coldata 
-df3 <- data.frame(biosample = temp_coldat$biosample_ontology.term_name[ehh_totalRNA_3],
+temp_coldata <- dataset_list$ENCODE_HH$coldata 
+df3 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_3],
                  weights = weights)
 
 ggplot(df3, aes(x=biosample))+
@@ -556,21 +663,21 @@ save.image("./post_wtd_onto_test.RData")
 
 onto_name <- "mesoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_1 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_1 <- onto$ehh[[which(onto$id==onto_id)]]
 onto_name <- "endoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_2 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_2 <- onto$ehh[[which(onto$id==onto_id)]]
 onto_name <- "ectoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
-ehh_totalRNA_3 <- onto$ehh_totalRNA[[which(onto$id==onto_id)]]
+ehh_3 <- onto$ehh[[which(onto$id==onto_id)]]
 ### perform similarity reweighting
 
 
-barplot(table(dataset_list$ENCODE_HH_totalRNA$coldata$biosample_ontology.term_name[ehh_totalRNA_1]))
+barplot(table(dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name[ehh_1]))
 
 
-ehh_totalRNA_2
-ehh_totalRNA_3
+ehh_2
+ehh_3
 ```
 
 
