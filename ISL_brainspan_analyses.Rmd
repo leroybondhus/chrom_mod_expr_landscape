@@ -7,6 +7,7 @@ output: html_document
 
 ```{r, load in files}
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
+expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"))
 
 unique_structures <- unique(columns_meta$structure_name)
 
@@ -71,9 +72,30 @@ onto$brainspan_cols <- vector("list", length(onto$id))
 for(i in 1:length(columns_meta$structure_name)){
   if(i %% 100 == 0){print(i)}
   if(is.na(mapped_uberon_ids[i])){next}
-  onto <- add_annotation(mapped_uberon_ids[i], onto, "brainspan_cols", i,
+  # iterate through multiple uberon ids per structure
+  for(j in 1:length(mapped_uberon_ids[i])){
+    onto <- add_annotation(mapped_uberon_ids[[i]][j], onto, "brainspan_cols", i,
                          transitive_relations = c("part_of", "is_a" ))
+  }
 }
+
+save(onto, file = "./onto.RData")
+
+```
+
+```{r, Uberon onto summary statistics}
+brainspan_terms <- Filter(Negate(is.null), onto$brainspan_cols)
+ # 130 Uberon terms that relate to brainspan data
+
+# histogram to show avg number of terms per brainspan column
+brainspan_term_counts <- vector("integer", length(brainspan_terms))
+for(i in 1:length(brainspan_terms)){
+  brainspan_term_counts[i] = length(brainspan_terms[[i]])
+}
+
+hist(brainspan_term_counts, breaks = 20, main = "Histogram of number of brainspan terms populated")
+
+
 
 ```
 
