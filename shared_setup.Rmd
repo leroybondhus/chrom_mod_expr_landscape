@@ -632,6 +632,86 @@ ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of
 ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
 ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
 
+
+
+
+
+ontos$cl = list(
+  URL = "https://raw.githubusercontent.com/obophenotype/cell-ontology/master/cl.obo"
+)
+
+files$cl_obo <- paste0(dirs$temp_data,"cl.obo")
+download.file(ontos$cl$URL,files$cl_obo)
+
+##### read in and set up ontology ####
+con <- file(files$cl_obo,open="r")
+num_terms <- 0
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){break}
+  num_terms <- num_terms + grepl("^id: CL:[0-9]+",line)
+}
+close(con);rm(con,line)
+
+ontos$cl$ont <- list(
+  id=character(length = num_terms ),
+  name=character(length = num_terms ),
+  parents = vector("list", num_terms),
+  children = vector("list", num_terms),
+  relations = vector("list", num_terms),
+  external_relations = vector("list", num_terms),
+  is_obsolete = rep(FALSE, num_terms)
+)
+
+term_num <- 0
+is_cl <- FALSE
+con <- file(files$cl_obo,open="r")
+while(TRUE){
+  line = readLines(con,n=1)
+  if(length(line)==0){
+    break
+  } else if(grepl("^\\[Term\\]$",line)){
+    is_cl <- FALSE
+  } else if(grepl("^id:.*CL:",line)){
+    term_num <- term_num + 1
+    ontos$cl$ont$id[term_num] <- str_extract(line, "CL:[0-9]+")
+    is_cl <- TRUE
+  }  else if(grepl("^name:",line) & is_cl){
+    ontos$cl$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
+  } else if(grepl("^namespace:",line) & is_cl){
+    ontos$cl$ont$namespace[term_num] <- str_remove(line, "^namespace:[[:space:]]")
+  } else if(grepl("^is_a:",line) & is_cl){
+    ontos$cl$ont$parents[term_num][[1]] <- c(ontos$cl$ont$parents[term_num][[1]], str_extract(line, "CL:[0-9]+")) 
+  } else if(grepl("^relationship: [a-zA-Z0-9_:]+ CL:[0-9]+",line) & is_cl){
+    temp_relation  <- str_remove(str_extract(line, "^relationship: [a-zA-Z0-9_:]+"),"^relationship:[[:space:]]")
+    temp_id <- str_remove(str_remove(line, "^relationship: [a-zA-Z0-9_:]+ ")," .*")
+    temp_df <- data.frame(relation = temp_relation, id = temp_id )
+    temp_gci_relation <- str_remove(str_remove(str_extract(line,"gci_relation.*\""),"gci_relation=\""),"\"")
+    ## if gci_relation exists and does not match temp_df$relation skip
+    if(!is.na(temp_gci_relation) & temp_gci_relation != temp_df$relation){next} 
+    ontos$cl$ont$relations[term_num][[1]] <- rbind(ontos$cl$ont$relations[term_num][[1]],
+                                                       temp_df) 
+  } else if(grepl("^relationship: [a-zA-Z0-9_:]+ UBERON:[0-9]+",line) & is_cl){
+    temp_relation  <- str_remove(str_extract(line, "^relationship: [a-zA-Z0-9_:]+"),"^relationship:[[:space:]]")
+    temp_id <- str_remove(str_remove(line, "^relationship: [a-zA-Z0-9_:]+ ")," .*")
+    temp_df <- data.frame(relation = temp_relation, id = temp_id )
+    temp_gci_relation <- str_remove(str_remove(str_extract(line,"gci_relation.*\""),"gci_relation=\""),"\"")
+    ## if gci_relation exists and does not match temp_df$relation skip
+    if(!is.na(temp_gci_relation) & temp_gci_relation != temp_df$relation){next} 
+    ontos$cl$ont$external_relations[term_num][[1]] <- rbind(ontos$cl$ont$external_relations[term_num][[1]],
+                                                       temp_df) 
+  } else if(grepl("^is_obsolete: true",line)){
+    ontos$cl$ont$is_obsolete[term_num] <- TRUE 
+  }
+}
+close(con);rm(con,term_num,num_terms,line)
+
+### replace is_a with parents
+### add children attribute to each term for ease of navigation up and down ontology
+ontos$cl$ont <- add_children_from_parents(ontos$cl$ont)
+ontos$cl$ont <- add_descendants(ontos$cl$ont)
+##### done: read in and set up ontology ####
+
 ```
 
 ```{r, organize onto_maps}
