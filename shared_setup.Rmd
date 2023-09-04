@@ -81,16 +81,19 @@ add_children_from_parents <- function(onto){
 }
 
 
-get_ancestors <- function(id, onto){
+get_ancestors <- function(id, onto, visited=c()){
   which <- which(onto$id==id)
   if(length(which)==0){ stop(paste0("id: ",id,", not in ontology")) }
   if(length(which)>1){ stop(paste0("id: ",id,", not unique in ontology")) }
   if(length(onto$parents[[which]]) == 0){
     return(onto$id[which])
   }
+  visited <- c(visited, id)
   ancestors <- id
   for(parent in onto$parents[[which]]){
-    ancestors <- unique(c(ancestors, get_ancestors(parent, onto)))
+    if(is.element(parent, visited)){next}
+    visited <- c(visited, parent)
+    ancestors <- unique(c(ancestors, get_ancestors(parent, onto, visited)))
   }
   return(ancestors)
 }
@@ -678,9 +681,7 @@ while(TRUE){
     is_cl <- TRUE
   }  else if(grepl("^name:",line) & is_cl){
     ontos$cl$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
-  } else if(grepl("^namespace:",line) & is_cl){
-    ontos$cl$ont$namespace[term_num] <- str_remove(line, "^namespace:[[:space:]]")
-  } else if(grepl("^is_a:",line) & is_cl){
+  } else if(grepl("^is_a:.*CL:",line) & is_cl){
     ontos$cl$ont$parents[term_num][[1]] <- c(ontos$cl$ont$parents[term_num][[1]], str_extract(line, "CL:[0-9]+")) 
   } else if(grepl("^relationship: [a-zA-Z0-9_:]+ CL:[0-9]+",line) & is_cl){
     temp_relation  <- str_remove(str_extract(line, "^relationship: [a-zA-Z0-9_:]+"),"^relationship:[[:space:]]")
@@ -704,7 +705,7 @@ while(TRUE){
     ontos$cl$ont$is_obsolete[term_num] <- TRUE 
   }
 }
-close(con);rm(con,term_num,num_terms,line)
+close(con);rm(con,term_num,num_terms,line,is_cl,temp_gci_relation,temp_id,temp_relation)
 
 ### replace is_a with parents
 ### add children attribute to each term for ease of navigation up and down ontology

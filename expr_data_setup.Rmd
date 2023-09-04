@@ -6,15 +6,18 @@ output: html_document
 ---
 
 ```{r}
-dataset_list <- list()
+if(!exists("dataset_list")){dataset_list <- list()}
 registerDoParallel(detectCores()-2)
 files$temp_log <- paste0(dirs$temp_data,"temp.log")
+library(jsonlite)
+library(httr)
+library(dendextend)
+library(factoextra)
 ```
 
 
 ```{r, encode human RNA}
-library(jsonlite)
-library(httr)
+
 print(Sys.time())
 # search_query <- "https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Mus+musculus&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
 # 
@@ -272,7 +275,7 @@ dataset_list$ENCODE_HH$agg_med_norm__coldata <- temp_coldata
 
 ```{r, embed in ontology}
 
-onto <- ontos$uberon$ont
+#onto <- ontos$uberon$ont
 
 ### is_a, part_of, develops_from ...
 
@@ -280,18 +283,62 @@ onto <- ontos$uberon$ont
 ### if x develops_from y , x --> y, else if x is_a y, go_to y, repeat. ##  
 ### 
 ### annotate ontology with is_a and part_of
-onto <- add_inverse_relation(onto, "develops_from","devolops_into(SUPP_INV(develops_from))")
+ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "develops_from","devolops_into(SUPP_INV(develops_from))")
+
 
 temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"UBERON.[0-9]*")
 temp_uberon_ids <- str_replace(temp_uberon_ids,"_",":")
 
-onto$ehh <- vector("list", length(onto$id))
+
+ontos$uberon$ont$ehh <- vector("list", length(ontos$uberon$ont$id))
 for(i in 1:length(temp_uberon_ids)){
   if(i %% 100 == 0){print(i)}
   if(is.na(temp_uberon_ids[i])){next}
-  onto <- add_annotation(temp_uberon_ids[i], onto, "ehh", i,
-                         transitive_relations = c("part_of", "is_a" ))
+  ontos$uberon$ont <- add_annotation(temp_uberon_ids[i], ontos$uberon$ont, "ehh", i,
+                         transitive_relations = c("part_of", "is_a" ))  
 }
+
+
+
+### map cells to uberon concept if "CL is part_of UBERON"
+
+get_onto_paired_concepts <- function(id, onto, inter_onto_relations=c("is_a","part_of")){
+#                                      onto, transitive_relations,){
+  which <- which(onto$id == id)
+  # onto$external_relations[which]
+  temp_anc <- get_ancestors(id,onto)
+  temp_ext_rels <- c()
+  for(i in 1:length(temp_anc)){
+    temp_which_anc <- which(onto$id == temp_anc[i])
+    temp_ext_rels <- unique(rbind(temp_ext_rels,
+                                  onto$external_relations[[temp_which_anc]]))
+  }
+  temp_ext_rels <- temp_ext_rels[which(is.element(temp_ext_rels$relation, inter_onto_relations)),]
+  return(temp_ext_rels)
+}
+
+temp_cl_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"CL_.[0-9]*")
+temp_cl_ids <- str_replace(temp_cl_ids,"_",":")
+temp_cl_paired_uberon_ids <- rep(NA, length(temp_cl_ids))
+temp_list <- list()
+for(i in 1:length(temp_cl_ids)){
+  if(is.na(temp_cl_ids[i])){temp_list[i] <- list(NULL);next}
+  temp_df <- get_onto_paired_concepts(temp_cl_ids[i],ontos$cl$ont)
+  if(is.null(temp_df)){ temp_list[i] <- list(NULL); next}
+  temp_list[[i]] <- temp_df
+}
+
+
+for(i in 1:length(temp_list)){
+  if(i %% 20 == 0){print(i)}
+  if(is.null(temp_list[[i]]) || nrow(temp_list[[i]])==0){next}
+  for(j in 1:nrow(temp_list[[i]])){
+    if(!is.element(temp_list[[i]]$id[j],ontos$uberon$ont$id)){next}
+    ontos$uberon$ont <- add_annotation(temp_list[[i]]$id[j], ontos$uberon$ont, "ehh", i,
+                         transitive_relations = c("part_of", "is_a" ))
+  }
+}
+
 
 ###
 save.image("./setup_w_expr_dat.RData")
@@ -407,7 +454,7 @@ cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(h
 
 
 ```{r}
-library(dendextend)
+
 
 # specificity_func <- specificity_measures$funcs[[measure]]
 # dot_sim <- similarity_func(exp_mat[,which])
@@ -442,7 +489,7 @@ weights <- get_weights(sim_tree, colnames(mat))
 weighted_means <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-library(factoextra)
+
 res.pca <- prcomp(t(mat))
 fviz_eig(res.pca)
 fviz_pca_ind(res.pca, repel = TRUE)
@@ -450,7 +497,7 @@ fviz_pca_ind(res.pca, repel = TRUE)
 
 
 ```{r}
-library(factoextra)
+
 ### PCA
 ### HEATMAP w CLUSTERING 
 ### SPECIFICITY
@@ -476,10 +523,18 @@ gene_set_names <- sort(names(gss))
 
 
 ehh_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+rownames(ehh_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat)
 ehh_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
 
+
+
+dirs$scratch_figures <- paste0(dirs$figures,"scratch/")
+if(!dir.exists(dirs$scratch_figures)){dir.create(dirs$scratch_figures)}
+
 for(onto_term_index in 1:length(onto_terms)){
-  for(gene_set_name_index in 1:2){ #length(gene_set_names)){
+  for(gene_set_name_index in c(1,2,7)){ #length(gene_set_names)){
+    base_filename_part <- paste0(gene_set_names[gene_set_name_index],"__",
+                       str_remove(onto$id[[which(onto$name==onto_terms[onto_term_index])]], ":"))
     
     temp_cols <- onto$ehh[[which(onto$name==onto_terms[onto_term_index])]]
     temp_rows <- which(is.element(rownames(ehh_mat),gss[[gene_set_names[gene_set_name_index]]]))
@@ -501,10 +556,19 @@ for(onto_term_index in 1:length(onto_terms)){
     res.pca <- prcomp(t(temp_mat))
     fviz_eig(res.pca)
     fviz_pca_ind(res.pca,axes = c(1,2),repel = TRUE, labelsize=3)  
+    filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
+    ggsave(filename, bg = 'white')
     fviz_pca_ind(res.pca,axes = c(2,3),repel = TRUE, labelsize=3)
+    filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
+    ggsave(filename, bg = 'white')
     fviz_pca_ind(res.pca,axes = c(3,4),repel = TRUE, labelsize=3)
+    filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
+    ggsave(filename, bg = 'white')
     
+    filename <- paste0(dirs$scratch_figures,"heatmap__",base_filename_part, ".png" )
+    png(filename = filename, width=10,height=8,res=300,units = "in")
     heatmap(t(temp_mat),scale="none")
+    dev.off()
     ### PCA
     ### HEATMAP w CLUSTERING 
     ### SPECIFICITY
