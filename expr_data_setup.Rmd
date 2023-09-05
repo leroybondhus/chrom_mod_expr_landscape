@@ -346,11 +346,6 @@ save.image("./setup_w_expr_dat.RData")
 
 
 
-```{r}
-
-
-```
-
 ```{r collected functions used, include=FALSE}
 ### slow with many samples ... prioritize for parallelization 
 calc_dot_product_similarity_matrix <- function(dat) {
@@ -453,6 +448,60 @@ cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(h
 
 
 
+```{r, add summary level expr data to ontology}
+onto <- ontos$uberon$ont
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+num_terms <- length(onto$id)
+onto$ehh_summary_stats <- list(
+  mean_internal = vector("list", num_terms),
+  sd_internal = vector("list", num_terms),
+  mean_external = vector("list", num_terms),
+  sd_external = vector("list", num_terms)
+)
+  
+  
+temp_num_els <- sapply(onto$ehh,length)
+temp_els <- which(temp_num_els > 10)[1:2]
+temp_els <- grep("^mesoderm-derived|^ectoderm-derived|^endoderm-derived", onto$name)
+for(i in 1:length(temp_els)){
+  print(i)
+  
+  ehh <- onto$ehh[[temp_els[i]]]
+  
+  for(set_and_complement in c(1,-1)){
+    if(set_and_complement==1){print("set")} else {print("complement")}
+    temp_mat <- mat[,ehh*set_and_complement]
+    temp_coldata <- coldata[ehh*set_and_complement,]
+    if(ncol(temp_mat)>0){
+      colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+      dot_sim <- similarity_func(temp_mat)
+      rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) 
+      sim_tree <- cluster_func(dot_sim)
+      weights <- get_weights(sim_tree, colnames(temp_mat))
+      weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+      weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+    } else {
+      weighted_means <- NA
+      weighted_sds <- NA
+    }
+    
+    if(set_and_complement==1){
+      onto$ehh_summary_stats$mean_internal[[temp_els[i]]] <- weighted_means
+      onto$ehh_summary_stats$sd_internal[[temp_els[i]]] <- weighted_sds
+    } else {
+      onto$ehh_summary_stats$mean_external[[temp_els[i]]] <- weighted_means
+      onto$ehh_summary_stats$sd_external[[temp_els[i]]] <- weighted_sds
+    }
+    
+  }
+}
+
+```
+
+
+
 ```{r}
 
 
@@ -497,7 +546,7 @@ fviz_pca_ind(res.pca, repel = TRUE)
 
 
 ```{r}
-
+onto <- ontos$uberon$ont
 ### PCA
 ### HEATMAP w CLUSTERING 
 ### SPECIFICITY
@@ -559,10 +608,10 @@ for(onto_term_index in 1:length(onto_terms)){
     filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
     ggsave(filename, bg = 'white')
     fviz_pca_ind(res.pca,axes = c(2,3),repel = TRUE, labelsize=3)
-    filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
+    filename <- paste0(dirs$scratch_figures,"pc23__",base_filename_part, ".png" )
     ggsave(filename, bg = 'white')
     fviz_pca_ind(res.pca,axes = c(3,4),repel = TRUE, labelsize=3)
-    filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" )
+    filename <- paste0(dirs$scratch_figures,"pc34__",base_filename_part, ".png" )
     ggsave(filename, bg = 'white')
     
     filename <- paste0(dirs$scratch_figures,"heatmap__",base_filename_part, ".png" )
@@ -602,6 +651,7 @@ length(onto$ehh[[which(onto$name==onto_terms[3])]])
 
 
 ```{r}
+onto <- ontos$uberon$ont
 ## TO DO :: Compare to permutations ::  
 onto_name <- "mesoderm-derived structure"
 onto_id <- onto$id[which(onto$name == onto_name)]
@@ -614,15 +664,21 @@ onto_id <- onto$id[which(onto$name == onto_name)]
 ehh_3 <- onto$ehh[[which(onto$id==onto_id)]]
 ### perform similarity reweighting 
 
-temp_mat <- mat_cleaned[,ehh_1]
+
+
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_1]
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_1,] 
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group))
+rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat)
+
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldata <- dataset_list$ENCODE_HH$coldata 
-df1 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_1],
+
+df1 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name,
                  weights = weights)
 
 ggplot(df1, aes(x=biosample))+
@@ -645,20 +701,24 @@ ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+
   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1))
 ggsave(filename = paste0(dirs$figures,"RD__meso_biosample_sum_of_weights.png"))
 
-png(paste0(dirs$figures,"RD__meso_biosample_sim.png"))
+filename <- paste0(dirs$figures,"RD__meso_biosample_sim.png")
+png(filename = filename, width=10,height=8,res=300,units = "in")
 heatmap(dot_sim)
 dev.off()
 
 
-temp_mat <- mat_cleaned[,ehh_2]
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_2]
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_2,] 
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group))
+rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat)
+
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldata <- dataset_list$ENCODE_HH$coldata 
-df2 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_2],
+df2 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name,
                  weights = weights)
 
 ggplot(df2, aes(x=biosample))+
@@ -680,20 +740,25 @@ ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+
   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1))
 ggsave(filename = paste0(dirs$figures,"RD__endo_biosample_sum_of_weights.png"))
 
-png(paste0(dirs$figures,"RD__endo_biosample_sim.png"))
+
+filename <- paste0(dirs$figures,"RD__endo_biosample_sim.png")
+png(filename = filename, width=10,height=8,res=300,units = "in")
 heatmap(dot_sim)
 dev.off()
 
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_3]
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_3,] 
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group))
+rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat)
 
-temp_mat <- mat_cleaned[,ehh_3]
 dot_sim <- similarity_func(temp_mat)
 sim_tree <- cluster_func(dot_sim)
 weights <- get_weights(sim_tree, colnames(temp_mat))
 weighted_means_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
 weighted_sds_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 
-temp_coldata <- dataset_list$ENCODE_HH$coldata 
-df3 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name[ehh_3],
+
+df3 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name,
                  weights = weights)
 
 ggplot(df3, aes(x=biosample))+
@@ -715,7 +780,9 @@ ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+
   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1))
 ggsave(filename = paste0(dirs$figures,"RD__ecto_biosample_sum_of_weights.png"))
 
-png(paste0(dirs$figures,"RD__ecto_biosample_sim.png"))
+
+filename <- paste0(dirs$figures,"RD__ecto_biosample_sim.png")
+png(filename = filename, width=10,height=8,res=300,units = "in")
 heatmap(dot_sim)
 dev.off()
 
