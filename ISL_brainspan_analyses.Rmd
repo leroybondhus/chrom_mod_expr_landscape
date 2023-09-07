@@ -85,7 +85,7 @@ save(onto, file = "./onto.RData")
 
 ```{r, Uberon onto summary statistics}
 # histogram to show avg number of terms per brainspan column
-brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[1])}) # need to fix to get length of list
+brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[[1]])}) # need to fix to get length of list
  # 130 Uberon terms that relate to brainspan data
 
 hist(brainspan_terms[which(brainspan_terms>0)], breaks = 20, main = "Histogram of number of brainspan terms populated")
@@ -121,7 +121,7 @@ library(ComplexHeatmap)
 # BiocManager::install("ComplexHeatmap")
 
 # heatmap of "amygdaloid complex"
-sorted_expression <- as.matrix(sorted_expression)
+sorted_expression <- as.matrix(sorted_expression) # convert to matrix
 
 Heatmap(sorted_expression[,1:33])
 ```
