@@ -85,29 +85,44 @@ save(onto, file = "./onto.RData")
 
 ```{r, Uberon onto summary statistics}
 # histogram to show avg number of terms per brainspan column
-brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[1])})
+brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[1])}) # need to fix to get length of list
  # 130 Uberon terms that relate to brainspan data
 
 hist(brainspan_terms[which(brainspan_terms>0)], breaks = 20, main = "Histogram of number of brainspan terms populated")
 
 
-# calculate average gene expression per populated brainspan column in ontology
-brainspan_avg_express <- vector("numeric", length(brainspan_terms))
-for(i in 1:length(brainspan_terms)){
-  for(j in 1:length(brainspan_terms[i])){
-    brainspan_avg_express[i] =brainspan_avg_express[i] + sum(expression_mat[j])
-  }
-}
+# # calculate average gene expression per populated brainspan column in ontology
+# brainspan_avg_express <- vector("numeric", length(brainspan_terms))
+# for(i in 1:length(brainspan_terms)){
+#   for(j in 1:length(brainspan_terms[i])){
+#     brainspan_avg_express[i] =brainspan_avg_express[i] + sum(expression_mat[j])
+#   }
+# }
 
-rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
+# calculate average gene expression of a row
+# rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
 ```
-
 
 ```{r, sort expression matrix by brain structure and development time}
 # sort columns_meta by brainspan structure name & then already in age ascending order
 sorted_cols <- columns_meta[with(columns_meta, order(structure_name)),]
 
 # sort expression_mat columns based on order from sorted columns_meta
-test <- expression_mat[sorted_cols$column_num]
+sorted_expression <- expression_mat[sorted_cols$column_num]
+```
+
+```{r, heat maps for gene expression over time for each structure}
+library(ggplot2)
+library(ComplexHeatmap)
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("ComplexHeatmap")
+
+# heatmap of "amygdaloid complex"
+sorted_expression <- as.matrix(sorted_expression)
+
+Heatmap(sorted_expression[,1:33])
 ```
 
