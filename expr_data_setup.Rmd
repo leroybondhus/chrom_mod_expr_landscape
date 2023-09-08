@@ -279,6 +279,15 @@ dataset_list$ENCODE_HH$agg_med_norm__coldata <- temp_coldata
 
 ```{r, embed in ontology}
 
+### add cardiac ventricles and cardiac atria as proxy for cardiac muscle tissue
+temp_id <- ontos$uberon$ont$id[which(ontos$uberon$ont$name=="cardiac muscle tissue")]
+which <- which(ontos$uberon$ont$name == "cardiac atrium")
+ontos$uberon$ont$relations[[which]] <- unique(rbind(ontos$uberon$ont$relations[[which]],
+                                                    data.frame(relation="proxy_for(SUPP)",id=temp_id)))
+which <- which(ontos$uberon$ont$name == "cardiac ventricle")
+ontos$uberon$ont$relations[[which]] <- unique(rbind(ontos$uberon$ont$relations[[which]],
+                                                    data.frame(relation="proxy_for(SUPP)",id=temp_id)))
+
 #onto <- ontos$uberon$ont
 
 ### is_a, part_of, develops_from ...
@@ -299,7 +308,7 @@ for(i in 1:length(temp_uberon_ids)){
   if(i %% 100 == 0){print(i)}
   if(is.na(temp_uberon_ids[i])){next}
   ontos$uberon$ont <- add_annotation(temp_uberon_ids[i], ontos$uberon$ont, "ehh", i,
-                         transitive_relations = c("part_of", "is_a" ))  
+                         transitive_relations = c("part_of", "is_a", "proxy_for(SUPP)" ))  
 }
 
 
@@ -344,7 +353,8 @@ for(i in 1:length(ontos$uberon$ont$id)){
 
 for(i in 1:length(temp_cl_ids)){
   if(is.na(temp_cl_ids[i])){temp_list[i] <- list(NULL);next}
-  temp_df <- get_onto_paired_concepts(temp_cl_ids[i],ontos$cl$ont)
+  temp_df <- get_onto_paired_concepts(temp_cl_ids[i],ontos$cl$ont,
+                                      inter_onto_relations = c("is_a","part_of","primarily_composes(complement_of:composed_primarily_of)"))
   if(is.null(temp_df)){ temp_list[i] <- list(NULL); next}
   temp_list[[i]] <- temp_df
 }
