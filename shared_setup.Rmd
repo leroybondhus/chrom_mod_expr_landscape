@@ -46,7 +46,7 @@ rm(OMIM_genemap2_URL)
 ```{r, load libraries}
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
-               "ggiraph","ggraph","igraph","collapsibleTree"),
+               "ggiraph","ggraph","igraph","collapsibleTree","ComplexHeatmap"),
   biocmanager = c("Gviz","biomaRt")
 )
 for(std_package in req_packages$standard ){
@@ -232,7 +232,8 @@ get_mask_set <- function(id, onto){ #}, mask_self=T){
 get_desc_summary_table <- function(id,onto, level=1,
                                    transitive_relations=c(),
                                    descend_through_children=TRUE,
-                                   visited_ids=c()){
+                                   visited_ids=c(),
+                                   max_level=Inf){
   which <- which(onto$id==id) 
   if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
   if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
@@ -240,9 +241,11 @@ get_desc_summary_table <- function(id,onto, level=1,
   temp_df <- as.data.frame(matrix(character() ,nrow = 1, ncol=length(onto),
                                   dimnames = list(NULL, names(onto))))
   for(el in names(onto)){
+    if(length(onto[[el]]) != length(onto$id)){next} ### e.g. for summary_stats and metadata not attributed to nodes of ontology
     if(is.data.frame(onto[[el]][[which]])){
       temp_df[el] <- paste0(apply(onto[[el]][[which]],1, paste0, collapse=","),collapse=";")
     } else if( is.list(onto[[el]][[which]] )){
+      #if(is.list(onto[[el]][[which]][[1]])){next}
       if(length(onto[[el]][[which]]) > 0){
        temp_df[el] <- sapply(onto[[el]][[which]], paste, collapse=",")
       } else { temp_df[el] <- NA }
@@ -251,14 +254,13 @@ get_desc_summary_table <- function(id,onto, level=1,
     } 
   }
   temp_df <- cbind(temp_df, data.frame(level=level))
-
   relation_df <- onto$relations[[which]]
   transitive_ids <- relation_df$id[which(is.element(relation_df$relation, transitive_relations))]
   if(descend_through_children){
     transitive_ids <- unique(c(transitive_ids,onto$children[[which]]))
   }
   transitive_ids <- transitive_ids[!is.element(transitive_ids, visited_ids)]
-  if(length(transitive_ids) > 0 ){
+  if(length(transitive_ids) > 0 & level < max_level  ){
     for(tid in transitive_ids){
       temp_df <- rbind(temp_df,
                        get_desc_summary_table(tid, onto, level=level+1,
@@ -422,6 +424,15 @@ add_annotation <- function(id, onto, annotation_name,annotation_value,
   return(onto)
 }
 
+add_external_relation <- function(id, onto, relation_name, relation_to_id){
+  which <- which(onto$id==id)
+  if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+  if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+  onto$external_relations[[which]] <- unique(rbind(onto$external_relations[[which]],
+                                                   data.frame(relation=relation_name,id=relation_to_id)))
+  return(onto)
+}
+
 ```
 
 ```{r, organize ontologies}
@@ -561,6 +572,7 @@ ontos$uberon$ont <- list(
   parents = vector("list", num_terms),
   children = vector("list", num_terms),
   relations = vector("list", num_terms),
+  external_relations = vector("list", num_terms),
   is_obsolete = rep(FALSE, num_terms)
 )
 
@@ -594,6 +606,15 @@ while(TRUE){
                                                        temp_df) 
       # c(ontos$uberon$ont$parents[term_num][[1]],
       # str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")) 
+  } else if(grepl("^relationship: [a-zA-Z0-9_:]+ CL:[0-9]+",line) & is_uberon){
+    temp_relation  <- str_remove(str_extract(line, "^relationship: [a-zA-Z0-9_:]+"),"^relationship:[[:space:]]")
+    temp_id <- str_remove(str_remove(line, "^relationship: [a-zA-Z0-9_:]+ ")," .*")
+    temp_df <- data.frame(relation = temp_relation, id = temp_id )
+    temp_gci_relation <- str_remove(str_remove(str_extract(line,"gci_relation.*\""),"gci_relation=\""),"\"")
+    ## if gci_relation exists and does not match temp_df$relation skip
+    if(!is.na(temp_gci_relation) & temp_gci_relation != temp_df$relation){next} 
+    ontos$uberon$ont$external_relations[term_num][[1]] <- rbind(ontos$uberon$ont$external_relations[term_num][[1]],
+                                                                temp_df) 
   } else if(grepl("^is_obsolete: true",line) & is_uberon){
     ontos$uberon$ont$is_obsolete[term_num] <- TRUE 
   }
