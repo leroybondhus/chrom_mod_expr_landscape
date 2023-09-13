@@ -880,11 +880,14 @@ df <- onto$ehh_summary_stats[[which(onto$name=="anatomical entity")]]
 df$specificity_state <- factor("complex",levels =c("specific","complex","ubiquitous") )
 df$specificity_state[which(df$tau_internal < 0.4)] <- "ubiquitous"
 df$specificity_state[which(df$tau_internal > 0.7)] <-  "specific"
-df_out <- merge(names(gene_sets$human_chromatin_modifiers$gene_subsets),
+temp_names <- names(gene_sets$human_chromatin_modifiers$gene_subsets)
+temp_names <- temp_names[which(temp_names != "chromatin looping")]
+df_out <- merge(temp_names,
                 c("specific","complex","ubiquitous"))
 colnames(df_out) <- c("gene_subset","expr_class") 
 df_out$proportion <- 0
 
+full_df <- data.frame()
 for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   gene_set_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
   which <- which(is.element(rownames(df),
@@ -910,13 +913,27 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   which <- which(df_out$gene_subset==gene_set_name & df_out$expr_class=="ubiquitous")
   df_out$proportion[which] <- length(which(temp_df$specificity_state=="ubiquitous")) / nrow(temp_df)
   
+  temp_df$index_proportion <- temp_df$index / nrow(temp_df)
+  temp_df$num_modifiers <- nrow(temp_df)
+  temp_df$gene_name <- rownames(temp_df)
+  full_df <- rbind(full_df, cbind(temp_df,data.frame(gene_subset=gene_set_name)))
 }
 
+ggplot(full_df, aes(index_proportion,tau_internal,color=specificity_state))+
+  geom_point()+
+   theme(strip.text.x = element_text(size = 6))+
+  #scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.2))+
+  facet_wrap(. ~ gene_subset, nrow=3)
+ggsave(filename=paste0(dirs$figures,"temp_specificity_distribution_color.png"), height=6,width=8,units = "in",device = "png")
+
+df_out$gene_subset
+df_out$gene_subset <- factor(df_out$gene_subset)
 df_out$expr_class <- factor(df_out$expr_class, levels=c("specific","complex","ubiquitous")) 
 ggplot(df_out, aes(gene_subset, proportion, fill=expr_class))+
   geom_bar(position="fill", stat="identity")+
+  scale_x_discrete(limits=rev(levels(df_out$gene_subset)))+
   coord_flip()
-
+ggsave(filename=paste0(dirs$figures,"temp_specificity_dist_simplified.png"), height=8,width=6,units = "in",device = "png")
 # 
 # 343
 # ggl[["inheritance"]] <- ggplot(df, aes(x=inheritance, fill=prob, y=prop))+
@@ -930,6 +947,35 @@ ggplot(df_out, aes(gene_subset, proportion, fill=expr_class))+
 
 ```{r, chrom modifier specificity map to specific onto term for specific chrom modifiers}
 
+for(i in 1:length(onto$ehh_summary_stats)){
+  if(is.null(onto$ehh_summary_stats[[i]])){next}
+  onto$ehh_summary_stats[[i]]$delta_mean <- onto$ehh_summary_stats[[i]]$mean_internal - onto$ehh_summary_stats[[i]]$mean_external 
+}
+
+temp_df <- full_df[which(full_df$gene_subset=="all_chrom_modifiers" &
+                           full_df$specificity_state=="specific"),]
+
+
+temp_onto_ids <- which(onto$ehh_num_cols > 5 & onto$ehh_num_cols < 80)
+temp_genes <- unique(temp_df$gene_name)
+delta_mean_df <- matrix(nrow=length(temp_genes),ncol=length(temp_onto_ids),dimnames=list(temp_genes,temp_onto_ids))
+delta_mean_df <- matrix(nrow=length(temp_genes),ncol=length(temp_onto_ids),dimnames=list(temp_genes,temp_onto_ids))
+  
+for(i in temp_onto_ids){
+  delta_mean_df[,as.character(i)] <- onto$ehh_summary_stats[[i]][temp_genes,]$delta_mean
+}
+
+rownames(delta_mean_df) <- gene_sets$genes_all$external_gene_name[match(rownames(delta_mean_df),
+                                                                        gene_sets$genes_all$ensembl_gene_id)]
+colnames(delta_mean_df) <- onto$name[temp_onto_ids]
+
+png(filename=paste0(dirs$figures,"temp_heatmap_onto_spec_chrom.png"),width=14,height=14,units="in",res=250)
+heatmap(t(delta_mean_df),scale="none",
+        margins = c(4,12)
+        )
+legend(x="bottomleft",legend=c("min","ave","max"),
+       fill=rev(heat.colors(3)))
+dev.off()
 
 
 ```
