@@ -763,6 +763,9 @@ temp$OMIM_ID <- str_extract(temp$temp_str,"[0-9]{6}")
 temp$temp_str <- NULL
 temp$Phenotype <-  str_remove(temp$Phenotype,", [0-9]{6}.*")
 
+temp$non_syndrome_flag <- "" == str_remove(str_remove(temp$Phenotype,"\\{.*\\}\\(*[0-9]*\\)*"),"^ ")
+temp$non_syndrome_flag <- temp$non_syndrome_flag | grepl("somatic",temp$Phenotype)
+
 onto_maps$OMIM_GENE$map <- temp
 rm(temp,temp_header)
 
@@ -782,7 +785,7 @@ colnames(onto_maps$HPO_OMIM$map)[which(colnames(onto_maps$HPO_OMIM$map)=="hpo_id
 
 onto_maps$HPO_OMIM_GENE <- list()
 temp1 <- onto_maps$HPO_OMIM$map[,c("OMIM_ID","HPO_ID")]
-temp2 <- onto_maps$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID")]
+temp2 <- onto_maps$OMIM_GENE$map[c("Ensembl_Gene_ID","OMIM_ID","non_syndrome_flag")]
 temp2$OMIM_ID <- paste0("OMIM:",temp2$OMIM_ID)
 onto_maps$HPO_OMIM_GENE$map <- merge(temp1,temp2)
 rm(temp1,temp2)

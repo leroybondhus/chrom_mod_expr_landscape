@@ -142,6 +142,95 @@ ggsave(filename, ggl$mendelian, height = 6, width = 5, units="in" )
 ```
 
 
+```{r, plot chromatin modifier syndrome complexity}
+onto <- ontos$hpo$ont
+which <- which(onto$name=="Phenotypic abnormality")
+major_systems <- onto$name[is.element(onto$id,onto$children[[which]])] 
+to_remove <- c("Constitutional symptom",
+               "Abnormality of the thoracic cavity",
+               "Abnormality of prenatal development or birth",
+               "Neoplasm",
+               "Abnormal cellular phenotype",
+               "Growth abnormality")
+major_systems <- major_systems[-which(is.element(major_systems,to_remove ))]
+major_systems <- list(system_name=major_systems,
+                      descendent_ids=vector(mode="list",length=length(major_systems))  )
+for(i in 1:length(major_systems$descendent_ids)){
+  major_systems$descendent_ids[[i]] <- onto$descendants[[which(onto$name== major_systems$system_name[i] )]]
+}
+
+
+df <-  data.frame(ensembl_gene_id = character(),
+                  omim_id = character(),
+                  major_systems_affected = character(),
+                  complexity  = numeric(),
+                  chrom_subset_name = character())
+
+
+
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]]
+  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  
+  
+  temp_map <- onto_maps$HPO_UBERON_GENE$map
+  temp_map <- temp_map[is.element(temp_map$Ensembl_Gene_ID, chrom_subset),]
+  temp_map <- temp_map[!temp_map$non_syndrome_flag,]
+  
+  for(temp_omim_id in unique(temp_map$OMIM_ID) ){
+    temp_submap <- temp_map[which(temp_map$OMIM_ID==temp_omim_id),] 
+    major_systems_affected <- character()
+    if(nrow(temp_submap)>0){
+      for(j in 1:length(major_systems$system_name)){
+        if(any(is.element(temp_submap$HPO_ID,major_systems$descendent_ids[[j]]))){
+          major_systems_affected <- paste(c(major_systems_affected,
+                                          major_systems$system_name[j]),collapse = ",")
+        }
+      }
+    }
+    temp_df <- data.frame(ensembl_gene_id = unique(temp_submap$Ensembl_Gene_ID),
+                          omim_id = temp_omim_id,
+                          major_systems_affected = strsplit(major_systems_affected,",")[[1]],
+                          complexity = length(strsplit(major_systems_affected,",")[[1]]),
+                          chrom_subset_name = chrom_subset_name)
+    df <- rbind(df, temp_df)
+    
+  }
+}
+
+
+ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complexity))+
+  geom_bar()+
+  facet_grid(chrom_subset_name ~ . )+
+  theme(strip.text.y = element_text(angle = 0))
+
+filename <- paste0(dirs$figures, "syndrome_complexity.png")
+ggsave(filename = filename, device="png",units="in",width=7,height=10,dpi=250)
+
+
+
+df$system_name <- str_remove(str_remove(df$major_systems_affected,"Abnormality of "),"the ")
+temp <- aggregate(df$system_name,by=list(df$system_name),FUN=length)
+temp <- temp[order(temp$x,decreasing = T),]
+df$system_name <- factor(df$system_name, levels = temp$Group.1)
+
+ggplot(df, aes(x=system_name, fill=system_name))+
+  geom_bar()+
+  facet_grid(chrom_subset_name ~ . )+
+  theme(strip.text.y = element_text(angle = 0),
+        axis.text.x =  element_text(angle=90,hjust=0.95))
+
+filename <- paste0(dirs$figures, "major_systems_affected.png")
+ggsave(filename = filename, device="png",units="in",width=7,height=10,dpi=250)
+
+
+### work on upset plot
+
+```
+
+
+
+
 ```{r, test hpo enrichments}
 ## for each HPO, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
@@ -389,9 +478,9 @@ for(i in 1:length(ontos$uberon$ont$id)){
   temp_not_chrom_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
 
     ### Use all genes or only those with some HP association ?
-  which <-  which(!is.element(temp_chrom$UBERON_ID, hps))
+  which <-  which(!is.element(temp_chrom$UBERON_ID, ubs))
   temp_chrom_not_ub <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
-  which <-  which(!is.element(temp_not_chrom$UBERON_ID, hps))
+  which <-  which(!is.element(temp_not_chrom$UBERON_ID, ubs))
   temp_not_chrom_not_ub <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
   
   ## chrom and hp
