@@ -5,6 +5,22 @@ date: "2023-08-20"
 output: html_document
 ---
 
+```{r, load libraries}
+req_packages <- list(
+  standard = c("dendextend","factoextra","cowplot"),
+  biocmanager = c("Gviz","biomaRt")
+)
+for(std_package in req_packages$standard ){
+  if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
+};rm(std_package)
+for(bioc_package in req_packages$biocmanager ){
+  if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
+};rm(bioc_package)
+rm(req_packages)
+
+```
+
+
 ```{r}
 if(!exists("dataset_list")){dataset_list <- list()}
 registerDoParallel(detectCores()-2)
@@ -595,6 +611,93 @@ for(i in 1:length(temp_els)){
 
 save.image("post_summ_stat_meso.RData")
 ```
+
+```{r, plot broad level expression}
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) 
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+temp_tau <- calc_weighted_tau(temp_mat,weights)
+
+
+which <- which(is.element(rownames(temp_mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers )) 
+sub_temp_mat <- temp_mat[which,]
+sub_temp_mat <- melt(sub_temp_mat)
+colnames(sub_temp_mat) <- c("id","biosample","expr") 
+sub_temp_mat$name <- gene_sets$genes_all$external_gene_name[match(sub_temp_mat$id,gene_sets$genes_all$ensembl_gene_id)]
+  
+df <- data.frame(id = names(weighted_means)[which],
+                 wmean = weighted_means[which],
+                 wvar = weighted_sds[which],
+                 name = gene_sets$genes_all$external_gene_name[match(rownames(temp_mat)[which],gene_sets$genes_all$ensembl_gene_id)])
+df <- df[order(df$wmean, decreasing=T),]
+df$id <- factor(df$id, levels = df$id)
+df$name <- factor(df$name, levels = df$name)
+df$wmeanv_l <- df$wmean - df$wvar
+df$wmeanv_u <- df$wmean + df$wvar
+ggplot(df, aes(x=wmean,y=name))+
+  geom_point(color="grey20")+
+  geom_point(data = sub_temp_mat, aes(x=expr, y = name),size=0.1,alpha=0.4,color="firebrick4")+
+  geom_errorbar(alpha=0.8,color="grey20",aes(xmin=df$wmeanv_l,xmax=df$wmeanv_u))+
+  theme(axis.text.y = element_text(size=2))
+ggsave(paste0(dirs$figures,"each_modifier_expression_dist.png"),dev="png",units = "in",width=8,height=10)
+
+
+# ggplot(df, aes(x=wmean))+  
+#   geom_histogram(aes(y=..density..), position="identity") + 
+#   geom_density(aes(y=..density..))
+# ggsave(paste0(dirs$figures,"expression_dist.png"),dev="png",units = "in",width=8,height=4)
+# 
+
+
+ggl <- list()
+ggl[["density"]] <- ggplot(df, aes(x=wmean))+
+  geom_density(alpha=0.5)+
+  barcode_theme+
+  theme(axis.title.x = element_blank())
+
+ggl[["barcode"]] <- ggplot(df, aes(x=wmean,xend=wmean, y=0,yend=1))+
+  geom_segment(alpha=0.5)+
+  barcode_theme+
+  theme(strip.text.y = element_text(angle = 0))
+  
+ggl[["composite"]] <- plot_grid(ggl$density, ggl$barcode, align="v",axis="r",nrow = 2, rel_heights = c(1,1))
+ggl$composite
+
+filename <- paste0(dirs$figures, "expression_dist.png")
+save_plot(filename = filename, ggl$composite, base_width = 6, base_height=2)
+
+
+
+# 
+# df <- data.frame(wmean = weighted_means,
+#                  is_chrom = is.element(names(weighted_means),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+# 
+# df <- melt(temp_mat)
+# colnames(df) <- c("id","biosample","expr") 
+# df$is_chrom <- is.element(df$id,gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+# 
+# ggplot(df[which(df$expr > 0),], aes(x=expr, color=is_chrom))+
+#     geom_histogram(aes(y=..density..), position="identity") + 
+#     geom_density(aes(y=..density..))
+
+  #facet_grid(is_chrom ~ .)
+
+# ggplot(df[!df$is_chrom,], aes(x=expr))+
+#   geom_histogram(bins=6)+ scale_y_log10()
+#+
+ # 
+
+```
+
+
 
 ```{r, muscle example r.e. ontologically organized analysis}
 onto <- ontos$uberon$ont

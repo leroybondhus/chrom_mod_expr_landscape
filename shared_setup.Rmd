@@ -11,7 +11,7 @@ dirs <- list(data="./data/",
              results = "./results/",
              tables = "./results/tables/",
              figures = "./results/figures/",
-             temp_data ="/u/scratch/l/leroybon/chrom_mod_expr_landscape/",
+             temp_data ="./temp_data/",
              OMIM_data = "./data/omim_ra/")
 for(dir in dirs){
   if(!dir.exists(dir)){dir.create(dir)}
@@ -46,8 +46,8 @@ rm(OMIM_genemap2_URL)
 ```{r, load libraries}
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
-               "ggiraph","ggraph","igraph","collapsibleTree","ComplexHeatmap"),
-  biocmanager = c("Gviz","biomaRt")
+               "ggiraph","ggraph","igraph","collapsibleTree","webshot"),
+  biocmanager = c("Gviz","biomaRt","ComplexHeatmap")
 )
 for(std_package in req_packages$standard ){
   if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
@@ -60,7 +60,6 @@ rm(req_packages)
 date <- format(Sys.time(),"%Y%m%d")
 
 
-library(webshot)
 #webshot::install_phantomjs()
 Sys.setenv("OPENSSL_CONF"="/dev/null") ## needed to get around phantomjs bug idk why ..
 ```
