@@ -129,6 +129,30 @@ sorted_expression <- data.matrix(sorted_expression) # convert to matrix
 heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name)
 ```
 
+```{r, calculate gene expression correlation}
+# index gene expression columns to obtain submatrices of each brain structure
+
+# calculate gene expression for all genes for a given brain structure
+calc_correlation <- function(cols_meta,expr_mat){
+  corr_vector <- vector("numeric", dim(expr_mat)[1])
+  for(i in 1:dim(expr_mat)[1]){
+    corr_vector[i] = cor(cols_meta$age, expr_mat[i,])
+  }
+  return(corr_vector)
+}
+
+calc_correlation(sorted_cols[1:33,], sorted_expression[,1:33])
+
+# convert age data in columns_meta to be numeric
+convert_age <- function(ages){
+  numeric_ages <- vector("integer", length(ages))
+  
+  ages[ages == grepl("pcw", ages)]
+  return(numeric_ages)
+}
+```
+
+
 ```{r collected functions used, include=FALSE}
 ### slow with many samples ... prioritize for parallelization 
 calc_dot_product_similarity_matrix <- function(dat) {
@@ -251,10 +275,6 @@ similarity_func <- function(exp_mat){
 ## only 1 clustering fucntion tested for now, can make as a list later
 cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(hclust(as.dist(1-sim_mat), method = "average") ) ))}  
 
-calc_correlation <- function(mat){
-  
-}
-
 ```
 
 ```{r, add summary level expr data to ontology}
@@ -278,11 +298,9 @@ temp_stat_df_model <- data.frame(
   mean_internal = numeric(length=num_features),
   sd_internal = numeric(length=num_features),
   tau_internal = numeric(length=num_features),
-  corr_internal = numeric(length=num_features), # determine gene expression trajectory over time
   mean_external = numeric(length=num_features),
   sd_external = numeric(length=num_features),
-  tau_external = numeric(length=num_features),
-  corr_external = numeric(length=num_features) # determine gene expression trajectory over time
+  tau_external = numeric(length=num_features)
   
 )
 rownames(temp_stat_df_model) <- rownames(mat)
@@ -291,7 +309,7 @@ rownames(temp_stat_df_model) <- rownames(mat)
   
 temp_num_els <- sapply(onto$brainspan_cols,length)
 # temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
-temp_els <- grepl("^brain$",onto$name)
+temp_els <- grepl("^hippocampal formation$",onto$name)
 # temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
 # temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
 temp_els <- which(temp_els & temp_num_els > 1)
@@ -302,16 +320,16 @@ temp_els <- which(temp_els & temp_num_els > 1)
 for(i in 1:length(temp_els)){
   print(i)
   
-  brainspan <- onto$brainspan_cols[[temp_els[i]]]
+  uberon <- onto$brainspan_cols[[temp_els[i]]]
   onto$brainspan_summary_stats[[temp_els[i]]] <- temp_stat_df_model
   
   for(set_and_complement in c(1,-1)){
     if(set_and_complement==1){print("set")} else {print("complement")}
-    temp_mat <- mat[,ehh*set_and_complement,drop=F]
-    temp_coldata <- coldata[ehh*set_and_complement,,drop=F]
-    if(ncol(temp_mat)>0 & (length(ehh) > 5 | set_and_complement==1) ){
-      colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
-                                               ":",temp_coldata$age_group))
+    temp_mat <- mat[,uberon*set_and_complement,drop=F]
+    temp_coldata <- coldata[uberon*set_and_complement,,drop=F]
+    if(ncol(temp_mat)>0 & (length(uberon) > 5 | set_and_complement==1) ){
+      colnames(temp_mat) <- make.unique(paste0(temp_coldata$structure_name,
+                                               ":",temp_coldata$age))
       dot_sim <- similarity_func(temp_mat)
       rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) 
       sim_tree <- cluster_func(dot_sim)
