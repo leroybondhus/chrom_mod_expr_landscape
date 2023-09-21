@@ -6,6 +6,8 @@ output: html_document
 ---
 
 ```{r, load in files}
+registerDoParallel(detectCores()-2)
+
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
@@ -47,7 +49,10 @@ mapped_ids[22] = "UBERON:0006088" # posteroventral (inferior) parietal cortex --
 mapped_ids[23] = "UBERON:0008933" # primary somatosensory cortex (area S1, areas 3,1,2) --> primary somatosensory cortex
 mapped_ids[26] = "UBERON:0002739" # mediodorsal nucleus of thalamus --> medial dorsal nucleus of thalamus
 
-struct_to_ids <- cbind(unique_structures, mapped_ids)
+struct_to_ids <- data.frame(unique_structures, mapped_ids)
+
+# sort in alphabetical order by structure
+struct_to_ids <- struct_to_ids[with(struct_to_ids, order(unique_structures)),]
 
 ```
 
@@ -101,13 +106,31 @@ hist(brainspan_terms[which(brainspan_terms>0)], breaks = 20, main = "Histogram o
 #   }
 # }
 
+# can use this code
 # calculate average gene expression of a row
 # rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
 ```
 
 ```{r, sort expression matrix by brain structure and development time}
-# sort columns_meta by brainspan structure name & then already in age ascending order
-sorted_cols <- columns_meta[with(columns_meta, order(structure_name)),]
+# convert age data in columns_meta to be numeric (number of weeks)
+convert_age <- function(ages){
+  numeric_ages <- vector("integer", length(ages))
+  # replace pcw with just the number
+  numeric_ages[grepl("pcw", ages)] = strtoi(gsub(" pcw", "", ages[grepl("pcw", ages)]))
+  # replace mos with the number * 4
+  numeric_ages[grepl("mos", ages)] = strtoi(gsub(" mos", "", ages[grepl("mos", ages)]))*4
+  # replace yrs with the number * 52
+  numeric_ages[grepl("yrs", ages)] = strtoi(gsub(" yrs", "", ages[grepl("yrs", ages)]))*52
+
+  return(numeric_ages)
+}
+
+columns_meta$age <- convert_age(columns_meta$age)
+
+# sort columns_meta by brainspan structure name and then age ascending order
+sorted_cols <- columns_meta[with(columns_meta, order(structure_name, age)),]
+
+
 
 # sort expression_mat columns based on order from sorted columns_meta
 sorted_expression <- expression_mat[sorted_cols$column_num]
@@ -134,22 +157,15 @@ heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], 
 
 # calculate gene expression for all genes for a given brain structure
 calc_correlation <- function(cols_meta,expr_mat){
-  corr_vector <- vector("numeric", dim(expr_mat)[1])
-  for(i in 1:dim(expr_mat)[1]){
+  corr_vector <- vector("numeric", nrow(expr_mat))
+  for(i in 1:nrow(expr_mat)){
     corr_vector[i] = cor(cols_meta$age, expr_mat[i,])
   }
   return(corr_vector)
 }
 
-calc_correlation(sorted_cols[1:33,], sorted_expression[,1:33])
 
-# convert age data in columns_meta to be numeric
-convert_age <- function(ages){
-  numeric_ages <- vector("integer", length(ages))
-  
-  ages[ages == grepl("pcw", ages)]
-  return(numeric_ages)
-}
+corr <- calc_correlation(sorted_cols[1:33,], sorted_expression[,1:33])
 ```
 
 
@@ -309,7 +325,7 @@ rownames(temp_stat_df_model) <- rownames(mat)
   
 temp_num_els <- sapply(onto$brainspan_cols,length)
 # temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
-temp_els <- grepl("^hippocampal formation$",onto$name)
+temp_els <- grepl("^brain$",onto$name)
 # temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
 # temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
 temp_els <- which(temp_els & temp_num_els > 1)
