@@ -675,27 +675,52 @@ filename <- paste0(dirs$figures, "expression_dist.png")
 save_plot(filename = filename, ggl$composite, base_width = 6, base_height=2)
 
 
+```
 
-# 
-# df <- data.frame(wmean = weighted_means,
-#                  is_chrom = is.element(names(weighted_means),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
-# 
-# df <- melt(temp_mat)
-# colnames(df) <- c("id","biosample","expr") 
-# df$is_chrom <- is.element(df$id,gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
-# 
-# ggplot(df[which(df$expr > 0),], aes(x=expr, color=is_chrom))+
-#     geom_histogram(aes(y=..density..), position="identity") + 
-#     geom_density(aes(y=..density..))
 
-  #facet_grid(is_chrom ~ .)
 
-# ggplot(df[!df$is_chrom,], aes(x=expr))+
-#   geom_histogram(bins=6)+ scale_y_log10()
-#+
- # 
+```{r, make primary gene expression heatmap figure}
+onto <- ontos$hpo$ont
+which <- which(onto$name=="Phenotypic abnormality")
+major_systems <- onto$name[is.element(onto$id,onto$children[[which]])] 
+to_remove <- c("Constitutional symptom",
+               "Abnormality of the thoracic cavity",
+               "Abnormality of prenatal development or birth",
+               "Neoplasm",
+               "Abnormal cellular phenotype",
+               "Growth abnormality")
+major_systems <- major_systems[-which(is.element(major_systems,to_remove ))]
+temp_ids <- onto$id[match(major_systems,onto$name)]
+temp_df <- onto_maps$HPO_UBERON$map[match(temp_ids, onto_maps$HPO_UBERON$map$HPO_ID),]
+temp_df$HPO_name <- ontos$hpo$ont$name[match(temp_df$HPO_ID, ontos$hpo$ont$id)]
+temp_df$UBERON_name <- ontos$uberon$ont$name[match(temp_df$UBERON_ID, ontos$uberon$ont$id)]
+## map major systems defined in HPO to UBERON
+
+
+
+#major_systems <- list(system_name=major_systems,
+                      descendent_ids=vector(mode="list",length=length(major_systems))  )
+
+# for(i in 1:length(major_systems$descendent_ids)){
+#   major_systems$descendent_ids[[i]] <- onto$descendants[[which(onto$name== major_systems$system_name[i] )]]
+# }
+
+
+
+
+
+
+#### top : ubiquitous ordered by decreasing mean expression
+### bottom : Specific - top 10 by major system -- map UBERON to same set of major systems as HPO phenotype analyses
+## OR for each specific gene - search onto list - pull df of mean and specificity of int and ext
+## then calc sim of this for all spec genes (i.e. cluster on this) - and plot with these gene groups and columns ordered by 
+## these onto terms- allow duplicates ? 
+### complex : correlation with other gene classes? GO analysis to id unifying modules ? (since not related by tissue)
+
+
 
 ```
+
 
 
 

@@ -841,9 +841,18 @@ temp$UBERON_ID <- str_replace_all(temp$UBERON_ID, "_",":")
 temp$HPO_ID <- str_replace_all(temp$HPO_ID,"_",":")
 onto_maps$HPO_UBERON$map <- temp[,c("HPO_ID","UBERON_ID")]
 onto_maps$HPO_UBERON$map <- onto_maps$HPO_UBERON$map[is.element(onto_maps$HPO_UBERON$map$HPO_ID, ontos$hpo$ont$id),]
+onto_maps$HPO_UBERON$map$temp_hpo_height <- ontos$hpo$ont$height[match(onto_maps$HPO_UBERON$map$HPO_ID, ontos$hpo$ont$id )]
+
+### NOTE: FIX HPO UBERON MAPPING: 
+##### add: HP:0033127 "abnormality of the musculoskeletal system" maps to UBERON:0002204 "musculoskeletal systems" 
+onto_maps$HPO_UBERON$map$UBERON_ID[which(onto_maps$HPO_UBERON$map$HPO_ID=="HP:0033127")] <- "UBERON:0002204"
+
+
 ## 
 ### fill in missing uberon terms from map - find deepest HPO term with some UBERON mapped to it
-for(i in 1:nrow(onto_maps$HPO_UBERON$map)){
+#### need to start at deepest level and move upwards
+temp_order <- order(onto_maps$HPO_UBERON$map$temp_hpo_height, decreasing = F)
+for(i in temp_order){
   if(i %% 1e3 == 0){print(i)}
   if(!is.na(onto_maps$HPO_UBERON$map$UBERON_ID[i])){next}
   ancestors  <- get_ancestors(onto_maps$HPO_UBERON$map$HPO_ID[i], ontos$hpo$ont)
@@ -857,7 +866,10 @@ for(i in 1:nrow(onto_maps$HPO_UBERON$map)){
   if(nrow(temp_df)==0){next}
   onto_maps$HPO_UBERON$map$UBERON_ID[i] <- temp_df$UBERON[which.max(temp_df$depth)[1]] 
 }
-rm(temp, temp_df, ancestors, i, which)
+rm(temp, temp_df, ancestors, i, which, temp_order)
+onto_maps$HPO_UBERON$map$temp_hpo_height <- NULL
+
+
 
 onto_maps$HPO_UBERON_GENE <- list()
 onto_maps$HPO_UBERON_GENE$map <- merge(onto_maps$HPO_OMIM_GENE$map, onto_maps$HPO_UBERON$map)
