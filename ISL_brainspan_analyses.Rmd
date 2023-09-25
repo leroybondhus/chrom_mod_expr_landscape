@@ -130,42 +130,47 @@ columns_meta$age <- convert_age(columns_meta$age)
 # sort columns_meta by brainspan structure name and then age ascending order
 sorted_cols <- columns_meta[with(columns_meta, order(structure_name, age)),]
 
-
-
 # sort expression_mat columns based on order from sorted columns_meta
 sorted_expression <- expression_mat[sorted_cols$column_num]
+
+sorted_expression <- data.matrix(sorted_expression) # convert to matrix
 ```
 
 ```{r, heat maps for gene expression over time for each structure}
-library(ggplot2)
-library(ComplexHeatmap)
-
-# if (!require("BiocManager", quietly = TRUE))
-#     install.packages("BiocManager")
-# 
-# BiocManager::install("ComplexHeatmap")
-
 # heatmap of "amygdaloid complex"
-sorted_expression <- data.matrix(sorted_expression) # convert to matrix
 
-# note that need to determine method to subset genes of interest b/c vector allocation issues
+# note that need to determine method to subset genes of interest b/c vector allocation issues - just need to select smaller set of genes of interest
 heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name)
 ```
 
 ```{r, calculate gene expression correlation}
-# index gene expression columns to obtain submatrices of each brain structure
-
 # calculate gene expression for all genes for a given brain structure
 calc_correlation <- function(cols_meta,expr_mat){
   corr_vector <- vector("numeric", nrow(expr_mat))
   for(i in 1:nrow(expr_mat)){
-    corr_vector[i] = cor(cols_meta$age, expr_mat[i,])
+    corr_vector[i] = suppressWarnings(cor(cols_meta$age, expr_mat[i,]))
   }
   return(corr_vector)
 }
 
+# first create matrix with columns for each brain structure and rows for the correlation of each gene
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
 
-corr <- calc_correlation(sorted_cols[1:33,], sorted_expression[,1:33])
+# index gene expression columns to obtain submatrices of each brain structure
+for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
+  struct <- struct_to_ids$unique_structures[i]
+  temp_mat <- sorted_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
+  temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+  if(nrow(temp_cols) > 1){
+    corr_matrix[,i] = calc_correlation(temp_cols, temp_mat)
+  }
+}
+
+# note some individual correlation values are NA
+# error with "temporal neocortex" because only one sample - use if statement to test length of num cols
+
+# can perform exploratory heat map analysis by taking certain sets of genes
+
 ```
 
 
