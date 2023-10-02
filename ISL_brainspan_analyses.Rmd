@@ -167,11 +167,18 @@ for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
 }
 
 # note some individual correlation values are NA
-# error with "temporal neocortex" because only one sample - use if statement to test length of num cols
+# error with "temporal neocortex" because only one sample - use if statement to test length of num cols before calculating correlation
 
 # can perform exploratory heat map analysis by taking certain sets of genes
+# should i use ComplexHeatMap or base heatmap
 
 ```
+
+```{r, summary table for correlation values}
+
+
+```
+
 
 
 ```{r collected functions used, include=FALSE}
