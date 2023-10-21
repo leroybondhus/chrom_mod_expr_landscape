@@ -146,37 +146,138 @@ heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], 
 ```{r, calculate gene expression correlation}
 # calculate gene expression for all genes for a given brain structure
 calc_correlation <- function(cols_meta,expr_mat){
-  corr_vector <- vector("numeric", nrow(expr_mat))
+  corr <- vector("numeric", nrow(expr_mat))
+  p_val <- vector("numeric", nrow(expr_mat))
+  confidence_int_lower <- vector("numeric", nrow(expr_mat))
+  confidence_int_upper <- vector("numeric", nrow(expr_mat))
   for(i in 1:nrow(expr_mat)){
-    corr_vector[i] = suppressWarnings(cor(cols_meta$age, expr_mat[i,]))
+    output = suppressWarnings(cor.test(cols_meta$age, expr_mat[i,]))
+    corr[i] = output$estimate
+    p_val[i] = output$p.value
+    if (length(output$conf.int) > 0){
+      confidence_int_lower[i] = output$conf.int[1]
+      confidence_int_upper[i] = output$conf.int[2]
+    }
   }
-  return(corr_vector)
+  return(data.frame(corr, p_val, confidence_int_lower, confidence_int_upper))
 }
 
 # first create matrix with columns for each brain structure and rows for the correlation of each gene
+# create list of matrices (time-correlation sum)
 corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
+
+# also create vector to store number of time points for each unique brainspan structure
+num_struct_timepoints <- vector("integer", nrow(struct_to_ids))
 
 # index gene expression columns to obtain submatrices of each brain structure
 for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
   struct <- struct_to_ids$unique_structures[i]
   temp_mat <- sorted_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
   temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
-  if(nrow(temp_cols) > 1){
-    corr_matrix[,i] = calc_correlation(temp_cols, temp_mat)
+  num_struct_timepoints[i] = nrow(temp_cols)
+  if(nrow(temp_cols) > 2){
+    result = calc_correlation(temp_cols, temp_mat)
+    corr_matrix[,i] = result$corr
+    p_val_matrix[,i] = result$p_val
+    confidence_int_lower_matrix[,i] = result$confidence_int_lower
+    confidence_int_upper_matrix[,i] = result$confidence_int_upper
   }
 }
 
 # note some individual correlation values are NA
 # error with "temporal neocortex" because only one sample - use if statement to test length of num cols before calculating correlation
+# using cor.test brainspan structures with only two samples also lead to error
 
 # can perform exploratory heat map analysis by taking certain sets of genes
 # should i use ComplexHeatMap or base heatmap
 
 ```
 
+```{r, summary stats for p-values for correlation}
+# save for future
+
+```
+
 ```{r, summary table for correlation values}
+count_corr <- function(corr_mat, lower_bound, upper_bound){
+  counts <- vector("integer", ncol(corr_mat))
+  for (i in 1:ncol(corr_mat)){
+      counts[i] = sum((corr_mat[,i] > lower_bound) & (corr_mat[,i] < upper_bound), na.rm = T)
+    }
+  return (counts)
+}
+
+# subset genes in corr_matrix that correspond to human chromatin modifer genes
+chromatin_modifiers <- gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers
+matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
+matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
+chrom_mod_corr <- corr_matrix[matched_modifiers,]
+
+# modify threshold cutoffs for correlation
+upper = 0.6
+lower = 0.2
+
+corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
+
+```
 
 
+```{r, exploratory plots for correlation}
+# test plot high corr genes for ventrolateral prefrontal cortex
+struct <- "ventrolateral prefrontal cortex"
+# find which column in the corr_matrix the struct corresponds to
+col_index <- grep(struct, struct_to_ids$unique_structures, fixed = T)
+interest_gene <- rows_meta$gene_symbol[which(chrom_mod_corr[,col_index]>0.8)]
+chrom_mod_expression <- sorted_expression[matched_modifiers,]
+which(chrom_mod_corr[,col_index]>0.8)
+temp_mat <- chrom_mod_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
+temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+
+# use to center title in plot
+theme_update(plot.title = element_text(hjust = 0.5))
+
+ggplot(data.frame(log10(temp_cols$age), temp_mat[which(chrom_mod_corr[,col_index]>0.8),]), aes(x = log10(temp_cols$age), y = temp_mat[which(chrom_mod_corr[,col_index]>0.8),])) + geom_line() + labs(x = "log10(age)", y = "expression level", title =paste0(interest_gene, " in ", struct, " over time"))
+
+
+```
+
+```{r}
+# for a structure, plot line for each of the genes
+# temp_mat based on struct from previous block
+
+formatted_data <- data.frame(temp_mat, row.names = rows_meta[matched_modifiers,]$gene_symbol)
+colnames(formatted_data) <- temp_cols$age
+formatted_data$id = row.names(formatted_data)
+melted <- melt(formatted_data)
+
+ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) + 
+  geom_line() + 
+  theme(legend.position = "none")
+
+```
+
+```{r, KAT6A/B expression plots}
+kat6a_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6A")
+kat6b_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6B")
+
+# normalize gene expression btwn 0-1 - do i scale along row (gene) or column (sample)
+norm_chrom_mod_expression <- chrom_mod_expression
+
+kat6a_expression <- norm_chrom_mod_expression[kat6a_row,]
+kat6b_expression <- norm_chrom_mod_expression[kat6b_row,]
+pcw <- sorted_cols$age
+structures <- sorted_cols$structure_name
+
+kat6a_df <- data.frame(structures, pcw, kat6a_expression)
+ggplot(kat6a_df, aes(x = pcw, y = log10(kat6a_expression+1), color = structures, group = structures)) + geom_line() + 
+  theme(legend.position = "bottom") + ggtitle("KAT6A expression over time for each brain region")
+
+kat6b_df <- data.frame(structures, pcw, kat6b_expression)
+ggplot(kat6b_df, aes(x = pcw, y = log10(kat6b_expression+1), color = structures, group = structures)) + geom_line() + 
+  theme(legend.position = "bottom")+ ggtitle("KAT6B expression over time for each brain region")
 ```
 
 
