@@ -29,6 +29,7 @@ library(jsonlite)
 library(httr)
 library(dendextend)
 library(factoextra)
+library(cowplot)
 ```
 ```{r}
 ### look into this as supplement/alt to encode
@@ -43,7 +44,7 @@ print(Sys.time())
 # 
 search_query <- paste0("https://www.encodeproject.org/search/",
                        "?type=Experiment&control_type!=*&status=released&perturbed=false",
-                       "&assay_title=polyA+plus+RNA-seq&assay_title=total+RNA-seq",
+                       "&assay_title=total+RNA-seq", #&assay_title=polyA+plus+RNA-seq
                        "&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens",
                        "&format=json&limit=all")
 #"https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"

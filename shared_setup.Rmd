@@ -58,7 +58,7 @@ for(bioc_package in req_packages$biocmanager ){
 rm(req_packages)
 
 date <- format(Sys.time(),"%Y%m%d")
-
+registerDoParallel(detectCores()-2)
 
 #webshot::install_phantomjs()
 Sys.setenv("OPENSSL_CONF"="/dev/null") ## needed to get around phantomjs bug idk why ..
@@ -936,7 +936,9 @@ gene_sets$human_chromatin_modifiers$go_terms = c("histone acetyltransferase acti
                                         "chromatin looping",
                                         "heterochromatin organization",
                                         "DNA-methyltransferase activity",
-                                        "DNA demethylase activity")
+                                        "DNA demethylase activity",
+                                        "structural constituent of chromatin"
+                                      )
 
 
 ## for each term in chrom_go_terms, check which genes are associated with term (and any of it's descendants)
@@ -951,7 +953,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
   gene_sets$human_chromatin_modifiers$go_ids[i] <- term_id
   
   ## genes which have GO id for current term or any of it's descendants
-  descendants <-ontos$go$ont$descendants[[which]]
+  descendants <- c(term_id, ontos$go$ont$descendants[[which]])
   gene_sets$human_chromatin_modifiers$gene_subsets[[i]] <-
     unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, descendants ))])
   
