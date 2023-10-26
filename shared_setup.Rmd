@@ -961,6 +961,10 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
 
 gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
 
+gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
+  gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+  gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
+
 
 ## human
 ## mouse

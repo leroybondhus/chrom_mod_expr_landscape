@@ -96,30 +96,31 @@ output: html_document
 <!-- ``` -->
 
 ```{r, plot broad level expression}
-for(assay in unique(dataset_list$ENCODE_HH$agg_med_norm__coldata$assay_term_name)){
-  which <- which(dataset_list$ENCODE_HH$agg_med_norm__coldata == assay)
-  temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,which]
-  temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[which,]
-  
-  colnames(temp_mat) <- make.unique(paste(temp_coldata$assay_term_name,
-                                           temp_coldata$biosample_ontology.term_name,
-                                           temp_coldata$age_group, sep=":"))
-  
-  
-  dot_sim <- similarity_func(temp_mat)
-  rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
-  sim_tree <- cluster_func(dot_sim)
-  weights <- get_weights(sim_tree, colnames(temp_mat))
-  weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
-  weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
-  temp_tau <- calc_weighted_tau(temp_mat,weights)
-  
-  
-  which <- which(is.element(rownames(temp_mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers ))
+
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+colnames(temp_mat) <- make.unique(paste(temp_coldata$assay_term_name,
+                                         temp_coldata$biosample_ontology.term_name,
+                                         temp_coldata$age_group, sep=":"))
+
+
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+temp_tau <- calc_weighted_tau(temp_mat,weights)
+
+ggl2 <- list()
+for(subset_name in names(gene_sets$human_chromatin_modifiers$gene_subsets)){ 
+  which <- which(is.element(rownames(temp_mat),gene_sets$human_chromatin_modifiers$gene_subsets[[subset_name]] ))
   sub_temp_mat <- temp_mat[which,]
   sub_temp_mat <- melt(sub_temp_mat)
   colnames(sub_temp_mat) <- c("id","biosample","expr")
   sub_temp_mat$name <- gene_sets$genes_all$external_gene_name[match(sub_temp_mat$id,gene_sets$genes_all$ensembl_gene_id)]
+  sub_temp_mat$name[which(sub_temp_mat$name=="")] <- sub_temp_mat$id[which(sub_temp_mat$name=="")]
   temp <- str_split_fixed(sub_temp_mat$biosample,":", 3)
   colnames(temp) <- c("assay","ontology.term_name","age_group")
   sub_temp_mat <- cbind(sub_temp_mat, temp)
@@ -129,17 +130,23 @@ for(assay in unique(dataset_list$ENCODE_HH$agg_med_norm__coldata$assay_term_name
                    wmean = weighted_means[which],
                    wvar = weighted_sds[which],
                    name = gene_sets$genes_all$external_gene_name[match(rownames(temp_mat)[which],gene_sets$genes_all$ensembl_gene_id)])
+  df$name[which(df$name=="")] <- df$id[which(df$name=="")]
   df <- df[order(df$wmean, decreasing=T),]
   df$id <- factor(df$id, levels = df$id)
   df$name <- factor(df$name, levels = df$name)
   df$wmeanv_l <- df$wmean - df$wvar
   df$wmeanv_u <- df$wmean + df$wvar
-  ggplot(df, aes(x=wmean,y=name))+
+  
+  sub_temp_mat$name <- factor(sub_temp_mat$name,levels=levels(df$name))
+  ggl2[[str_replace_all(subset_name," ","_")]] <- ggplot(df, aes(x=wmean,y=name))+
     geom_point(color="grey20")+
-    geom_point(data = sub_temp_mat, aes(x=expr, y = name, color=assay),size=0.1,alpha=0.4)+#,color="firebrick4")+
-    geom_errorbar(alpha=0.8,color="grey20",aes(xmin=df$wmeanv_l,xmax=df$wmeanv_u))+
+    geom_point(data = sub_temp_mat, aes(x=expr, y = name),size=0.1,alpha=0.4,color="salmon")+
+    geom_errorbar(alpha=0.8,color="grey20",aes(xmin=wmeanv_l,xmax=wmeanv_u))+
+    scale_y_discrete(limits=levels(df$name))+
+    scale_x_continuous(limits = c(0,3.5))+
+    theme_bw()+
     theme(axis.text.y = element_text(size=2))
-  ggsave(paste0(dirs$figures, assay, "__each_modifier_expression_dist.png"),dev="png",units = "in",width=8,height=10)
+  ggsave(paste0(dirs$figures, str_replace_all(subset_name," ","_"), "_dist.png"),dev="png",units = "in",width=8,height=10)
   
   
   # ggplot(df, aes(x=wmean))+
@@ -163,10 +170,13 @@ for(assay in unique(dataset_list$ENCODE_HH$agg_med_norm__coldata$assay_term_name
   ggl[["composite"]] <- plot_grid(ggl$density, ggl$barcode, align="v",axis="r",nrow = 2, rel_heights = c(1,1))
   ggl$composite
   
-  filename <- paste0(dirs$figures, assay, "__expression_dist.png")
+  filename <- paste0(dirs$figures, str_replace_all(subset_name," ","_"), "_expression_dist.png")
   save_plot(filename = filename, ggl$composite, base_width = 6, base_height=2)
-
 }
+
+ggl2$composite <- plot_grid(ggl2$non_histones, ggl2$structural_constituent_of_chromatin, align="v",axis="r",nrow = 2, rel_heights = c(3,1))
+filename <- paste0(dirs$figures,  "histone_nonhistone_expression_dist.png")
+save_plot(filename = filename, ggl2$composite, base_width = 6, base_height=8)
 ```
 
 
