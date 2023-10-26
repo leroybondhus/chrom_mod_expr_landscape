@@ -194,7 +194,7 @@ for(phen_name in phen_names){
   desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==phen_name)], onto,
                                  descendent_relations =  "has_part(SUPP_INV(part_of))",
                                  ascendent_relations = "part_of",
-                                 max_level = 4)
+                                 max_level = 3)
   which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
                            desc_sum_table$num_chrom_associated > 30) 
   desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
@@ -227,17 +227,17 @@ for(phen_name in phen_names){
     desc_sum_tree_merge$term_parent, desc_sum_tree_merge$term 
   )]
   desc_sum_tree_merge$term <- desc_sum_tree_merge$`_name_`
-  
+  desc_sum_tree_merge$size <- desc_sum_tree_merge$mag_associated*1.5
   temp_html_plot <- collapsibleTreeNetwork(
     desc_sum_tree_merge,
-    fontSize = 12,
+    fontSize = 18,
     attribute = "odds_ratio",
     fill = "color", 
-    nodeSize = "mag_associated",
+    nodeSize = "size",
     collapsed = FALSE,
     zoomable = FALSE,
-    width=700,
-    height = 700
+    width=1200,
+    height = 400
   )
 
   htmlwidgets::saveWidget(temp_html_plot,
@@ -247,7 +247,7 @@ for(phen_name in phen_names){
   Sys.setenv("OPENSSL_CONF"="/dev/null")
   webshot(paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn_2.html"),
           paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn_2.png"),
-          vheight = 800, vwidth = 800 , zoom =2, delay=1.5)
+          vheight = 500, vwidth = 1300 , zoom =2, delay=1.5)
    
 }
 
@@ -346,7 +346,7 @@ for(phen_name in phen_names){
   desc_sum_tree <- get_desc_tree(onto$id[which(onto$name==phen_name)], onto,
                                  descendent_relations =  "has_part(SUPP_INV(part_of))",
                                  ascendent_relations = "part_of",
-                                 max_level = 4)
+                                 max_level = 3)
   which_assoc <- which(desc_sum_table$num_non_chrom_associated + 
                            desc_sum_table$num_chrom_associated > 30) 
   desc_sum_tree_merge <- unique(merge(desc_sum_tree[,which(colnames(desc_sum_tree)!="level")],
@@ -383,14 +383,14 @@ for(phen_name in phen_names){
   
   temp_html_plot <- collapsibleTreeNetwork(
     desc_sum_tree_merge,
-    fontSize = 12,
+    fontSize = 18,
     attribute = "odds_ratio",
     fill = "color", 
     nodeSize = "mag_associated",
     collapsed = FALSE,
     zoomable = FALSE,
-    width=700,
-    height = 700
+    width=1200,
+    height = 400
   )
 
   htmlwidgets::saveWidget(temp_html_plot,
@@ -400,7 +400,7 @@ for(phen_name in phen_names){
   Sys.setenv("OPENSSL_CONF"="/dev/null")
   webshot(paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn_cilia.html"),
           paste0(dirs$figures,"HPO_", str_replace_all(phen_name," ","_"),"_ctn_cilia.png"),
-          vheight = 800, vwidth = 800 , zoom =2, delay=1.5)
+          vheight = 500, vwidth = 1300 , zoom =2, delay=1.5)
    
 }
 

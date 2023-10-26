@@ -1,0 +1,737 @@
+---
+title: "expression_analyses"
+author: "Leroy Bondhus"
+date: "2023-10-24"
+output: html_document
+---
+
+
+
+
+
+<!-- ```{r, add summary level expr data to ontology} -->
+<!-- onto <- ontos$uberon$ont -->
+<!-- mat <- dataset_list$ENCODE_HH$agg_med_norm__mat -->
+<!-- coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata -->
+<!-- num_terms <- length(onto$id) -->
+<!-- num_features <- nrow(mat) -->
+<!-- # onto$ehh_summary_stats <- list( -->
+<!-- #   mean_internal = vector("list", num_terms), -->
+<!-- #   sd_internal = vector("list", num_terms), -->
+<!-- #   tau_internal = vector("list", num_terms), -->
+<!-- #   mean_external = vector("list", num_terms), -->
+<!-- #   sd_external = vector("list", num_terms), -->
+<!-- #   tau_external = vector("list", num_terms) -->
+<!-- # ) -->
+<!-- onto$ehh_summary_stats <- vector("list", num_terms) -->
+<!-- temp_stat_df_model <- data.frame( -->
+<!--   mean_internal = numeric(length=num_features), -->
+<!--   sd_internal = numeric(length=num_features), -->
+<!--   tau_internal = numeric(length=num_features), -->
+<!--   mean_external = numeric(length=num_features), -->
+<!--   sd_external = numeric(length=num_features), -->
+<!--   tau_external = numeric(length=num_features) -->
+<!-- ) -->
+<!-- rownames(temp_stat_df_model) <- rownames(mat) -->
+
+
+
+<!-- temp_num_els <- sapply(onto$ehh,length) -->
+<!-- # temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) -->
+<!-- # temp_els <- grepl("^heart$",onto$name) -->
+<!-- # temp_els <- temp_els | grepl("^mesoderm-derived",onto$name) -->
+<!-- # temp_els <- temp_els | grepl("^anatomical entity$",onto$name) -->
+<!-- # temp_els <- which(temp_els & temp_num_els > 1) -->
+
+<!-- eg_onto_terms <- c("anatomical entity","mesoderm-derived structure","heart","muscle tissue", -->
+<!--                     "cardiac muscle tissue", "skeletal muscle tissue","smooth muscle tissue") -->
+<!-- temp_els <- match(eg_onto_terms, onto$name) -->
+
+<!-- #temp_els <- which(is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) & -->
+<!-- #                  temp_num_els > 1)   #which(temp_num_els > 1) -->
+<!-- #temp_els <- grep("^mesoderm-derived|^ectoderm-derived|^endoderm-derived", onto$name) -->
+<!-- for(i in 1:length(temp_els)){ -->
+<!--   print(i) -->
+
+<!--   ehh <- onto$ehh[[temp_els[i]]] -->
+<!--   onto$ehh_summary_stats[[temp_els[i]]] <- temp_stat_df_model -->
+
+<!--   for(set_and_complement in c(1,-1)){ -->
+<!--     if(set_and_complement==1){print("set")} else {print("complement")} -->
+<!--     temp_mat <- mat[,ehh*set_and_complement,drop=F] -->
+<!--     temp_coldata <- coldata[ehh*set_and_complement,,drop=F] -->
+<!--     if(ncol(temp_mat)>0 & (length(ehh) > 5 | set_and_complement==1) ){ -->
+<!--       colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name, -->
+<!--                                                ":",temp_coldata$age_group)) -->
+<!--       dot_sim <- similarity_func(temp_mat) -->
+<!--       rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) -->
+<!--       sim_tree <- cluster_func(dot_sim) -->
+<!--       weights <- get_weights(sim_tree, colnames(temp_mat)) -->
+<!--       weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
+<!--       weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
+<!--       temp_tau <- calc_weighted_tau(temp_mat,weights) -->
+<!--     } else { -->
+<!--       temp_tau <- NA -->
+<!--       weighted_means <- NA -->
+<!--       weighted_sds <- NA -->
+<!--     } -->
+<!--     if(set_and_complement==1){ -->
+<!--       # onto$ehh_summary_stats$tau_internal[[temp_els[i]]] <- temp_tau -->
+<!--       # onto$ehh_summary_stats$mean_internal[[temp_els[i]]] <- weighted_means -->
+<!--       # onto$ehh_summary_stats$sd_internal[[temp_els[i]]] <- weighted_sds -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$tau_internal <- temp_tau -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$mean_internal <- weighted_means -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$sd_internal <- weighted_sds -->
+<!--     } else { -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$tau_external <- temp_tau -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$mean_external <- weighted_means -->
+<!--       onto$ehh_summary_stats[[temp_els[i]]]$sd_external <- weighted_sds -->
+<!--     } -->
+
+<!--   } -->
+<!-- } -->
+
+
+<!-- save.image("post_summ_stat_meso.RData") -->
+<!-- ``` -->
+
+```{r, plot broad level expression}
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+temp_tau <- calc_weighted_tau(temp_mat,weights)
+
+
+which <- which(is.element(rownames(temp_mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers ))
+sub_temp_mat <- temp_mat[which,]
+sub_temp_mat <- melt(sub_temp_mat)
+colnames(sub_temp_mat) <- c("id","biosample","expr")
+sub_temp_mat$name <- gene_sets$genes_all$external_gene_name[match(sub_temp_mat$id,gene_sets$genes_all$ensembl_gene_id)]
+
+df <- data.frame(id = names(weighted_means)[which],
+                 wmean = weighted_means[which],
+                 wvar = weighted_sds[which],
+                 name = gene_sets$genes_all$external_gene_name[match(rownames(temp_mat)[which],gene_sets$genes_all$ensembl_gene_id)])
+df <- df[order(df$wmean, decreasing=T),]
+df$id <- factor(df$id, levels = df$id)
+df$name <- factor(df$name, levels = df$name)
+df$wmeanv_l <- df$wmean - df$wvar
+df$wmeanv_u <- df$wmean + df$wvar
+ggplot(df, aes(x=wmean,y=name))+
+  geom_point(color="grey20")+
+  geom_point(data = sub_temp_mat, aes(x=expr, y = name),size=0.1,alpha=0.4,color="firebrick4")+
+  geom_errorbar(alpha=0.8,color="grey20",aes(xmin=df$wmeanv_l,xmax=df$wmeanv_u))+
+  theme(axis.text.y = element_text(size=2))
+ggsave(paste0(dirs$figures,"each_modifier_expression_dist.png"),dev="png",units = "in",width=8,height=10)
+
+
+# ggplot(df, aes(x=wmean))+
+#   geom_histogram(aes(y=..density..), position="identity") +
+#   geom_density(aes(y=..density..))
+# ggsave(paste0(dirs$figures,"expression_dist.png"),dev="png",units = "in",width=8,height=4)
+#
+
+
+ggl <- list()
+ggl[["density"]] <- ggplot(df, aes(x=wmean))+
+  geom_density(alpha=0.5)+
+  barcode_theme+
+  theme(axis.title.x = element_blank())
+
+ggl[["barcode"]] <- ggplot(df, aes(x=wmean,xend=wmean, y=0,yend=1))+
+  geom_segment(alpha=0.5)+
+  barcode_theme+
+  theme(strip.text.y = element_text(angle = 0))
+
+ggl[["composite"]] <- plot_grid(ggl$density, ggl$barcode, align="v",axis="r",nrow = 2, rel_heights = c(1,1))
+ggl$composite
+
+filename <- paste0(dirs$figures, "expression_dist.png")
+save_plot(filename = filename, ggl$composite, base_width = 6, base_height=2)
+
+
+```
+
+
+
+```{r, make primary gene expression heatmap figure}
+onto <- ontos$hpo$ont
+which <- which(onto$name=="Phenotypic abnormality")
+major_systems <- onto$name[is.element(onto$id,onto$children[[which]])]
+to_remove <- c("Constitutional symptom",
+               "Abnormality of the thoracic cavity",
+               "Abnormality of prenatal development or birth",
+               "Neoplasm",
+               "Abnormal cellular phenotype",
+               "Growth abnormality")
+major_systems <- major_systems[-which(is.element(major_systems,to_remove ))]
+temp_ids <- onto$id[match(major_systems,onto$name)]
+temp_df <- onto_maps$HPO_UBERON$map[match(temp_ids, onto_maps$HPO_UBERON$map$HPO_ID),]
+temp_df$HPO_name <- ontos$hpo$ont$name[match(temp_df$HPO_ID, ontos$hpo$ont$id)]
+temp_df$UBERON_name <- ontos$uberon$ont$name[match(temp_df$UBERON_ID, ontos$uberon$ont$id)]
+## map major systems defined in HPO to UBERON
+
+
+
+#major_systems <- list(system_name=major_systems,
+                      # descendent_ids=vector(mode="list",length=length(major_systems))  )
+
+# for(i in 1:length(major_systems$descendent_ids)){
+#   major_systems$descendent_ids[[i]] <- onto$descendants[[which(onto$name== major_systems$system_name[i] )]]
+# }
+
+
+
+
+
+
+#### top : ubiquitous ordered by decreasing mean expression
+### bottom : Specific - top 10 by major system -- map UBERON to same set of major systems as HPO phenotype analyses
+## OR for each specific gene - search onto list - pull df of mean and specificity of int and ext
+## then calc sim of this for all spec genes (i.e. cluster on this) - and plot with these gene groups and columns ordered by
+## these onto terms- allow duplicates ?
+### complex : correlation with other gene classes? GO analysis to id unifying modules ? (since not related by tissue)
+
+
+
+```
+
+
+
+
+<!-- ```{r, muscle example r.e. ontologically organized analysis} -->
+<!-- onto <- ontos$uberon$ont -->
+<!-- mat <- dataset_list$ENCODE_HH$agg_med_norm__mat -->
+<!-- coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata -->
+
+<!-- #### ubiquitous, specific -->
+<!-- #### all, mesoderm-derived, heart -->
+
+<!-- temp_stat_df_model <- data.frame( -->
+<!--   mean_internal = numeric(length=num_features), -->
+<!--   sd_internal = numeric(length=num_features), -->
+<!--   tau_internal = numeric(length=num_features), -->
+<!--   mean_external = numeric(length=num_features), -->
+<!--   sd_external = numeric(length=num_features), -->
+<!--   tau_external = numeric(length=num_features) -->
+<!-- ) -->
+<!-- rownames(temp_stat_df_model) <- rownames(mat) -->
+
+<!-- ## assumes p2 can contain p1 but not reverse -->
+<!-- contrast_pairs <- list(list(name="muscle v all", -->
+<!--                             p1="muscle tissue", -->
+<!--                             p2="anatomical entity"), -->
+<!--                        list(name="striated muscle v other muscle", -->
+<!--                             p1="striated muscle tissue", -->
+<!--                             p2="muscle tissue"), -->
+<!--                        list(name="cardiac muscle v other muscle", -->
+<!--                             p1="cardiac muscle tissue", -->
+<!--                             p2="muscle tissue"), -->
+<!--                        list(name="skeletal muscle v other muscle", -->
+<!--                             p1="skeletal muscle tissue", -->
+<!--                             p2="muscle tissue"), -->
+<!--                        list(name="smooth muscle v other muscle", -->
+<!--                             p1="smooth muscle tissue", -->
+<!--                             p2="muscle tissue")) #, -->
+<!--                        # list(name="striated muscle v all", -->
+<!--                        #      p1="striated muscle tissue", -->
+<!--                        #      p2="anatomical entity"), -->
+<!--                        # list(name="cardiac muscle v all", -->
+<!--                        #      p1="cardiac muscle tissue", -->
+<!--                        #      p2="anatomical entity"), -->
+<!--                        # list(name="skeletal muscle v all", -->
+<!--                        #      p1="skeletal muscle tissue", -->
+<!--                        #      p2="anatomical entity"), -->
+<!--                        # list(name="smooth muscle v all", -->
+<!--                        #      p1="smooth muscle tissue", -->
+<!--                        #      p2="anatomical entity")) -->
+
+<!-- for(i in 1:length(contrast_pairs)){ -->
+<!--   temp_pair <- contrast_pairs[[i]] -->
+<!--   print(temp_pair$name) -->
+
+<!--   colset_list <- list( -->
+<!--     ehh1 = onto$ehh[[which(onto$name==temp_pair$p1) ]], -->
+<!--     ehh2 = setdiff(onto$ehh[[which(onto$name==temp_pair$p2)]] -->
+<!--                    ,onto$ehh[[which(onto$name==temp_pair$p1)]]) -->
+<!--   ) -->
+<!--   temp_pair$summary_stats <- temp_stat_df_model -->
+<!--   for(j in 1:length(colset_list)){ -->
+<!--     ehh <- colset_list[[j]] -->
+<!--     temp_mat <- mat[,ehh,drop=F] -->
+<!--     temp_coldata <- coldata[ehh,,drop=F] -->
+<!--     colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name, -->
+<!--                                              ":",temp_coldata$age_group)) -->
+<!--     dot_sim <- similarity_func(temp_mat) -->
+<!--     rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) -->
+<!--     sim_tree <- cluster_func(dot_sim) -->
+<!--     weights <- get_weights(sim_tree, colnames(temp_mat)) -->
+<!--     if(names(colset_list)[j]=="ehh1"){ -->
+<!--       temp_pair$summary_stats$mean_internal <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
+<!--       temp_pair$summary_stats$sd_internal <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
+<!--       temp_pair$summary_stats$tau_internal <- calc_weighted_tau(temp_mat,weights) -->
+<!--     }else{ -->
+<!--       temp_pair$summary_stats$mean_external <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
+<!--       temp_pair$summary_stats$sd_external <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
+<!--       temp_pair$summary_stats$tau_external <- calc_weighted_tau(temp_mat,weights) -->
+<!--     } -->
+<!--   } -->
+<!--   contrast_pairs[[i]] <- temp_pair -->
+
+<!-- } -->
+
+<!-- save.image("post_contrast_muscle.RData") -->
+<!-- ``` -->
+
+
+```{r, get gene sets to plot}
+gene_sets$to_plot <- list()
+gene_sets$to_plot_full_ordered <- list()
+
+for(i in 1:length(contrast_pairs)){
+  temp_df <- contrast_pairs[[i]]$summary_stats
+  temp_df$delta_mean <- temp_df$mean_internal - temp_df$mean_external
+  temp_df$delta_tau <- temp_df$tau_external - temp_df$tau_internal
+  which <- which(temp_df$mean_internal > 0.5 &
+                   abs(temp_df$delta_mean) > 0.5 &
+                   temp_df$sd_internal < (temp_df$mean_internal/2) &
+                   temp_df$tau_internal < 0.4 )
+  print(paste0(contrast_pairs[[i]]$name,":",length(which)))
+
+  # gene_sets$genes_all$external_gene_name[match(rownames(temp_df[which,]),gene_sets$genes_all$ensembl_gene_id)]
+  temp_df2 <- cbind(temp_df,data.frame(gene_id=rownames(temp_df)))
+  temp_df2 <- merge(temp_df2, gene_sets$genes_all[,c(1,2)],by.x="gene_id",by.y="ensembl_gene_id")
+  temp_df2 <- temp_df2[which,]
+
+  temp_df2_pos <- temp_df2[which(temp_df2$delta_mean > 0),]
+  temp_df2_neg <- temp_df2[which(temp_df2$delta_mean < 0),]
+
+  if(nrow(temp_df2_pos) > 0){
+  #  top_10_pos <- temp_df2_pos[order(temp_df2_pos$delta_mean, decreasing = T),c("gene_id","external_gene_name")]
+    top_10_pos <- temp_df2_pos[order(temp_df2_pos$delta_mean, decreasing = T)[1:min(8,nrow(temp_df2_pos))],c("gene_id","external_gene_name")]
+    full_ordered<- temp_df2_pos[order(temp_df2_pos$delta_mean, decreasing = T),]
+  } else {  top_10_pos <- NA }
+  if(nrow(temp_df2_neg >0)){
+  #  top_10_neg <- temp_df2_neg[order(temp_df2_neg$delta_mean, decreasing = T),c("gene_id","external_gene_name")]
+    top_10_neg <- temp_df2_neg[order(temp_df2_neg$delta_mean, decreasing = T)[1:min(8,nrow(temp_df2_neg))],c("gene_id","external_gene_name")]
+  } else { top_10_neg <- NA }
+
+
+  gene_sets$to_plot[[paste0(contrast_pairs[[i]]$name, ":top_10_pos")]] <- top_10_pos
+  gene_sets$to_plot_full_ordered[[paste0(contrast_pairs[[i]]$name, ":ordered")]] <- full_ordered$gene_id
+
+#  gene_sets$to_plot[[paste0(contrast_pairs[[i]]$name, ":top_10_neg")]] <- top_10_neg
+
+}
+
+
+```
+
+
+```{r, CHD do test for phenotypes for each gene set}
+hpo_onto <- ontos$hpo$ont
+which <- which(hpo_onto$name=="Phenotypic abnormality")
+major_systems <- hpo_onto$name[is.element(hpo_onto$id,hpo_onto$children[[which]])]
+
+#major_systems <- c("Abnormal heart morphology","Abnormality of the musculature")
+to_remove <- c("Constitutional symptom",
+               "Abnormality of the thoracic cavity",
+               "Abnormality of prenatal development or birth",
+               "Neoplasm",
+               "Abnormal cellular phenotype",
+               "Growth abnormality")
+major_systems <- major_systems[-which(is.element(major_systems,to_remove ))]
+major_systems <- major_systems[grep("system",major_systems)]
+major_systems <- list(system_name=major_systems,
+                      descendent_ids=vector(mode="list",length=length(major_systems))  )
+for(i in 1:length(major_systems$descendent_ids)){
+  major_systems$descendent_ids[[i]] <- hpo_onto$descendants[[which(hpo_onto$name== major_systems$system_name[i] )]]
+}
+
+
+df <-  data.frame(ensembl_gene_id = character(),
+                  omim_id = character(),
+                  major_systems_affected = character(),
+                  complexity  = numeric(),
+                  chrom_subset_name = character())
+
+synd_count_df <- data.frame(chrom_subset_name = character(),
+                            num_disorders = numeric(),
+                            num_genes = numeric() )
+temp_gene_sets <- gene_sets$to_plot_full_ordered
+
+
+  #list(chrom=gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+                   #    cilia=gene_sets$cilia$gene_subsets$cilium)
+for(i in 1:length(temp_gene_sets)){
+  chrom_subset <- temp_gene_sets[[i]]
+  chrom_subset_name <- names(temp_gene_sets)[i]
+
+
+  temp_map <- onto_maps$HPO_UBERON_GENE$map
+  temp_map <- temp_map[is.element(temp_map$Ensembl_Gene_ID, chrom_subset),]
+  temp_map <- temp_map[!temp_map$non_syndrome_flag,]
+
+  for(temp_omim_id in unique(temp_map$OMIM_ID) ){
+    temp_submap <- temp_map[which(temp_map$OMIM_ID==temp_omim_id),]
+    major_systems_affected <- character()
+    if(nrow(temp_submap)>0){
+      for(j in 1:length(major_systems$system_name)){
+        if(any(is.element(temp_submap$HPO_ID,major_systems$descendent_ids[[j]]))){
+          major_systems_affected <- paste(c(major_systems_affected,
+                                          major_systems$system_name[j]),collapse = ",")
+        }
+      }
+    }
+    if(length(major_systems_affected)==0){
+      next
+    }
+    temp_df <- merge(data.frame(ensembl_gene_id = unique(temp_submap$Ensembl_Gene_ID)),data.frame(
+                          omim_id = temp_omim_id,
+                          major_systems_affected = strsplit(major_systems_affected,",")[[1]],
+                          complexity = length(strsplit(major_systems_affected,",")[[1]]),
+                          chrom_subset_name = chrom_subset_name))
+    df <- rbind(df, temp_df)
+
+
+
+  }
+  synd_count_df <- rbind(synd_count_df,
+                         data.frame(chrom_subset_name=chrom_subset_name,
+                                    num_disorders=length(unique(temp_map$OMIM_ID)),
+                                    num_genes=length(chrom_subset)))
+}
+
+#
+# ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complexity))+
+#   geom_bar()+
+#   facet_grid(chrom_subset_name ~ . )+
+#   theme(strip.text.y = element_text(angle = 0))
+#
+# filename <- paste0(dirs$figures, "_CHD_syndrome_complexity.png")
+# ggsave(filename = filename, device="png",units="in",width=7,height=10,dpi=250)
+
+
+df$chrom_subset_name <- str_remove(df$chrom_subset_name,":ordered")
+df$chrom_subset_name <- factor(df$chrom_subset_name,
+                               levels=c(
+                                 "muscle v all",
+                                 "striated muscle v other muscle",
+                                 "cardiac muscle v other muscle",
+                                 "skeletal muscle v other muscle",
+                                 "smooth muscle v other muscle"))
+
+synd_count_df$chrom_subset_name <- str_remove(synd_count_df$chrom_subset_name,":ordered")
+synd_count_df$chrom_subset_name <- factor(synd_count_df$chrom_subset_name,
+                                              levels=levels(df$chrom_subset_name))
+levels(synd_count_df$chrom_subset_name) <- str_replace(levels(synd_count_df$chrom_subset_name),
+                                                       " v ", "\nv ")
+levels(df$chrom_subset_name) <- str_replace(levels(df$chrom_subset_name), " v ","\nv ")
+df$system_name <- str_remove(str_remove(df$major_systems_affected,"Abnormality of "),"the ")
+temp <- aggregate(df$system_name,by=list(df$system_name),FUN=length)
+temp <- temp[order(temp$x,decreasing = T),]
+df$system_name <- factor(df$system_name, levels = temp$Group.1)
+levels(df$system_name) <- str_remove(levels(df$system_name)," system")
+
+ggplot(df, aes(y=system_name, fill=system_name))+
+  geom_bar()+
+  geom_vline(data=synd_count_df, aes(xintercept=num_disorders),color="red",
+             linetype="dotted")+
+ # geom_vline(data=synd_count_df, aes(xintercept=num_genes),color="red")+
+  scale_fill_grey()+
+  facet_grid(chrom_subset_name ~ .)+
+  theme_bw()+
+  scale_y_discrete(limits=rev)+
+  theme(strip.text.y = element_text(angle = 0),
+        axis.text.x =  element_text(angle=45,hjust=0.95),
+        legend.position="none")
+
+filename <- paste0(dirs$figures, "_CHD_major_systems_affected.png")
+ggsave(filename = filename, device="png",units="in",width=4.5,height=8,dpi=300)
+
+
+### work on upset plot
+
+
+
+
+```
+
+
+
+
+```{r, setup heatmap}
+
+onto <- ontos$uberon$ont
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+onto_names <- c("anatomical entity","muscle tissue","striated muscle tissue", "cardiac muscle tissue","skeletal muscle tissue","smooth muscle tissue")
+temp_colgroups <- list("all not muscle" = setdiff(onto$ehh[[which(onto$name=="anatomical entity")]],onto$ehh[[which(onto$name=="muscle tissue")]]),
+                       "cardiac muscle" = onto$ehh[[which(onto$name=="cardiac muscle tissue")]],
+                       "skeletal muscle" = onto$ehh[[which(onto$name=="skeletal muscle tissue")]],
+                       "smooth muscle" = onto$ehh[[which(onto$name=="smooth muscle tissue")]])
+
+set.seed(2)
+temp_colgroups$`all not muscle` <- sample(temp_colgroups$`all not muscle`,min(16,length(temp_colgroups$`all not muscle`)))
+for(i in 2:length(temp_colgroups)){
+  temp_colgroups[[i]] <- sample(temp_colgroups[[i]],min(8,length(temp_colgroups[[i]])))
+}
+temp_colgroups
+
+temp_rows <- melt(gene_sets$to_plot)
+temp_rows_names <- temp_rows$external_gene_name
+temp_rows <- temp_rows$gene_id
+temp_rows <- temp_rows[!is.na(temp_rows)]
+
+temp_mat <- mat[temp_rows,unlist(temp_colgroups)]
+colnames(temp_mat) <- make.unique(coldata$biosample_ontology.term_name[unlist(temp_colgroups)])
+rownames(temp_mat) <- temp_rows_names
+
+#temp_mat <- t(temp_mat)
+ht <- Heatmap(
+  temp_mat,
+  row_order = 1:nrow(temp_mat),
+  column_order = 1:ncol(temp_mat),
+ # show_row_names = F
+)
+png(filename = paste0(dirs$figures,"temp_muscle_spec.png"), width = 7,height=10,units = "in",res=300)
+draw(ht, padding = unit(c(0.9, 0.1, 0.1, 0.1), "in"))
+dev.off()
+  # heatmaps <- list()
+  # for(type in c("delta", "flat", "weighted")){
+  #   heatmaps[[type]] <- HeatmapList()
+  #   for(measure in names(gene_list[["up"]])){
+  #     spec_mat_name <- names(spec_mats)[intersect(grep(measure, names(spec_mats)), grep(type, names(spec_mats)))]
+  #     spec_mat <-  spec_mats[[spec_mat_name ]]
+  #     temp_name <- paste(spec_mat_name, sep="_")
+  #     if(measure=="Zscore"){
+  #       h1 <- Heatmap(spec_mat[gene_vec$gene,], name=temp_name,
+  #                     row_order = gene_vec$gene, show_row_names = FALSE,
+  #                     cluster_columns = sim_tree,
+  #                     column_order = colnames(spec_mat),
+  #                     col = col_funs[[paste(type,measure, sep="_")]])
+  #     } else {
+  #       h1 <- Heatmap(spec_mat[gene_vec$gene,], name=temp_name,
+  #                     row_order = gene_vec$gene, show_row_names = FALSE,
+  #                     col = col_funs[[paste(type,measure, sep="_")]])
+  #     }
+  #     if(length(heatmaps[[type]])==0){
+  #       heatmaps[[type]] <- h1
+  #     } else {
+  #       heatmaps[[type]] <- heatmaps[[type]] + h1
+  #     }
+  #   }
+  #   draw(heatmaps[[type]], padding = unit(c(0.9, 0.1, 0.3, 0.1), "in"))
+  # }
+
+```
+
+
+
+
+
+```{r, chrom modifier specificity}
+onto <- ontos$uberon$ont
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene set to look at
+mat <- mat[is.element(rownames(mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),]
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+num_terms <- length(onto$id)
+num_features <- nrow(mat)
+onto$ehh_summary_stats <- vector("list", num_terms)
+temp_stat_df_model <- data.frame(
+  mean_internal = numeric(length=num_features),
+  sd_internal = numeric(length=num_features),
+  tau_internal = numeric(length=num_features),
+  mean_external = numeric(length=num_features),
+  sd_external = numeric(length=num_features),
+  tau_external = numeric(length=num_features)
+)
+rownames(temp_stat_df_model) <- rownames(mat)
+
+
+
+temp_num_els <- sapply(onto$ehh,length)
+onto$ehh_num_cols <- temp_num_els
+temp_els <- which(onto$ehh_num_cols > 0)
+# temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
+# temp_els <- grepl("^heart$",onto$name)
+# temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
+# temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
+# temp_els <- which(temp_els & temp_num_els > 1)
+
+#temp_els <- which(is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) &
+#                  temp_num_els > 1)   #which(temp_num_els > 1)
+#temp_els <- grep("^mesoderm-derived|^ectoderm-derived|^endoderm-derived", onto$name)
+for(i in 1:length(temp_els)){
+  if(i %% 50 == 0){ print(i)}
+
+  ehh <- onto$ehh[[temp_els[i]]]
+  onto$ehh_summary_stats[[temp_els[i]]] <- temp_stat_df_model
+
+  for(set_and_complement in c(1,-1)){
+  #  if(set_and_complement==1){print("set")} else {print("complement")}
+    temp_mat <- mat[,ehh*set_and_complement,drop=F]
+    temp_coldata <- coldata[ehh*set_and_complement,,drop=F]
+    if(ncol(temp_mat)>0 & (length(ehh) > 5 | set_and_complement==1) ){
+      colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+      if(ncol(temp_mat) > 5){
+        dot_sim <- similarity_func(temp_mat)
+        rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+        sim_tree <- cluster_func(dot_sim)
+        weights <- get_weights(sim_tree, colnames(temp_mat))
+        weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+        weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+        temp_tau <- calc_weighted_tau(temp_mat,weights)
+      } else {
+        weighted_means <- apply(temp_mat, MARGIN = 1, FUN = mean)
+        weighted_sds <- NA
+        temp_tau <- NA
+      }
+    } else {
+      temp_tau <- NA
+      weighted_means <- NA
+      weighted_sds <- NA
+    }
+    if(set_and_complement==1){
+      # onto$ehh_summary_stats$tau_internal[[temp_els[i]]] <- temp_tau
+      # onto$ehh_summary_stats$mean_internal[[temp_els[i]]] <- weighted_means
+      # onto$ehh_summary_stats$sd_internal[[temp_els[i]]] <- weighted_sds
+      onto$ehh_summary_stats[[temp_els[i]]]$tau_internal <- temp_tau
+      onto$ehh_summary_stats[[temp_els[i]]]$mean_internal <- weighted_means
+      onto$ehh_summary_stats[[temp_els[i]]]$sd_internal <- weighted_sds
+    } else {
+      onto$ehh_summary_stats[[temp_els[i]]]$tau_external <- temp_tau
+      onto$ehh_summary_stats[[temp_els[i]]]$mean_external <- weighted_means
+      onto$ehh_summary_stats[[temp_els[i]]]$sd_external <- weighted_sds
+    }
+
+  }
+}
+
+
+save.image("post_chrom_mod_specificity.RData")
+```
+
+```{r, chrom modifier specificity/ubiquity plot}
+
+df <- onto$ehh_summary_stats[[which(onto$name=="anatomical entity")]]
+df$specificity_state <- factor("complex",levels =c("specific","complex","ubiquitous") )
+df$specificity_state[which(df$tau_internal < 0.4)] <- "ubiquitous"
+df$specificity_state[which(df$tau_internal > 0.7)] <-  "specific"
+temp_names <- names(gene_sets$human_chromatin_modifiers$gene_subsets)
+temp_names <- temp_names[which(temp_names != "chromatin looping")]
+df_out <- merge(temp_names,
+                c("specific","complex","ubiquitous"))
+colnames(df_out) <- c("gene_subset","expr_class")
+df_out$proportion <- 0
+
+full_df <- data.frame()
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  gene_set_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  which <- which(is.element(rownames(df),
+                      gene_sets$human_chromatin_modifiers$gene_subsets[[i]]))
+  if(length(which)==0){next}
+  temp_df <- df[which,,drop=F]
+  temp_df <- temp_df[order(temp_df$tau_internal,decreasing = F),,drop=F]
+  temp_df$index <- 1:nrow(temp_df)
+  gg <- ggplot(temp_df, aes(index,tau_internal )) +
+    geom_point()+
+    ggtitle(gene_set_name)+
+    scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))+
+    scale_x_continuous(
+      "number of chromatin modifiers",
+      sec.axis = sec_axis(~ . / nrow(temp_df), name = "proportion",breaks=seq(0,1,by=0.1))
+    )
+  plot(gg)
+
+  which <- which(df_out$gene_subset==gene_set_name & df_out$expr_class=="specific")
+  df_out$proportion[which] <- length(which(temp_df$specificity_state=="specific")) / nrow(temp_df)
+  which <- which(df_out$gene_subset==gene_set_name & df_out$expr_class=="complex")
+  df_out$proportion[which] <- length(which(temp_df$specificity_state=="complex")) / nrow(temp_df)
+  which <- which(df_out$gene_subset==gene_set_name & df_out$expr_class=="ubiquitous")
+  df_out$proportion[which] <- length(which(temp_df$specificity_state=="ubiquitous")) / nrow(temp_df)
+
+  temp_df$index_proportion <- temp_df$index / nrow(temp_df)
+  temp_df$num_modifiers <- nrow(temp_df)
+  temp_df$gene_name <- rownames(temp_df)
+  full_df <- rbind(full_df, cbind(temp_df,data.frame(gene_subset=gene_set_name)))
+}
+
+ggplot(full_df, aes(index_proportion,tau_internal,color=specificity_state))+
+  geom_point()+
+   theme(strip.text.x = element_text(size = 6))+
+  #scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.2))+
+  facet_wrap(. ~ gene_subset, nrow=3)
+ggsave(filename=paste0(dirs$figures,"temp_specificity_distribution_color.png"), height=6,width=8,units = "in",device = "png")
+
+df_out$gene_subset
+df_out$gene_subset <- factor(df_out$gene_subset)
+df_out$expr_class <- factor(df_out$expr_class, levels=c("specific","complex","ubiquitous"))
+ggplot(df_out, aes(gene_subset, proportion, fill=expr_class))+
+  geom_bar(position="fill", stat="identity")+
+  scale_x_discrete(limits=rev(levels(df_out$gene_subset)))+
+  coord_flip()
+ggsave(filename=paste0(dirs$figures,"temp_specificity_dist_simplified.png"), height=8,width=6,units = "in",device = "png")
+#
+# 343
+# ggl[["inheritance"]] <- ggplot(df, aes(x=inheritance, fill=prob, y=prop))+
+#   geom_col(stat="identity", position=position_identity(), width = 0.99,)+
+#   scale_fill_manual(values=c("lightblue1","lightblue2","lightblue3","lightblue4","grey30","grey20"))+
+#   theme_classic()+
+#   theme(strip.text.y = element_text(angle = 0))+
+#   facet_grid(chrom_subset_name ~ .)
+
+```
+
+```{r, chrom modifier specificity map to specific onto term for specific chrom modifiers}
+
+for(i in 1:length(onto$ehh_summary_stats)){
+  if(is.null(onto$ehh_summary_stats[[i]])){next}
+  onto$ehh_summary_stats[[i]]$delta_mean <- onto$ehh_summary_stats[[i]]$mean_internal - onto$ehh_summary_stats[[i]]$mean_external
+}
+
+temp_df <- full_df[which(full_df$gene_subset=="all_chrom_modifiers" &
+                           full_df$specificity_state=="specific"),]
+
+
+temp_onto_ids <- which(onto$ehh_num_cols > 5 & onto$ehh_num_cols < 80)
+temp_genes <- unique(temp_df$gene_name)
+delta_mean_df <- matrix(nrow=length(temp_genes),ncol=length(temp_onto_ids),dimnames=list(temp_genes,temp_onto_ids))
+delta_mean_df <- matrix(nrow=length(temp_genes),ncol=length(temp_onto_ids),dimnames=list(temp_genes,temp_onto_ids))
+
+for(i in temp_onto_ids){
+  delta_mean_df[,as.character(i)] <- onto$ehh_summary_stats[[i]][temp_genes,]$delta_mean
+}
+
+rownames(delta_mean_df) <- gene_sets$genes_all$external_gene_name[match(rownames(delta_mean_df),
+                                                                        gene_sets$genes_all$ensembl_gene_id)]
+colnames(delta_mean_df) <- onto$name[temp_onto_ids]
+
+png(filename=paste0(dirs$figures,"temp_heatmap_onto_spec_chrom.png"),width=14,height=14,units="in",res=250)
+heatmap(t(delta_mean_df),scale="none",
+        margins = c(4,12)
+        )
+legend(x="bottomleft",legend=c("min","ave","max"),
+       fill=rev(heat.colors(3)))
+dev.off()
+
+
+```
+
+```{r, chrom modifier specificity map to specific onto term for specific chrom modifiers}
+
+
+
+```
+
+

@@ -922,7 +922,7 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
 gene_sets$human_chromatin_modifiers <- list()
-gene_sets$human_chromatin_modifiers$go_terms = c( "histone acetyltransferase activity",
+gene_sets$human_chromatin_modifiers$go_terms = c("histone acetyltransferase activity",
                                         "histone deacetylase activity",
                                         "histone methyltransferase activity",
                                         "histone demethylase activity",
