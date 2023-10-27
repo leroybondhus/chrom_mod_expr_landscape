@@ -179,6 +179,116 @@ filename <- paste0(dirs$figures,  "histone_nonhistone_expression_dist.png")
 save_plot(filename = filename, ggl2$composite, base_width = 6, base_height=8)
 ```
 
+```{r, histone vs chrom modifiers}
+gene_sets$human <- list()
+gene_sets$human$cell_cycle <- gene_sets$genes_all_go$ensembl_gene_id[
+  which(is.element(gene_sets$genes_all_go$go_id, 
+                   c(ontos$go$ont$id[which(ontos$go$ont$name=="regulation of mitotic cell cycle")],
+                     ontos$go$ont$descendants[[which(ontos$go$ont$name=="regulation of mitotic cell cycle")]]) ))
+]
+subset_names <- c("structural constituent of chromatin","non_histones","regulation of mitotic cell cycle")
+full_df <- NULL
+full_temp_mat  <- NULL
+subsets <- list("structural constituent of chromatin" = gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`,
+                "non_histones" = gene_sets$human_chromatin_modifiers$gene_subsets$non_histones,
+                "regulation of mitotic cell cycle" = gene_sets$human$cell_cycle)
+
+
+major_anatomic_groups <- c("genitourinary system",
+                           "nervous system",
+                           "cardiovascular system",
+                           "musculoskeletal system",
+                           "integumental system",
+                           "immune system",
+                           "digestive system",
+                           "respiratory system",
+                           "hematopoietic system",
+                           "endocrine system",
+                           "limb")
+all(is.element(major_anatomic_groups, ontos$uberon$ont$name))
+
+
+temp_coldata$mat_colnames <- paste(temp_coldata$assay_term_name,
+                                   temp_coldata$biosample_ontology.term_name,
+                                   temp_coldata$age_group,sep=":")
+temp_coldata$major_anatomic_group <- ""
+for(anatomic_group in major_anatomic_groups){
+  which <- ontos$uberon$ont$ehh[[which(ontos$uberon$ont$name==anatomic_group)]]
+  temp_coldata$major_anatomic_group[which] <- str_remove(paste(temp_coldata$major_anatomic_group[which],
+                                                    str_remove(anatomic_group," system"),sep=","),"^,") 
+}
+
+for(subset_name in subset_names){
+  which <- which(is.element(rownames(temp_mat),subsets[[subset_name]]))
+  sub_temp_mat <- temp_mat[which,]
+  sub_temp_mat <- melt(sub_temp_mat)
+  colnames(sub_temp_mat) <- c("id","biosample","expr")
+  sub_temp_mat$name <- gene_sets$genes_all$external_gene_name[match(sub_temp_mat$id,gene_sets$genes_all$ensembl_gene_id)]
+  sub_temp_mat$name[which(sub_temp_mat$name=="")] <- sub_temp_mat$id[which(sub_temp_mat$name=="")]
+  temp <- str_split_fixed(sub_temp_mat$biosample,":", 3)
+  colnames(temp) <- c("assay","ontology.term_name","age_group")
+  sub_temp_mat <- cbind(sub_temp_mat, temp)
+  
+  
+  df <- data.frame(id = names(weighted_means)[which],
+                   wmean = weighted_means[which],
+                   wvar = weighted_sds[which],
+                   name = gene_sets$genes_all$external_gene_name[match(rownames(temp_mat)[which],gene_sets$genes_all$ensembl_gene_id)])
+  df$name[which(df$name=="")] <- df$id[which(df$name=="")]
+  df <- df[order(df$wmean, decreasing=T),]
+  df$id <- factor(df$id, levels = df$id)
+  df$name <- factor(df$name, levels = df$name)
+  df$wmeanv_l <- df$wmean - df$wvar
+  df$wmeanv_u <- df$wmean + df$wvar
+  
+  
+  
+  full_df <- unique(rbind(full_df,df))
+  full_temp_mat <- unique(rbind(full_temp_mat, sub_temp_mat))
+}
+
+full_temp_mat$major_anatomic_group <-  temp_coldata$major_anatomic_group[match(full_temp_mat$biosample, temp_coldata$mat_colnames)]
+full_temp_mat$major_anatomic_group[which(str_length(full_temp_mat$major_anatomic_group)>15)]  <- "" 
+
+ggplot(full_df, aes(x=wmean,y=name))+
+  geom_point(color="grey20")+
+  geom_point(data = full_temp_mat, aes(x=expr, y = name, color=major_anatomic_group),size=0.1,alpha=0.4)+# ,color="salmon")+
+  geom_errorbar(alpha=0.8,color="grey20",aes(xmin=wmeanv_l,xmax=wmeanv_u))+
+  scale_y_discrete(limits=levels(full_df$name))+
+  scale_x_continuous(limits = c(0,3.5))+
+  theme_bw()+
+  theme(axis.text.y = element_text(size=2))
+
+
+filename <- paste0(dirs$figures,  "histone_nonhistone_cellcycle_expression_dist.png")
+ggsave(filename = filename,dev="png",units = "in",width=8,height=14,dpi=350)
+
+
+for(major_anatomic_group in unique(full_temp_mat$major_anatomic_group)){
+  ggplot(full_df, aes(x=wmean,y=name))+
+    geom_point(color="grey20")+
+    geom_point(data = full_temp_mat[which(full_temp_mat$major_anatomic_group!=""),],
+             aes(x=expr, y = name), color="grey20",size=0.1,alpha=0.4)+# ,color="salmon")+
+    geom_point(data = full_temp_mat[which(full_temp_mat$major_anatomic_group==major_anatomic_group),],
+               aes(x=expr, y = name), color="red",size=0.1,alpha=0.6)+# ,color="salmon")+
+    geom_errorbar(alpha=0.6,color="grey10",aes(xmin=wmeanv_l,xmax=wmeanv_u))+
+    scale_y_discrete(limits=levels(full_df$name))+
+    scale_x_continuous(limits = c(0,3.5))+
+    theme_bw()+
+    theme(axis.text.y = element_text(size=2))
+
+  filename <- paste0(dirs$figures,  "histone_nonhistone_cellcycle_expression_dist_",major_anatomic_group,".png")
+  ggsave(filename = filename,dev="png",units = "in",width=8,height=12,dpi=300)
+}
+
+
+
+```
+
+
+
+
+
 
 
 ```{r, make primary gene expression heatmap figure}
