@@ -145,6 +145,7 @@ heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], 
 
 ```{r, calculate gene expression correlation}
 # calculate gene expression for all genes for a given brain structure
+# CALC CORR BASED ON LOG TIME
 calc_correlation <- function(cols_meta,expr_mat){
   corr <- vector("numeric", nrow(expr_mat))
   p_val <- vector("numeric", nrow(expr_mat))
@@ -260,6 +261,7 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 ```
 
 ```{r, KAT6A/B expression plots}
+# KAT6A, KAT6B, ING5, BRPF1/2/3, (H)MEAF6, FOXG1
 kat6a_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6A")
 kat6b_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6B")
 
@@ -272,12 +274,14 @@ pcw <- sorted_cols$age
 structures <- sorted_cols$structure_name
 
 kat6a_df <- data.frame(structures, pcw, kat6a_expression)
-ggplot(kat6a_df, aes(x = pcw, y = log10(kat6a_expression+1), color = structures, group = structures)) + geom_line() + 
-  theme(legend.position = "bottom") + ggtitle("KAT6A expression over time for each brain region")
+ggplot(kat6a_df, aes(x = log10(pcw), y = log10(kat6a_expression+1), color = structures, group = structures)) + geom_line() + geom_point() + facet_wrap(structures~.)+
+  theme(legend.position = "none") + ggtitle("KAT6A expression over time for each brain region")
 
 kat6b_df <- data.frame(structures, pcw, kat6b_expression)
-ggplot(kat6b_df, aes(x = pcw, y = log10(kat6b_expression+1), color = structures, group = structures)) + geom_line() + 
-  theme(legend.position = "bottom")+ ggtitle("KAT6B expression over time for each brain region")
+ggplot(kat6b_df, aes(x = log10(pcw), y = log10(kat6b_expression+1), color = structures, group = structures)) + geom_line() + geom_point() + facet_wrap(structures~.)+
+  theme(legend.position = "none")+ ggtitle("KAT6B expression over time for each brain region") + geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15))+ geom_vline(xintercept = log10(52*10))
+
+# PLOT FOXG1
 ```
 
 
