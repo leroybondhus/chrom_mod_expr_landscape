@@ -5,12 +5,13 @@ date: "2023-08-18"
 output: html_document
 ---
 
-```{r, load in files}
+```{r, load in files and setup brain structures to uberon ID file}
 registerDoParallel(detectCores()-2)
 
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
-expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
+expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
+colnames(expression_mat) <- columns_meta$structure_name
 
 unique_structures <- unique(columns_meta$structure_name)
 
@@ -59,7 +60,7 @@ struct_to_ids <- struct_to_ids[with(struct_to_ids, order(unique_structures)),]
 ```{r, add_annotation function}
 
 # modeled off expr_data_setup code
-# note that onto <- ontos$uberon$ont also in main or phenotype_summary_analyses
+# note that onto <- ontos$uberon$ont line also in main or phenotype_summary_analyses
 onto <- ontos$uberon$ont
 
 # create vector with uberon IDs in order of columns_meta
@@ -111,7 +112,7 @@ hist(brainspan_terms[which(brainspan_terms>0)], breaks = 20, main = "Histogram o
 # rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
 ```
 
-```{r, sort expression matrix by brain structure and development time}
+```{r, convert ages to weeks, normalize + sort expression matrix by brain structure and development time}
 # convert age data in columns_meta to be numeric (number of weeks)
 convert_age <- function(ages){
   numeric_ages <- vector("integer", length(ages))
@@ -125,10 +126,30 @@ convert_age <- function(ages){
   return(numeric_ages)
 }
 
-columns_meta$age <- convert_age(columns_meta$age)
+age_cols <- columns_meta
+age_cols$age <- convert_age(columns_meta$age)
 
 # sort columns_meta by brainspan structure name and then age ascending order
-sorted_cols <- columns_meta[with(columns_meta, order(structure_name, age)),]
+sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_cols)
+
+# expression matrix convert RPKM to TPM
+# first get transcript lengths
+# match genes in gene_sets$genes_all_transcript to the genes in rows_meta
+matched_genes <- match(rows_meta$ensembl_gene_id, gene_sets$genes_all_transcript$ensembl_gene_id)
+matched_genes_transcript_length <- gene_sets$genes_all_transcript$transcript_length[matched_genes]
+
+
+# Harold's formula: https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
+rpkmToTpm <- function(rpkm)
+{
+    rpkm/sum(rpkm)*(1e6)
+}
+tpm1 = rpkmToTpm(expression_mat[,1])
+
+converted_expression <- apply(expression_mat, 2, rpkmToTpm)
+  
+# median normalization of expression per gene
+
 
 # sort expression_mat columns based on order from sorted columns_meta
 sorted_expression <- expression_mat[sorted_cols$column_num]
@@ -261,27 +282,27 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 ```
 
 ```{r, KAT6A/B expression plots}
+# list genes of interest (note BRPF2 not in rows_meta)
 # KAT6A, KAT6B, ING5, BRPF1/2/3, (H)MEAF6, FOXG1
-kat6a_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6A")
-kat6b_row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6B")
+# note that ING5 and FOXG1 aren't chromatin modifiers so need to search all available genes
+gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRPF3", "MEAF6", "FOXG1")
 
-# normalize gene expression btwn 0-1 - do i scale along row (gene) or column (sample)
-norm_chrom_mod_expression <- chrom_mod_expression
+gene_expression_plot <- function(gene){
+  row <- which(rows_meta$gene_symbol == gene)
+  expression <- sorted_expression[row,]
+  pcw <- sorted_cols$age
+  structures <- sorted_cols$structure_name
+  df <- data.frame(structures, pcw, expression)
+  ggplot(df, aes(x = log10(pcw), y = log10(expression+1), color = structures, group = structures)) + 
+    geom_line() + geom_point() + 
+    facet_wrap(structures~.) +
+    theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+    ggtitle(paste0(gene, " expression over time for each brain region")) + 
+    geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
+  ggsave(paste0(gene, " expression plot.png"), width = 7, height = 5) 
+}
 
-kat6a_expression <- norm_chrom_mod_expression[kat6a_row,]
-kat6b_expression <- norm_chrom_mod_expression[kat6b_row,]
-pcw <- sorted_cols$age
-structures <- sorted_cols$structure_name
-
-kat6a_df <- data.frame(structures, pcw, kat6a_expression)
-ggplot(kat6a_df, aes(x = log10(pcw), y = log10(kat6a_expression+1), color = structures, group = structures)) + geom_line() + geom_point() + facet_wrap(structures~.)+
-  theme(legend.position = "none") + ggtitle("KAT6A expression over time for each brain region")
-
-kat6b_df <- data.frame(structures, pcw, kat6b_expression)
-ggplot(kat6b_df, aes(x = log10(pcw), y = log10(kat6b_expression+1), color = structures, group = structures)) + geom_line() + geom_point() + facet_wrap(structures~.)+
-  theme(legend.position = "none")+ ggtitle("KAT6B expression over time for each brain region") + geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15))+ geom_vline(xintercept = log10(52*10))
-
-# PLOT FOXG1
+sapply(gene_list, gene_expression_plot)
 ```
 
 
