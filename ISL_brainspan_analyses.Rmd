@@ -133,35 +133,45 @@ age_cols$age <- convert_age(columns_meta$age)
 sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_cols)
 
 # expression matrix convert RPKM to TPM
-# first get transcript lengths
+# first get transcript lengths - seems like formula doesn't need transcript length
 # match genes in gene_sets$genes_all_transcript to the genes in rows_meta
-matched_genes <- match(rows_meta$ensembl_gene_id, gene_sets$genes_all_transcript$ensembl_gene_id)
-matched_genes_transcript_length <- gene_sets$genes_all_transcript$transcript_length[matched_genes]
+# matched_genes <- match(rows_meta$ensembl_gene_id, gene_sets$genes_all_transcript$ensembl_gene_id)
+# matched_genes_transcript_length <- gene_sets$genes_all_transcript$transcript_length[matched_genes]
 
+# first sort expression matrix
+sorted_expression = expression_mat[sorted_cols$column_num]
 
-# Harold's formula: https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
-rpkmToTpm <- function(rpkm)
+# https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
+rpkmToTpm <- function(rpkm_col)
 {
-    rpkm/sum(rpkm)*(1e6)
+    rpkm_col/sum(rpkm_col)*(1e6)
 }
-tpm1 = rpkmToTpm(expression_mat[,1])
 
-converted_expression <- apply(expression_mat, 2, rpkmToTpm)
+TPM_expression <- apply(sorted_expression, 2, rpkmToTpm)
+
+# log transform expression data
+# log_TPM_expression <- log10(TPM_expression+1)
   
 # median normalization of expression per gene
+# divide all within each sample by median within respective sample (median of all genes with log tpm > 0 or log tpm > very small number), essentially want typical expressed gene to have expression value around 1
 
+median_normalize <- function(expr_mat_col)
+{
+  median <- median(expr_mat_col[which(expr_mat_col > log10(2))])
+  # print(median)
+  expr_mat_col = expr_mat_col/median
+}
 
-# sort expression_mat columns based on order from sorted columns_meta
-sorted_expression <- expression_mat[sorted_cols$column_num]
+normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 
-sorted_expression <- data.matrix(sorted_expression) # convert to matrix
+# sorted_expression <- data.matrix(sorted_expression) # convert to matrix - CHECK IF STILL NEED - already in matrix form
 ```
 
 ```{r, heat maps for gene expression over time for each structure}
 # heatmap of "amygdaloid complex"
 
 # note that need to determine method to subset genes of interest b/c vector allocation issues - just need to select smaller set of genes of interest
-heatmap(sorted_expression[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name)
+heatmap(normal_expr[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name)
 ```
 
 ```{r, calculate gene expression correlation}
@@ -173,7 +183,7 @@ calc_correlation <- function(cols_meta,expr_mat){
   confidence_int_lower <- vector("numeric", nrow(expr_mat))
   confidence_int_upper <- vector("numeric", nrow(expr_mat))
   for(i in 1:nrow(expr_mat)){
-    output = suppressWarnings(cor.test(cols_meta$age, expr_mat[i,]))
+    output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
     corr[i] = output$estimate
     p_val[i] = output$p.value
     if (length(output$conf.int) > 0){
@@ -186,10 +196,10 @@ calc_correlation <- function(cols_meta,expr_mat){
 
 # first create matrix with columns for each brain structure and rows for the correlation of each gene
 # create list of matrices (time-correlation sum)
-corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
-p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
-confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
-confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids))
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
 
 # also create vector to store number of time points for each unique brainspan structure
 num_struct_timepoints <- vector("integer", nrow(struct_to_ids))
@@ -197,7 +207,7 @@ num_struct_timepoints <- vector("integer", nrow(struct_to_ids))
 # index gene expression columns to obtain submatrices of each brain structure
 for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
   struct <- struct_to_ids$unique_structures[i]
-  temp_mat <- sorted_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
+  temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
   temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
   num_struct_timepoints[i] = nrow(temp_cols)
   if(nrow(temp_cols) > 2){
@@ -253,15 +263,15 @@ struct <- "ventrolateral prefrontal cortex"
 # find which column in the corr_matrix the struct corresponds to
 col_index <- grep(struct, struct_to_ids$unique_structures, fixed = T)
 interest_gene <- rows_meta$gene_symbol[which(chrom_mod_corr[,col_index]>0.8)]
-chrom_mod_expression <- sorted_expression[matched_modifiers,]
-which(chrom_mod_corr[,col_index]>0.8)
+chrom_mod_expression <- normal_expr[matched_modifiers,]
 temp_mat <- chrom_mod_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
 temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
 
 # use to center title in plot
 theme_update(plot.title = element_text(hjust = 0.5))
 
-ggplot(data.frame(log10(temp_cols$age), temp_mat[which(chrom_mod_corr[,col_index]>0.8),]), aes(x = log10(temp_cols$age), y = temp_mat[which(chrom_mod_corr[,col_index]>0.8),])) + geom_line() + labs(x = "log10(age)", y = "expression level", title =paste0(interest_gene, " in ", struct, " over time"))
+# error now b/c multiple corr above threshold
+ggplot(data.frame(log10(temp_cols$age), temp_mat[which(chrom_mod_corr[,col_index]>0.9),]), aes(x = log10(temp_cols$age), y = temp_mat[which(chrom_mod_corr[,col_index]>0.8),])) + geom_line() + labs(x = "log10(age)", y = "expression level", title =paste0(interest_gene, " in ", struct, " over time"))
 
 
 ```
@@ -281,28 +291,32 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 
 ```
 
-```{r, KAT6A/B expression plots}
-# list genes of interest (note BRPF2 not in rows_meta)
+```{r, key gene expression plots}
+# list genes of interest (note BRPF2 not in rows_meta - alternate name BRD1)
 # KAT6A, KAT6B, ING5, BRPF1/2/3, (H)MEAF6, FOXG1
 # note that ING5 and FOXG1 aren't chromatin modifiers so need to search all available genes
-gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRPF3", "MEAF6", "FOXG1")
+# add genes Pax6, nestin, kat7, map2, mki67
+gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRD1", "BRPF3", "MEAF6", "FOXG1", "PAX6", "NES", "KAT7", "MAP2", "MKI67")
 
-gene_expression_plot <- function(gene){
+# CHANGE TO A FOR LOOP
+for (i in 1:length(gene_list)){
+  gene <- gene_list[i]
   row <- which(rows_meta$gene_symbol == gene)
-  expression <- sorted_expression[row,]
+  expression <- normal_expr[row,]
   pcw <- sorted_cols$age
   structures <- sorted_cols$structure_name
   df <- data.frame(structures, pcw, expression)
-  ggplot(df, aes(x = log10(pcw), y = log10(expression+1), color = structures, group = structures)) + 
+  gg <- ggplot(df, aes(x = log10(pcw), y = expression, color = structures, group = structures)) + 
     geom_line() + geom_point() + 
     facet_wrap(structures~.) +
     theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
     ggtitle(paste0(gene, " expression over time for each brain region")) + 
     geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
-  ggsave(paste0(gene, " expression plot.png"), width = 7, height = 5) 
+  ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
 }
 
-sapply(gene_list, gene_expression_plot)
+
+# sapply(gene_list, gene_expression_plot)
 ```
 
 
