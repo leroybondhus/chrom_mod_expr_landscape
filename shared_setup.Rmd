@@ -733,6 +733,7 @@ close(con);rm(con,term_num,num_terms,line,is_cl,temp_gci_relation,temp_id,temp_r
 ### add children attribute to each term for ease of navigation up and down ontology
 ontos$cl$ont <- add_children_from_parents(ontos$cl$ont)
 ontos$cl$ont <- add_descendants(ontos$cl$ont)
+ontos$cl$ont <- add_height(ontos$cl$ont)
 ##### done: read in and set up ontology ####
 
 ```
