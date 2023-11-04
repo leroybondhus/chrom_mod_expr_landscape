@@ -140,7 +140,8 @@ for(subset_name in names(gene_sets$human_chromatin_modifiers$gene_subsets)){
   sub_temp_mat$name <- factor(sub_temp_mat$name,levels=levels(df$name))
   ggl2[[str_replace_all(subset_name," ","_")]] <- ggplot(df, aes(x=wmean,y=name))+
     geom_point(color="grey20")+
-    geom_point(data = sub_temp_mat, aes(x=expr, y = name),size=0.1,alpha=0.4,color="salmon")+
+    geom_point(data = sub_temp_mat, aes(x=expr, y = name),size=0.1,alpha=0.4
+               ,color="salmon")+
     geom_errorbar(alpha=0.8,color="grey20",aes(xmin=wmeanv_l,xmax=wmeanv_u))+
     scale_y_discrete(limits=levels(df$name))+
     scale_x_continuous(limits = c(0,3.5))+
@@ -252,7 +253,8 @@ full_temp_mat$major_anatomic_group[which(str_length(full_temp_mat$major_anatomic
 
 ggplot(full_df, aes(x=wmean,y=name))+
   geom_point(color="grey20")+
-  geom_point(data = full_temp_mat, aes(x=expr, y = name, color=major_anatomic_group),size=0.1,alpha=0.4)+# ,color="salmon")+
+  geom_point(data = full_temp_mat[which(full_temp_mat$major_anatomic_group!=""),],
+             aes(x=expr, y = name, color=major_anatomic_group),size=0.1,alpha=0.4)+# ,color="salmon")+
   geom_errorbar(alpha=0.8,color="grey20",aes(xmin=wmeanv_l,xmax=wmeanv_u))+
   scale_y_discrete(limits=levels(full_df$name))+
   scale_x_continuous(limits = c(0,3.5))+
@@ -282,11 +284,97 @@ for(major_anatomic_group in unique(full_temp_mat$major_anatomic_group)){
 }
 
 
+# 
+# cor_mat <- matrix(nrow=length(unlist(subsets)),
+#                   ncol=length(unlist(subsets)))
+# rownames(cor_mat) <- colnames(cor_mat) <- unlist(subsets)
+# which <- which(is.element(unlist(subsets),rownames(temp_mat)))
+# cor_mat <- cor_mat[which,which]
+# which <- sort(sample(1:nrow(cor_mat),300))
+# cor_mat <- cor_mat[which,which]
+
+# 
+
+cor_mat <- matrix(nrow=length(c(subsets$`regulation of mitotic cell cycle`)),
+                  ncol=length(c(subsets$`regulation of mitotic cell cycle`)))
+rownames(cor_mat) <- colnames(cor_mat) <- c(subsets$`regulation of mitotic cell cycle`)
+which <- which(is.element(c(subsets$`regulation of mitotic cell cycle`),rownames(temp_mat)))
+cor_mat <- cor_mat[which,which]
+which <- sort(sample(1:nrow(cor_mat),300))
+cor_mat <- cor_mat[which,which]
+for(i in 1:nrow(cor_mat)){
+  if(i %% 20 ==0 ){print(i)}
+  if(var(temp_mat[i,])<1e-10){next}
+  for(j in 1:nrow(cor_mat)){
+    if(var(temp_mat[j,])<1e-10){next}
+    cor_mat[i,j] <-cor(temp_mat[rownames(cor_mat)[i],], temp_mat[rownames(cor_mat)[j],])
+  }
+}
+Heatmap(cor_mat)
+
+
+cor_mat <- matrix(nrow=length(c(subsets$`regulation of mitotic cell cycle`)),
+                  ncol=length(c(subsets$`structural constituent of chromatin`)))
+rownames(cor_mat) <- c(subsets$`regulation of mitotic cell cycle`)
+which <- which(is.element(c(subsets$`regulation of mitotic cell cycle`),rownames(temp_mat)))
+cor_mat <- cor_mat[which,]
+colnames(cor_mat) <- c(subsets$`structural constituent of chromatin`)
+which <- which(is.element(c(subsets$`structural constituent of chromatin`),rownames(temp_mat)))
+cor_mat <- cor_mat[,which]
+which <- sort(sample(1:nrow(cor_mat),300))
+cor_mat <- cor_mat[which,]
+
+for(i in 1:nrow(cor_mat)){
+  if(i %% 20 ==0 ){print(i)}
+  if(var(temp_mat[i,])<1e-10){next}
+  for(j in 1:ncol(cor_mat)){
+    if(var(temp_mat[j,])<1e-10){next}
+    cor_mat[i,j] <-cor(temp_mat[rownames(cor_mat)[i],], temp_mat[colnames(cor_mat)[j],])
+  }
+}
+Heatmap(cor_mat)
+
 
 ```
 
 
+```{r, set up major systems}
+### set building
+### build major systems UBERON and HPO sets
 
+major_systems<- c("nervous system",
+                  "cardiovascular system",
+                  "musculoskeletal system",
+                  "respiratory system",
+                  "digestive system",
+                  "renal system",
+                  "reproductive system",
+                  "immune system",
+                  "endocrine system",
+                  "hematopoietic system",
+                  "integumental system")
+
+### major system name, ontology name, ontology id, include/remove (T/F)
+major_systems <- matrix(nrow = 0, ncol=4)
+### Uberon Canon
+major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T) )
+major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T))
+major_systems <- rbind(major_systems,c("cardiovascular system","cardiovascular system","UBERON:0004535",T))
+major_systems <- rbind(major_systems,c("musculoskeletal system","musculoskeletal system","UBERON:0002204",T))
+major_systems <- rbind(major_systems,c("respiratory system","respiratory system","UBERON:0001004",T))
+major_systems <- rbind(major_systems,c("digestive system","digestive system","UBERON:0001007",T))
+major_systems <- rbind(major_systems,c("renal system","renal system","UBERON:0001008",T))
+major_systems <- rbind(major_systems,c("reproductive system","reproductive system","UBERON:0000990",T))
+major_systems <- rbind(major_systems,c("immune system","immune system","UBERON:0002405",T))
+major_systems <- rbind(major_systems,c("endocrine system","endocrine system","UBERON:0000949",T))
+major_systems <- rbind(major_systems,c("hematopoietic system","hematopoietic system","UBERON:0002390",T))
+major_systems <- rbind(major_systems,c("integumental system","integumental system","UBERON:0002416",T))
+## UBERON non-canon
+major_systems <- rbind(major_systems,c("musculoskeletal system","musculature of body","UBERON:0002204",T))
+"v")]],"musculoskeletal system"] 
+
+
+```
 
 
 
@@ -674,8 +762,28 @@ mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene 
 mat <- mat[is.element(rownames(mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),]
 coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
 
+major_anatomic_groups<- c("renal system",
+                          "reproductive system",
+                           "nervous system",
+                           "cardiovascular system",
+                           "musculoskeletal system",
+                           "integumental system",
+                           "immune system",
+                           "digestive system",
+                           "respiratory system",
+                           "hematopoietic system",
+                           "endocrine system")
+## take some time to curate this to make clean 
+coldata <- cbind(coldata, matrix(F, nrow=nrow(coldata), ncol=length(major_anatomic_groups),
+       dimnames = list(rownames(coldata),major_anatomic_groups)) )
+for( major_anatomic_group in major_anatomic_groups){
+  coldata[onto$ehh[[which(onto$name==major_anatomic_group)]],major_anatomic_group] <- T 
+}
+View(coldata)
+## uberon does not encode musculature of body under musculoskeletal system which seems like an error
+### CORRECTION - Uberon 
+coldata[onto$ehh[[which(onto$name=="musculature of body")]],"musculoskeletal system"] <- T 
 
-  
 num_terms <- length(onto$id)
 num_features <- nrow(mat)
 onto$ehh_summary_stats <- vector("list", num_terms)
@@ -693,12 +801,17 @@ rownames(temp_stat_df_model) <- rownames(mat)
 
 temp_num_els <- sapply(onto$ehh,length)
 onto$ehh_num_cols <- temp_num_els
-temp_els <- which(onto$ehh_num_cols > 0)
+# temp_els <- which(onto$ehh_num_cols > 0)
 # temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
 # temp_els <- grepl("^heart$",onto$name)
 # temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
 # temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
 # temp_els <- which(temp_els & temp_num_els > 1)
+temp_els <- match("anatomical entity",onto$name)
+
+
+temp_els <- match( c("anatomical entity",
+                     major_anatomic_groups,onto$name)
 
 #temp_els <- which(is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) &
 #                  temp_num_els > 1)   #which(temp_num_els > 1)
@@ -761,7 +874,7 @@ df$specificity_state <- factor("complex",levels =c("specific","complex","ubiquit
 df$specificity_state[which(df$tau_internal < 0.4)] <- "ubiquitous"
 df$specificity_state[which(df$tau_internal > 0.7)] <-  "specific"
 temp_names <- names(gene_sets$human_chromatin_modifiers$gene_subsets)
-temp_names <- temp_names[which(temp_names != "chromatin looping")]
+#temp_names <- temp_names[which(temp_names != "chromatin looping")]
 df_out <- merge(temp_names,
                 c("specific","complex","ubiquitous"))
 colnames(df_out) <- c("gene_subset","expr_class")
@@ -825,6 +938,118 @@ ggsave(filename=paste0(dirs$figures,"temp_specificity_dist_simplified.png"), hei
 
 ```
 
+```{r, chrom modifier specificity}
+onto <- ontos$uberon$ont
+temp_el <- grep("^anatomical entity$",onto$name)
+ehh <- onto$ehh[[temp_el]]
+
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh] 
+mat <- mat[is.element(rownames(mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),]
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh,]
+rm(ehh)
+
+
+mat <- mat[,which(as.numeric(str_remove(coldata$age_group, "-.*")) > 512 |
+                    coldata$age_group == "")]
+coldata <- coldata[which(as.numeric(str_remove(coldata$age_group, "-.*")) > 512 |
+                    coldata$age_group == ""),]
+colnames(mat) <- paste0(coldata$biosample_ontology.term_name,
+                        coldata$age_group)
+
+coldata$mat_colnames <- paste(coldata$assay_term_name,
+                                   coldata$biosample_ontology.term_name,
+                                   coldata$age_group,sep=":")
+
+
+major_anatomic_groups <- c("genitourinary system",
+                           "nervous system",
+                           "cardiovascular system",
+                           "musculoskeletal system",
+                           "integumental system",
+                           "immune system",
+                           "digestive system",
+                           "respiratory system",
+                           "hematopoietic system",
+                           "endocrine system",
+                           "limb")
+coldata$major_anatomic_group <- ""
+for(i in 1:nrow(coldata)){
+  coldata$biosample_ontology
+  
+  which <- ontos$uberon$ont$ehh[[which(ontos$uberon$ont$name==anatomic_group)]]
+  coldata$major_anatomic_group[which] <- str_remove(paste(coldata$major_anatomic_group[which],
+                                                    str_remove(anatomic_group," system"),sep=","),"^,") 
+}
+
+
+
+num_features <- nrow(mat)
+spec_ss <- list()
+
+
+
+dot_sim <- similarity_func(mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(mat))
+spec_ss$mean <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+spec_ss$sd <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+spec_ss$tau <- calc_weighted_tau(mat,weights)
+spec_ss$zscore <- calc_weighted_zscore_matrix(mat,weights)
+spec_ss$zscore[is.na(spec_ss$zscore)] <- 0
+
+
+
+
+
+
+
+save.image("post_spec.RData")
+```
+
+
+
+```{r, ubiquitous-complex-specific heatmaps}
+table(df$specificity_state) 
+
+hist(df$mean_internal[which(df$specificity_state=="ubiquitous")], xlim = c(0,max(df$mean_internal)),
+     breaks=100)
+hist(df$mean_internal[which(df$specificity_state=="complex")], xlim = c(0,max(df$mean_internal)),
+     breaks=100)
+hist(df$mean_internal[which(df$specificity_state=="specific")], xlim = c(0,max(df$mean_internal)),
+     breaks=100)
+
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+mat <- mat[is.element(rownames(mat),rownames(df)),]
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+colnames(mat) <- coldata$biosample_ontology.term_name
+mat <- mat[,which(as.numeric(str_remove(coldata$age_group, "-.*")) > 512 |
+                    coldata$age_group == "")]
+
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="ubiquitous")]),], scale="row")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="ubiquitous")]),], scale="column")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="ubiquitous")]),], scale="none")
+
+
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="complex")]),], scale="row")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="complex")]),], scale="column")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="complex")]),], scale="none")
+
+
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="specific")]),], scale="row")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="specific")]),], scale="column")
+heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="specific")]),], scale="none")
+
+
+Heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="ubiquitous")]),])
+Heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="complex")]),])
+Heatmap(mat[is.element(rownames(mat),rownames(df)[which(df$specificity_state=="specific")]),])
+
+
+b
+```
+
+
 ```{r, chrom modifier specificity map to specific onto term for specific chrom modifiers}
 
 for(i in 1:length(onto$ehh_summary_stats)){
@@ -833,7 +1058,7 @@ for(i in 1:length(onto$ehh_summary_stats)){
 }
 
 temp_df <- full_df[which(full_df$gene_subset=="all_chrom_modifiers" &
-                           full_df$specificity_state=="specific"),]
+                           (full_df$specificity_state=="specific" | full_df$specificity_state=="complex") ),]
 
 
 temp_onto_ids <- which(onto$ehh_num_cols > 5 & onto$ehh_num_cols < 80)

@@ -651,9 +651,11 @@ rm(which, which_keep, id)
 ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
 ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
                                          inverse_relation_name = "has_part(SUPP_INV(part_of))")
-ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of"))
-ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
-ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
+ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "has_part",
+                                         inverse_relation_name = "part_of(SUPP_INV(has_part))")
+ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of","part_of(SUPP_INV(has_part))"))
+ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
+ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
 
 
 
