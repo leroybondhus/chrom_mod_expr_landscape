@@ -631,7 +631,7 @@ close(con);rm(con, line, term_num, num_terms,
 ##### remove: UBERON:0001379 part_of UBERON:0001377  ## quadriceps femoris has_part vastus lateralis ## preserve is_a relation 
 ##### remove: UBERON:0001380 part_of UBERON:0001377  ## quadriceps femoris has_part vastus medialis ## preserve is_a relation
 ##### remove: UBERON:0014847 part_of UBERON:0001377  ## quadriceps femoris has_part vastus intermedius ## preserve is_a relation
-
+##### add: UBERON:0018254 part_of UBERON:0002204 ## skeletal musculature part_of musculoskeletal system
 
 which <- which(ontos$uberon$ont$id=="UBERON:0003983")
 which_keep <- which(!(grepl("UBERON:000718[12]",ontos$uberon$ont$relations[[which]]$id) &
@@ -644,6 +644,10 @@ for(id in c("UBERON:0001378","UBERON:0001379","UBERON:0001380","UBERON:0014847")
                           grepl("part_of",ontos$uberon$ont$relations[[which]]$relation)))
   ontos$uberon$ont$relations[[which]] <- ontos$uberon$ont$relations[[which]][which_keep,]
 }
+ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")]] <- unique(rbind(
+  ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")]],
+  data.frame(relation="part_of",id=ontos$uberon$ont$id[which(ontos$uberon$ont$name=="musculoskeletal system")])
+))
 rm(which, which_keep, id)
 #################
 
@@ -651,8 +655,8 @@ rm(which, which_keep, id)
 ontos$uberon$ont <- add_children_from_parents(ontos$uberon$ont)
 ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
                                          inverse_relation_name = "has_part(SUPP_INV(part_of))")
-ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "has_part",
-                                         inverse_relation_name = "part_of(SUPP_INV(has_part))")
+# ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "has_part",
+#                                          inverse_relation_name = "part_of(SUPP_INV(has_part))")
 ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of","part_of(SUPP_INV(has_part))"))
 ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
 ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))

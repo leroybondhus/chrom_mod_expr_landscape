@@ -780,9 +780,9 @@ for( major_anatomic_group in major_anatomic_groups){
   coldata[onto$ehh[[which(onto$name==major_anatomic_group)]],major_anatomic_group] <- T 
 }
 View(coldata)
-## uberon does not encode musculature of body under musculoskeletal system which seems like an error
+## uberon does not encode skeletal musculature under musculoskeletal system which seems like an error
 ### CORRECTION - Uberon 
-coldata[onto$ehh[[which(onto$name=="musculature of body")]],"musculoskeletal system"] <- T 
+coldata[onto$ehh[[which(onto$name=="skeletal musculature")]],"musculoskeletal system"] <- T 
 
 num_terms <- length(onto$id)
 num_features <- nrow(mat)

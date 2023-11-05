@@ -332,7 +332,7 @@ for(i in 1:length(temp_uberon_ids)){
   if(i %% 100 == 0){print(i)}
   if(is.na(temp_uberon_ids[i])){next}
   ontos$uberon$ont <- add_annotation(temp_uberon_ids[i], ontos$uberon$ont, "ehh", i,
-                         transitive_relations = c("part_of", "part_of(SUPP_INV(has_part))", "is_a", "proxy_for(SUPP)" ))  
+                         transitive_relations = c("part_of",  "is_a", "proxy_for(SUPP)" ))  
 }
 
 
@@ -345,7 +345,7 @@ for(i in 1:length(temp_cl_ids)){
   if(i %% 100 == 0){print(i)}
   if(is.na(temp_cl_ids[i])){next}
   ontos$cl$ont <- add_annotation(temp_cl_ids[i], ontos$cl$ont, "ehh", i,
-                         transitive_relations = c("part_of", "part_of(SUPP_INV(has_part))", "is_a", "proxy_for(SUPP)" ))  
+                         transitive_relations = c("part_of",  "is_a", "proxy_for(SUPP)" ))  
 }
 
 
@@ -392,7 +392,7 @@ for(i in 1:length(temp_cl_ids)){
   if(is.na(temp_cl_ids[i])){temp_list[i] <- list(NULL);next}
   temp_df <- get_onto_paired_concepts(temp_cl_ids[i],ontos$cl$ont,
                                       inter_onto_relations = c("is_a",
-                                                               "part_of", "part_of(SUPP_INV(has_part))",
+                                                               "part_of", #"part_of(SUPP_INV(has_part))",
                                                                 "primarily_composes(complement_of:composed_primarily_of)"))
   if(is.null(temp_df)){ temp_list[i] <- list(NULL); next}
   
