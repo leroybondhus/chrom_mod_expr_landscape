@@ -7,6 +7,7 @@ output: html_document
 
 ```{r, load in files and setup brain structures to uberon ID file}
 registerDoParallel(detectCores()-2)
+date <- format(Sys.time(),"%Y%m%d")
 
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
@@ -298,7 +299,7 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 # add genes Pax6, nestin, kat7, map2, mki67
 gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRD1", "BRPF3", "MEAF6", "FOXG1", "PAX6", "NES", "KAT7", "MAP2", "MKI67")
 
-# CHANGE TO A FOR LOOP
+# gene expression plots for each gene in gene list
 for (i in 1:length(gene_list)){
   gene <- gene_list[i]
   row <- which(rows_meta$gene_symbol == gene)
@@ -306,17 +307,29 @@ for (i in 1:length(gene_list)){
   pcw <- sorted_cols$age
   structures <- sorted_cols$structure_name
   df <- data.frame(structures, pcw, expression)
-  gg <- ggplot(df, aes(x = log10(pcw), y = expression, color = structures, group = structures)) + 
-    geom_line() + geom_point() + 
-    facet_wrap(structures~.) +
-    theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
-    ggtitle(paste0(gene, " expression over time for each brain region")) + 
-    geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
-  ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
+  early <- df[which(df$pcw <= 40),]
+  adolescent <- df[which(df$pcw > 40 & df$pcw <= 52*13),]
+  adult <- df[which(df$pcw > 52*13),]
+  partitioned_dfs <- list(df, early, adolescent, adult)
+  time_partitions <- c("full_span", "0-40pcw", "40pcw-13yrs", "13yrs-eol")
+  for (j in 1:length(partitioned_dfs)){
+      gg <- ggplot(partitioned_dfs[[j]], aes(x = partitioned_dfs[[j]]$pcw, y = partitioned_dfs[[j]]$expression, color = partitioned_dfs[[j]]$structures, group = partitioned_dfs[[j]]$structures)) + 
+      geom_line() + geom_point() + 
+      facet_wrap(structures~.) +
+      theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+      ggtitle(paste0(gene, "_", time_partitions[j], " expression over time for each brain region")) + 
+      labs(x = "number of pcw", y = "median normalized log expression (TPM)")
+    ggsave(paste0("./results/figures/", date, "_gene_expr_plots/", time_partitions[j], '/', gene, "_", time_partitions[j], "_expression_plot.png"), plot = gg, width = 7, height = 5) 
+  }
 }
-
-
-# sapply(gene_list, gene_expression_plot)
+#   gg <- ggplot(df, aes(x = log10(df$pcw), y = df$expression, color = df$structures, group = df$structures)) + 
+#     geom_line() + geom_point() + 
+#     facet_wrap(structures~.) +
+#     theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+#     ggtitle(paste0(gene, " expression over time for each brain region")) + 
+#     geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
+#   ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
+# }
 ```
 
 
