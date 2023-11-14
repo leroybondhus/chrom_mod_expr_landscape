@@ -5,9 +5,15 @@ date: "2023-08-18"
 output: html_document
 ---
 
-```{r, load in files and setup brain structures to uberon ID file}
+ˆ
+```{r, setup}
 registerDoParallel(detectCores()-2)
+date <- format(Sys.time(),"%Y%m%d")
+library(dendextend)
+library(scales) # for rescale function to normalize values btwn 0 and 1
+```
 
+```{r, load in files and setup brain structures to uberon ID file}
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
@@ -171,7 +177,10 @@ normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 # heatmap of "amygdaloid complex"
 
 # note that need to determine method to subset genes of interest b/c vector allocation issues - just need to select smaller set of genes of interest
-heatmap(normal_expr[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name)
+temp <- heatmap(normal_expr[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name, keep.dendro = T)
+
+# figure dendrogram height
+# visit each node until below cutpoint and return subdendrogram/tree
 ```
 
 ```{r, calculate gene expression correlation}
@@ -221,7 +230,7 @@ for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
 
 # note some individual correlation values are NA
 # error with "temporal neocortex" because only one sample - use if statement to test length of num cols before calculating correlation
-# using cor.test brainspan structures with only two samples also lead to error
+# using cor.test brainspan structures with only two samples also lead to error - corr values will be NA
 
 # can perform exploratory heat map analysis by taking certain sets of genes
 # should i use ComplexHeatMap or base heatmap
@@ -255,6 +264,65 @@ lower = 0.2
 corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
 
 ```
+
+```{r, correlation clustering}
+struct_index = grep("amygdaloid complex", sorted_cols$structure_name, fixed = T)
+
+# get matrix of correlation btwn pairs of genes
+# use 0.5 as cutoff for difference between genes
+# first subset expr matrix to get 1 structure (amygdaloid complex) & then filter chromatin modifier genes with a significant difference in expression level
+sub_matrix <- normal_expr[matched_modifiers, struct_index]
+sub_matrix <- sub_matrix[which(apply(sub_matrix, 1, max)-apply(sub_matrix, 1, min)>0.5),]
+
+# mean (normalized to [0-1])  expression per timepoint for each cluster 
+mean_expr <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
+
+# create matrix of correlation btwn pairs of genes
+gene_pairwise_corr <- -1*(cor(t(mean_expr))-1)
+# gene_pairwise_corr <- cor(t(sub_matrix))
+
+
+hc <- hclust(as.dist(gene_pairwise_corr), "ave")
+plot(hc)
+rect.hclust(hc, h=0.5)
+
+# dend <- as.dendrogram(hc)
+# plot(dend)
+# get_branches_heights(dend)
+
+# cut at a distance of 0.5, and get cluster memberships
+myhcl <- cutree(hc, h=0.5)
+n_clusters <- max(myhcl)
+
+# create dataframe with cluster mean expression per time point
+cluster_mean_expr <- vector("list", max(n_clusters))
+for (i in 1:n_clusters){
+  # error in colMeans if only 1 gene in a cluster
+  if(length(which(myhcl == i)) > 1){
+    cluster_mean_expr[[i]] = colMeans(mean_expr[which(myhcl == i),])
+  }
+  else{
+    cluster_mean_expr[[i]] = mean_expr[which(myhcl == i),]
+  }
+}
+
+test_df <- melt(cluster_mean_expr)
+test_df$pcw <- sorted_cols$age[struct_index]
+colnames(test_df)[1] = "expr"
+colnames(test_df)[2] = "cluster"
+
+# see what these coexpression patterns look like 
+
+ggplot(test_df, aes(x = log10(pcw), y = expr, color = cluster, group = cluster)) +
+      geom_point() + geom_line() +
+      facet_wrap(cluster~.) +
+theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) +
+      ggtitle("amygdaloid complex gene expression over time for each cluster") + 
+      labs(x = "log10(pcw)", y = "normalized expr")
+
+# plug into gene ontology analysis to see whether they fall into common functional group
+```
+
 
 
 ```{r, exploratory plots for correlation}
@@ -291,6 +359,14 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 
 ```
 
+```{r, percentile plots}
+# use temp_mat from previous chunk
+row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6A")
+ggplot(data.frame(temp_cols$age, temp_mat[row,]), aes(x = temp_cols$age, y = temp_mat[row,]))+ 
+      geom_line() + geom_point()
+```
+
+
 ```{r, key gene expression plots}
 # list genes of interest (note BRPF2 not in rows_meta - alternate name BRD1)
 # KAT6A, KAT6B, ING5, BRPF1/2/3, (H)MEAF6, FOXG1
@@ -298,7 +374,7 @@ ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) +
 # add genes Pax6, nestin, kat7, map2, mki67
 gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRD1", "BRPF3", "MEAF6", "FOXG1", "PAX6", "NES", "KAT7", "MAP2", "MKI67")
 
-# CHANGE TO A FOR LOOP
+# gene expression plots for each gene in gene list
 for (i in 1:length(gene_list)){
   gene <- gene_list[i]
   row <- which(rows_meta$gene_symbol == gene)
@@ -306,17 +382,29 @@ for (i in 1:length(gene_list)){
   pcw <- sorted_cols$age
   structures <- sorted_cols$structure_name
   df <- data.frame(structures, pcw, expression)
-  gg <- ggplot(df, aes(x = log10(pcw), y = expression, color = structures, group = structures)) + 
-    geom_line() + geom_point() + 
-    facet_wrap(structures~.) +
-    theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
-    ggtitle(paste0(gene, " expression over time for each brain region")) + 
-    geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
-  ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
+  early <- df[which(df$pcw <= 40),]
+  adolescent <- df[which(df$pcw > 40 & df$pcw <= 52*13),]
+  adult <- df[which(df$pcw > 52*13),]
+  partitioned_dfs <- list(df, early, adolescent, adult)
+  time_partitions <- c("full_span", "0-40pcw", "40pcw-13yrs", "13yrs-eol")
+  for (j in 1:length(partitioned_dfs)){
+      gg <- ggplot(partitioned_dfs[[j]], aes(x = partitioned_dfs[[j]]$pcw, y = partitioned_dfs[[j]]$expression, color = partitioned_dfs[[j]]$structures, group = partitioned_dfs[[j]]$structures)) + 
+      geom_line() + geom_point() + 
+      facet_wrap(structures~.) +
+      theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+      ggtitle(paste0(gene, "_", time_partitions[j], " expression over time for each brain region")) + 
+      labs(x = "number of pcw", y = "median normalized log expression (TPM)")
+    ggsave(paste0("./results/figures/", date, "_gene_expr_plots/", time_partitions[j], '/', gene, "_", time_partitions[j], "_expression_plot.png"), plot = gg, width = 7, height = 5) 
+  }
 }
-
-
-# sapply(gene_list, gene_expression_plot)
+#   gg <- ggplot(df, aes(x = log10(df$pcw), y = df$expression, color = df$structures, group = df$structures)) + 
+#     geom_line() + geom_point() + 
+#     facet_wrap(structures~.) +
+#     theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+#     ggtitle(paste0(gene, " expression over time for each brain region")) + 
+#     geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
+#   ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
+# }
 ```
 
 
