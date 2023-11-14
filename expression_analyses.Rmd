@@ -341,37 +341,37 @@ Heatmap(cor_mat)
 ```{r, set up major systems}
 ### set building
 ### build major systems UBERON and HPO sets
-
-major_systems<- c("nervous system",
-                  "cardiovascular system",
-                  "musculoskeletal system",
-                  "respiratory system",
-                  "digestive system",
-                  "renal system",
-                  "reproductive system",
-                  "immune system",
-                  "endocrine system",
-                  "hematopoietic system",
-                  "integumental system")
-
-### major system name, ontology name, ontology id, include/remove (T/F)
-major_systems <- matrix(nrow = 0, ncol=4)
-### Uberon Canon
-major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T) )
-major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T))
-major_systems <- rbind(major_systems,c("cardiovascular system","cardiovascular system","UBERON:0004535",T))
-major_systems <- rbind(major_systems,c("musculoskeletal system","musculoskeletal system","UBERON:0002204",T))
-major_systems <- rbind(major_systems,c("respiratory system","respiratory system","UBERON:0001004",T))
-major_systems <- rbind(major_systems,c("digestive system","digestive system","UBERON:0001007",T))
-major_systems <- rbind(major_systems,c("renal system","renal system","UBERON:0001008",T))
-major_systems <- rbind(major_systems,c("reproductive system","reproductive system","UBERON:0000990",T))
-major_systems <- rbind(major_systems,c("immune system","immune system","UBERON:0002405",T))
-major_systems <- rbind(major_systems,c("endocrine system","endocrine system","UBERON:0000949",T))
-major_systems <- rbind(major_systems,c("hematopoietic system","hematopoietic system","UBERON:0002390",T))
-major_systems <- rbind(major_systems,c("integumental system","integumental system","UBERON:0002416",T))
-## UBERON non-canon
-major_systems <- rbind(major_systems,c("musculoskeletal system","musculature of body","UBERON:0002204",T))
-"v")]],"musculoskeletal system"] 
+# 
+# major_systems<- c("nervous system",
+#                   "cardiovascular system",
+#                   "musculoskeletal system",
+#                   "respiratory system",
+#                   "digestive system",
+#                   "renal system",
+#                   "reproductive system",
+#                   "immune system",
+#                   "endocrine system",
+#                   "hematopoietic system",
+#                   "integumental system")
+# 
+# ### major system name, ontology name, ontology id, include/remove (T/F)
+# major_systems <- matrix(nrow = 0, ncol=4)
+# ### Uberon Canon
+# major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T) )
+# major_systems <- rbind(major_systems,c("nervous system", "nervous system", "UBERON:0001016",T))
+# major_systems <- rbind(major_systems,c("cardiovascular system","cardiovascular system","UBERON:0004535",T))
+# major_systems <- rbind(major_systems,c("musculoskeletal system","musculoskeletal system","UBERON:0002204",T))
+# major_systems <- rbind(major_systems,c("respiratory system","respiratory system","UBERON:0001004",T))
+# major_systems <- rbind(major_systems,c("digestive system","digestive system","UBERON:0001007",T))
+# major_systems <- rbind(major_systems,c("renal system","renal system","UBERON:0001008",T))
+# major_systems <- rbind(major_systems,c("reproductive system","reproductive system","UBERON:0000990",T))
+# major_systems <- rbind(major_systems,c("immune system","immune system","UBERON:0002405",T))
+# major_systems <- rbind(major_systems,c("endocrine system","endocrine system","UBERON:0000949",T))
+# major_systems <- rbind(major_systems,c("hematopoietic system","hematopoietic system","UBERON:0002390",T))
+# major_systems <- rbind(major_systems,c("integumental system","integumental system","UBERON:0002416",T))
+# ## UBERON non-canon
+# major_systems <- rbind(major_systems,c("musculoskeletal system","musculature of body","UBERON:0002204",T))
+# "v")]],"musculoskeletal system"] 
 
 
 ```
@@ -759,7 +759,9 @@ dev.off()
 ```{r, chrom modifier specificity}
 onto <- ontos$uberon$ont
 mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene set to look at
-mat <- mat[is.element(rownames(mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),]
+
+### want to perform clustering and reweighting using all genes
+#mat <- mat[is.element(rownames(mat),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),]
 coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
 
 major_anatomic_groups<- c("renal system",
@@ -780,13 +782,9 @@ for( major_anatomic_group in major_anatomic_groups){
   coldata[onto$ehh[[which(onto$name==major_anatomic_group)]],major_anatomic_group] <- T 
 }
 View(coldata)
-## uberon does not encode skeletal musculature under musculoskeletal system which seems like an error
-### CORRECTION - Uberon 
-coldata[onto$ehh[[which(onto$name=="skeletal musculature")]],"musculoskeletal system"] <- T 
 
-num_terms <- length(onto$id)
 num_features <- nrow(mat)
-onto$ehh_summary_stats <- vector("list", num_terms)
+onto$ehh_summary_stats <- vector("list", length(onto$id))
 temp_stat_df_model <- data.frame(
   mean_internal = numeric(length=num_features),
   sd_internal = numeric(length=num_features),
@@ -797,39 +795,26 @@ temp_stat_df_model <- data.frame(
 )
 rownames(temp_stat_df_model) <- rownames(mat)
 
-
-
-temp_num_els <- sapply(onto$ehh,length)
-onto$ehh_num_cols <- temp_num_els
-# temp_els <- which(onto$ehh_num_cols > 0)
-# temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
-# temp_els <- grepl("^heart$",onto$name)
-# temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
-# temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
-# temp_els <- which(temp_els & temp_num_els > 1)
-temp_els <- match("anatomical entity",onto$name)
-
-
 temp_els <- match( c("anatomical entity",
-                     major_anatomic_groups,onto$name)
+                     major_anatomic_groups),onto$name)
 
-#temp_els <- which(is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) &
-#                  temp_num_els > 1)   #which(temp_num_els > 1)
-#temp_els <- grep("^mesoderm-derived|^ectoderm-derived|^endoderm-derived", onto$name)
+which_cols <- which( as.numeric(str_extract(coldata$age_group, "^[0-9]+")) >= 300 |
+                       is.na(str_extract(coldata$age_group, "^[0-9]+")))
+
 for(i in 1:length(temp_els)){
-  if(i %% 50 == 0){ print(i)}
-
   ehh <- onto$ehh[[temp_els[i]]]
   onto$ehh_summary_stats[[temp_els[i]]] <- temp_stat_df_model
 
   for(set_and_complement in c(1,-1)){
   #  if(set_and_complement==1){print("set")} else {print("complement")}
-    temp_mat <- mat[,ehh*set_and_complement,drop=F]
-    temp_coldata <- coldata[ehh*set_and_complement,,drop=F]
-    if(ncol(temp_mat)>0 & (length(ehh) > 5 | set_and_complement==1) ){
+    if(set_and_complement==1){temp_which_cols <- intersect(which_cols,ehh)}
+    if(set_and_complement==-1){temp_which_cols <- setdiff(which_cols,ehh)}
+    temp_mat <- mat[,temp_which_cols,drop=F]
+    temp_coldata <- coldata[temp_which_cols,,drop=F]
+    if(ncol(temp_mat)>0 & (length(ehh) > 2 | set_and_complement==1) ){
       colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
                                                ":",temp_coldata$age_group))
-      if(ncol(temp_mat) > 5){
+      if(ncol(temp_mat) > 2){
         dot_sim <- similarity_func(temp_mat)
         rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
         sim_tree <- cluster_func(dot_sim)
@@ -848,9 +833,6 @@ for(i in 1:length(temp_els)){
       weighted_sds <- NA
     }
     if(set_and_complement==1){
-      # onto$ehh_summary_stats$tau_internal[[temp_els[i]]] <- temp_tau
-      # onto$ehh_summary_stats$mean_internal[[temp_els[i]]] <- weighted_means
-      # onto$ehh_summary_stats$sd_internal[[temp_els[i]]] <- weighted_sds
       onto$ehh_summary_stats[[temp_els[i]]]$tau_internal <- temp_tau
       onto$ehh_summary_stats[[temp_els[i]]]$mean_internal <- weighted_means
       onto$ehh_summary_stats[[temp_els[i]]]$sd_internal <- weighted_sds
@@ -864,7 +846,172 @@ for(i in 1:length(temp_els)){
 }
 
 
-save.image("post_chrom_mod_specificity.RData")
+#save.image("post_chrom_mod_specificity.RData")
+
+
+major_systems_expr <- onto$ehh_summary_stats[temp_els]
+names(major_systems_expr) <- onto$name[temp_els]
+for(i in 1:length(major_systems_expr)){
+colnames(major_systems_expr[[i]]) <- paste(names(major_systems_expr)[i],colnames(major_systems_expr[[i]]),sep=":")
+}
+major_systems_expr <- do.call("cbind", major_systems_expr)
+temp_taus <- major_systems_expr[,grep("tau_internal", colnames(major_systems_expr))]
+
+# df$specificity_state <- factor("complex",levels =c("specific","complex","ubiquitous") )
+# df$specificity_state[which(df$tau_internal < 0.4)] <- "ubiquitous"
+# df$specificity_state[which(df$tau_internal > 0.7)] <-  "specific"
+# temp_names <- names(gene_sets$human_chromatin_modifiers$gene_subsets)
+
+
+temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] )
+temp_mat <- mat[,temp_which_cols,drop=F]
+temp_coldata <- coldata[temp_which_cols,,drop=F]
+
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+weight_zscores <- calc_weighted_zscore_matrix(temp_mat,weights)
+
+### for ms in major_systems
+### which genes with tau_global > 0.5, have z_global > 1 stdev mean_global i.e. specific to particular system
+### which genes with tau_global and NOT above condition have > 2 stdev mean_global i.e. specifc to particular biosample
+### stdev sensative to small changes in genes with very low variance - want more magnitude of change to select on e.g. log(fc)  
+### NOTE: log(x)-log(y) == log(x/y)
+major_system_gene_sets <- list()
+biosample_gene_sets <- list()
+cutoff_sys2global_z = 1
+cutoff_sys2global_abs_delta_log10 = log10(1.5) ## i.e. at least a 50% diff in expression
+cutoff_point2global_z = 2
+cutoff_point2global_abs_delta_log10 = log10(2) ## i.e. at least 2x diff
+cutoff_min_expr = log10(2.5) ## log10(5 TPM) ~ doesn't account for median normalization but if factor close to 1 for most this is ok 
+
+global_means <- major_systems_expr$`anatomical entity.anatomical entity:mean_internal`
+global_sds <- major_systems_expr$`anatomical entity.anatomical entity:sd_internal`
+global_taus <- major_systems_expr$`anatomical entity.anatomical entity:tau_internal`
+names(global_taus) <- names(global_means) <- names(global_sds) <- rownames(major_systems_expr)
+for( i in 1:length(major_anatomic_groups)){
+  major_anatomic_group <- major_anatomic_groups[i]
+  temp_means <- major_systems_expr[[grep(paste0(major_anatomic_group,".*mean_internal"), names(major_systems_expr))]]
+  temp_zs <- (temp_means - global_means) / global_sds
+  
+  which <- which(
+    ((temp_zs) > cutoff_sys2global_z) &
+    ((temp_means - global_means) > cutoff_sys2global_abs_delta_log10) &
+    (temp_means > cutoff_min_expr ) & # | global_means > cutoff_min_expr) &
+    (is.element(rownames(major_systems_expr),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)) &
+    (global_taus > 0.7)
+  )
+  
+  major_system_gene_sets[[major_anatomic_group]] <- gene_sets$genes_all[match(rownames(major_systems_expr)[which],gene_sets$genes_all$ensembl_gene_id),
+                      c("external_gene_name","ensembl_gene_id")]
+  major_system_gene_sets[[major_anatomic_group]] <- cbind(major_system_gene_sets[[major_anatomic_group]],data.frame(biosample="full_system")) 
+  ids_in_major_system <- rownames(major_systems_expr)[which]
+  for(j in which(temp_coldata[[major_anatomic_group]])){
+    temp_coldata[j,]
+     
+    which <- which(
+      ((weight_zscores[,j]) > cutoff_point2global_z) &
+      ((temp_mat[,j] - global_means) > cutoff_point2global_abs_delta_log10) &
+      (temp_mat[,j] > cutoff_min_expr ) & # | global_means > cutoff_min_expr) &
+      (is.element(rownames(major_systems_expr),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)) &
+      (global_taus > 0.7)
+    )
+    if(length(which)==0){next}
+    temp_df <- cbind(gene_sets$genes_all[match(rownames(major_systems_expr)[which],gene_sets$genes_all$ensembl_gene_id),
+                                         c("external_gene_name","ensembl_gene_id")],
+                  data.frame(biosample = paste0(temp_coldata$biosample_ontology.term_name[j],".",j) ))
+    which <- which(!is.element(temp_df$ensembl_gene_id,ids_in_major_system))
+    if(length(which)==0){next}
+    temp_df <- temp_df[which,]
+    major_system_gene_sets[[major_anatomic_group]] <- rbind(major_system_gene_sets[[major_anatomic_group]], temp_df)
+  }
+  
+}
+
+for(i in 1:length(major_system_gene_sets)){
+  major_system_gene_sets[[i]]$is_full_system <- major_system_gene_sets[[i]]$biosample == "full_system"
+  major_system_gene_sets[[i]]$sys_or_subset <- ifelse(major_system_gene_sets[[i]]$is_full_system,
+                                                       names(major_system_gene_sets)[i],
+                                                       paste0(names(major_system_gene_sets)[i]," subset") )
+}
+
+simplified_major_system_gene_set_df <- NULL
+temp_colnames_in_order <- c()
+temp_sytemnames_in_order <- c()
+for(i in 1:length(major_system_gene_sets)){
+  simplified_major_system_gene_set_df <- rbind(simplified_major_system_gene_set_df,
+                                               unique(major_system_gene_sets[[i]][,c("external_gene_name","ensembl_gene_id","sys_or_subset")]))
+  temp_colnames <- paste0(temp_coldata$biosample_ontology.term_name,":",
+                                     temp_coldata$age_group)[which(temp_coldata[names(major_system_gene_sets)[i]][[1]])]
+  temp_colnames_in_order <- c(temp_colnames_in_order, temp_colnames)
+  temp_sytemnames_in_order <- c(temp_sytemnames_in_order, rep(names(major_system_gene_sets)[i], length(temp_colnames)))
+}
+
+simplified_major_system_gene_set_df <- simplified_major_system_gene_set_df[!grepl("^H[0-9]",
+                                                                                  simplified_major_system_gene_set_df$external_gene_name),]
+
+
+temp_rownames_in_order <- simplified_major_system_gene_set_df$ensembl_gene_id
+temp <- gene_sets$genes_all$external_gene_name[match(temp_rownames_in_order, gene_sets$genes_all$ensembl_gene_id) ]
+temp[which(temp=="")] <- temp_rownames_in_order[which(temp=="")]
+temp_rownames_in_order <- temp
+#temp_mat[temp_rownames_in_order,temp_colnames_in_order]
+temp <- gene_sets$genes_all$external_gene_name[match(rownames(temp_mat), gene_sets$genes_all$ensembl_gene_id) ]
+temp[which(temp=="")] <- rownames(temp_mat)[which(temp=="")]
+rownames(temp_mat) <- temp
+
+dend1 <- cluster_within_group(temp_mat[temp_rownames_in_order,
+                                       temp_colnames_in_order] ,
+                              factor(temp_sytemnames_in_order, levels = unique(temp_sytemnames_in_order)))
+
+Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = F, cluster_rows = F) #dend1)
+
+Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = F, cluster_rows = dend1)
+
+Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = T, cluster_rows = dend1)
+
+
+save.image()
+
+#### for each specific gene
+##### find onto concept(s) that match greatest number of tissues with specific expression for that gene - add to temp_col_order w info r.e. onto concept used
+
+spec_genes <- names(global_taus)[which(global_taus > 0.5)]
+spec_genes <- spec_genes[which(is.element(spec_genes, gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
+
+spec_biosamples <- list()
+for(g in spec_genes){
+  spec_biosamples[[g]] <- list(colnames = colnames(weight_zscores[g, which(weight_zscores[g,] > 2),drop=F]))
+  spec_biosamples[[g]]$colids_spec <- which(
+    is.element(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group),
+               spec_biosamples[[g]]$colnames))
+  spec_biosamples[[g]]$colids_not_spec <- which(
+    is.element(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group),
+               colnames(temp_mat) ))
+  spec_biosamples[[g]]$colids_not_spec <- setdiff(spec_biosamples[[g]]$colids_not_spec, spec_biosamples[[g]]$colids_spec)
+  
+  temp_df <- data.frame(id=onto$id, name=onto$name, num_colids=0, num_not_colids=0)
+  for(i in 1:length(onto$ehh)){
+    ehh <- onto$ehh[[i]]
+    if(length(ehh)==0){next}
+    temp_df$num_colids[i] <- sum(is.element(spec_biosamples[[g]]$colids_spec, ehh))
+    temp_df$num_not_colids[i] <- sum(is.element(spec_biosamples[[g]]$colids_not_spec, ehh))
+  }
+  temp_df$prop_spec <- temp_df$num_colids / (temp_df$num_colids + temp_df$num_not_colids)
+  temp_df <- temp_df[which( #temp_df$prop_spec == max(c(0.1, temp_df$prop_spec), na.rm = T) |
+                            temp_df$prop_spec > 0.3 ) ,]
+  temp_df <- temp_df[which(temp_df$num_colids > 1 ) ,]
+  
+  # temp_df <- temp_df[which(temp_df$num_colids == max(temp_df$num_colids, na.rm = T) |
+  #                            temp_df$num_colids > 3) ,]
+  spec_biosamples[[g]]$uberon_subtable <- temp_df
+}
+weight_zscores[spec_genes,]
 ```
 
 ```{r, chrom modifier specificity/ubiquity plot}
