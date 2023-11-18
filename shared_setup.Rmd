@@ -972,7 +972,8 @@ gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
   gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
   gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
 
-
+gene_sets$human_chromatin_modifiers$AN_curated_set <- read.csv("./AN_curated_chromopathy_LB_mod.csv")
+gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id 
 ## human
 ## mouse
 ## zebrafish
