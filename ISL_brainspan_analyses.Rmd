@@ -5,10 +5,30 @@ date: "2023-08-18"
 output: html_document
 ---
 
-ˆ
+```{r, set up dir structure - need to update in shared_setup for clustering folders}
+                         
+dirs <- list(data="./data/",
+             results = "./results/",
+             tables = "./results/tables/",
+             figures = "./results/figures/",
+             temp_data ="./temp_data/",
+             OMIM_data = "./data/omim_ra/",
+             cluster_analysis = "./results/figures/cluster_analysis/")
+             # structure = "./results/figures/cluster_analysis/structure",
+             # cluster = "./results/figures/cluster_analysis/structure/cluster")
+for(dir in dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+
+files <- list()
+
+####
+date <- format(Sys.time(),"%Y%m%d")
+```
+
 ```{r, setup}
 registerDoParallel(detectCores()-2)
-date <- format(Sys.time(),"%Y%m%d")
+
 library(dendextend)
 library(scales) # for rescale function to normalize values btwn 0 and 1
 ```
@@ -265,8 +285,18 @@ corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_tim
 
 ```
 
+```{r, cluster analysis directory setup}
+                         
+figure_dirs <- paste0(dirs$cluster_analysis, str_replace_all(struct_to_ids$unique_structures, "[ /]", "_"), "/")
+for(dir in figure_dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+```
+
+
 ```{r, correlation clustering}
-struct_index = grep("amygdaloid complex", sorted_cols$structure_name, fixed = T)
+struct = str_replace_all("amygdaloid complex", "[ /]", "_")
+struct_index = grep(struct, sorted_cols$structure_name, fixed = T)
 
 # get matrix of correlation btwn pairs of genes
 # use 0.5 as cutoff for difference between genes
@@ -297,7 +327,7 @@ n_clusters <- max(myhcl)
 # create dataframe with cluster mean expression per time point
 cluster_mean_expr <- vector("list", max(n_clusters))
 for (i in 1:n_clusters){
-  # error in colMeans if only 1 gene in a cluster
+  # error in colMeans if only 1 gene in a cluster so check length
   if(length(which(myhcl == i)) > 1){
     cluster_mean_expr[[i]] = colMeans(mean_expr[which(myhcl == i),])
   }
@@ -306,20 +336,81 @@ for (i in 1:n_clusters){
   }
 }
 
+temp <- as.data.frame(table(myhcl))
+
 test_df <- melt(cluster_mean_expr)
 test_df$pcw <- sorted_cols$age[struct_index]
 colnames(test_df)[1] = "expr"
 colnames(test_df)[2] = "cluster"
+test_df$freq <- temp$Freq[match(test_df$cluster, temp$myhcl)]
+test_df$group_name <- paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq)
 
 # see what these coexpression patterns look like 
+library(ggforce)
 
-ggplot(test_df, aes(x = log10(pcw), y = expr, color = cluster, group = cluster)) +
+# NEED TO FIX SO THAT FACETS IN CLUSTER ORDER TO ACCESS SUBPLOTS PROPERLY
+
+gg <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
-      facet_wrap(cluster~.) +
-theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) +
+      facet_wrap(group_name~.) +
+theme(legend.position = "none") +
       ggtitle("amygdaloid complex gene expression over time for each cluster") + 
-      labs(x = "log10(pcw)", y = "normalized expr")
+      labs(x = "log10(pcw)", y = "normalized expr") + 
+     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
+ggsave(paste0(dirs$cluster_analysis, struct, "/", struct, "_test_coexpression_over_time.png"), plot = gg, width = 10, height = 8)
+
+# create subdirectories in each structure results folder for plots for each cluster
+cluster_dirs <- paste0("cluster", 1:n_clusters, "/")
+
+for(dir in figure_dirs){
+  for (sub_dir in cluster_dirs){
+    if(!dir.exists(paste0(dir,sub_dir))){dir.create(paste0(dir,sub_dir))}
+  };rm(sub_dir)
+};rm(dir)
+
+subplots <- vector(mode = "list", length = n_clusters)
+
+# for (i in 1:n_clusters){
+#   subplots[i] <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
+#       geom_point() + geom_line() +
+#       facet_wrap_paginate(group_name~., nrow = 1, ncol = 1, page = i) +
+# theme(legend.position = "none") +
+#       ggtitle("amygdaloid complex gene expression over time for each cluster") + 
+#       labs(x = "log10(pcw)", y = "normalized expr") + 
+#      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+# }
+
+subplots <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
+      geom_point() + geom_line() +
+      facet_wrap_paginate(group_name~., nrow = 1, ncol = 1) +
+theme(legend.position = "none") +
+      ggtitle("amygdaloid complex gene expression over time for each cluster") + 
+      labs(x = "log10(pcw)", y = "normalized expr") + 
+     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+
+for(i in 1:n_pages(subplots)){
+  p_save <-  subplots + 
+    facet_wrap_paginate(group_name~., nrow = 1, ncol = 1, page = i)
+  ggsave(paste0(dirs$cluster_analysis, struct, "/", "cluster", i, "/", struct, "_cluster_", i, "_test_coexpression_over_time.png"), plot = p_save, width = 10, height = 8)
+}
+
+
+# make histogram of max expression for genes within a cluster
+cluster_max_expr <- vector("list", max(n_clusters))
+for (i in 1:n_clusters){
+  # 
+  if(length(which(myhcl == i)) > 1){
+    cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl == i),], 1, max, na.rm=TRUE)
+    
+  }
+  else{
+    cluster_max_expr[[i]] = max(sub_matrix[which(myhcl == i),])
+  }
+}
+plot(cluster_max_expr[[2]])
+
+# GO analysis (get code from aileen)
 # plug into gene ontology analysis to see whether they fall into common functional group
 ```
 
@@ -394,7 +485,7 @@ for (i in 1:length(gene_list)){
       theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
       ggtitle(paste0(gene, "_", time_partitions[j], " expression over time for each brain region")) + 
       labs(x = "number of pcw", y = "median normalized log expression (TPM)")
-    ggsave(paste0("./results/figures/", date, "_gene_expr_plots/", time_partitions[j], '/', gene, "_", time_partitions[j], "_expression_plot.png"), plot = gg, width = 7, height = 5) 
+    ggsave(paste0(dirs$figures, date, "_gene_expr_plots/", time_partitions[j], '/', gene, "_", time_partitions[j], "_expression_plot.png"), plot = gg, width = 7, height = 5) 
   }
 }
 #   gg <- ggplot(df, aes(x = log10(df$pcw), y = df$expression, color = df$structures, group = df$structures)) + 
