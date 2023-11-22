@@ -31,6 +31,7 @@ registerDoParallel(detectCores()-2)
 
 library(dendextend)
 library(scales) # for rescale function to normalize values btwn 0 and 1
+library(ggforce) # use for facet_wrap_paginate() function
 ```
 
 ```{r, load in files and setup brain structures to uberon ID file}
@@ -83,7 +84,7 @@ struct_to_ids <- struct_to_ids[with(struct_to_ids, order(unique_structures)),]
 
 ```
 
-```{r, add_annotation function}
+```{r, add_annotation function for ontology}
 
 # modeled off expr_data_setup code
 # note that onto <- ontos$uberon$ont line also in main or phenotype_summary_analyses
@@ -167,7 +168,7 @@ sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_col
 # first sort expression matrix
 sorted_expression = expression_mat[sorted_cols$column_num]
 
-# https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
+# formula source - https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
 rpkmToTpm <- function(rpkm_col)
 {
     rpkm_col/sum(rpkm_col)*(1e6)
@@ -272,7 +273,7 @@ count_corr <- function(corr_mat, lower_bound, upper_bound){
 }
 
 # subset genes in corr_matrix that correspond to human chromatin modifer genes
-chromatin_modifiers <- gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers
+chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
 matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
 matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
 chrom_mod_corr <- corr_matrix[matched_modifiers,]
@@ -295,14 +296,20 @@ for(dir in figure_dirs){
 
 
 ```{r, correlation clustering}
-struct = str_replace_all("amygdaloid complex", "[ /]", "_")
+struct = "dorsolateral prefrontal cortex"
 struct_index = grep(struct, sorted_cols$structure_name, fixed = T)
+struct = str_replace_all("dorsolateral prefrontal cortex", "[ /]", "_") 
 
 # get matrix of correlation btwn pairs of genes
 # use 0.5 as cutoff for difference between genes
 # first subset expr matrix to get 1 structure (amygdaloid complex) & then filter chromatin modifier genes with a significant difference in expression level
-sub_matrix <- normal_expr[matched_modifiers, struct_index]
-sub_matrix <- sub_matrix[which(apply(sub_matrix, 1, max)-apply(sub_matrix, 1, min)>0.5),]
+struct_matrix <- normal_expr[matched_modifiers, struct_index] # 711 genes
+sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),] # 498 genes
+
+# get list of genes that filtered out b/c low variation in expression
+cluster0 <- rows_meta[strtoi(row.names(struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)<=0.5),])),]
+
+write.csv(cluster0, paste0(dirs$tables, date, struct, "_cluster0.csv"))
 
 # mean (normalized to [0-1])  expression per timepoint for each cluster 
 mean_expr <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
@@ -311,7 +318,7 @@ mean_expr <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
 gene_pairwise_corr <- -1*(cor(t(mean_expr))-1)
 # gene_pairwise_corr <- cor(t(sub_matrix))
 
-
+# for plotting
 hc <- hclust(as.dist(gene_pairwise_corr), "ave")
 plot(hc)
 rect.hclust(hc, h=0.5)
@@ -320,45 +327,119 @@ rect.hclust(hc, h=0.5)
 # plot(dend)
 # get_branches_heights(dend)
 
-# cut at a distance of 0.5, and get cluster memberships
-myhcl <- cutree(hc, h=0.5)
-n_clusters <- max(myhcl)
+# cut at a distance of 0.5, and get cluster memberships, also modest & high cutoffs of 0.2 and 0.4
+myhcl <- cutree(hc, h=c(0.2,0.4))
+# high_hcl <- cutree(hc, h=0.4)
+# modest_hcl <- cutree(hc, h=0.2)
+n_clusters_high <- max(myhcl[,2])
+n_clusters_modest <- max(myhcl[,1])
+
+# find subclusters for cutoff=0.4 clusters based on the cutoff=0.2 clusters
+myhcl <- as.data.frame(myhcl)
+colnames(myhcl)[1] = "modest"
+colnames(myhcl)[2] = "high"
+test <- vector("character", length(myhcl[,1]))
+for (i in 1:n_clusters_high){
+  subclusters <- unique(myhcl$modest[which(myhcl$high == i)])
+  subcluster_indexes <- which(myhcl$high == i)
+  n_sub_clusters <- length(unique(myhcl$modest[subcluster_indexes]))
+  for (j in 1:n_sub_clusters){
+    which(myhcl$modest[subcluster_indexes] == subclusters[j])
+  }
+  
+}
+# myhcl$subcluster <- 
 
 # create dataframe with cluster mean expression per time point
-cluster_mean_expr <- vector("list", max(n_clusters))
-for (i in 1:n_clusters){
+# myhcl_mean_expr <- vector("list", n_clusters)
+# for (i in 1:n_clusters){
+#   # error in colMeans if only 1 gene in a cluster so check length
+#   if(length(which(myhcl == i)) > 1){
+#     myhcl_mean_expr[[i]] = colMeans(mean_expr[which(myhcl == i),])
+#   }
+#   else{
+#     myhcl_mean_expr[[i]] = mean_expr[which(myhcl == i),]
+#   }
+# }
+
+high_hcl_mean_expr <- vector("list", n_clusters_high)
+for (i in 1:n_clusters_high){
   # error in colMeans if only 1 gene in a cluster so check length
-  if(length(which(myhcl == i)) > 1){
-    cluster_mean_expr[[i]] = colMeans(mean_expr[which(myhcl == i),])
+  if(length(which(myhcl$high == i)) > 1){
+    high_hcl_mean_expr[[i]] = colMeans(mean_expr[which(myhcl$high == i),])
   }
   else{
-    cluster_mean_expr[[i]] = mean_expr[which(myhcl == i),]
+    high_hcl_mean_expr[[i]] = mean_expr[which(myhcl$high == i),]
   }
 }
 
-temp <- as.data.frame(table(myhcl))
+modest_hcl_mean_expr <- vector("list", n_clusters_modest)
+for (i in 1:n_clusters_modest){
+  # error in colMeans if only 1 gene in a cluster so check length
+  if(length(which(myhcl$modest == i)) > 1){
+    modest_hcl_mean_expr[[i]] = colMeans(mean_expr[which(myhcl$modest == i),])
+  }
+  else{
+    modest_hcl_mean_expr[[i]] = mean_expr[which(myhcl$modest == i),]
+  }
+}
 
-test_df <- melt(cluster_mean_expr)
-test_df$pcw <- sorted_cols$age[struct_index]
-colnames(test_df)[1] = "expr"
-colnames(test_df)[2] = "cluster"
-test_df$freq <- temp$Freq[match(test_df$cluster, temp$myhcl)]
-test_df$group_name <- paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq)
+# myhcl_counts <- as.data.frame(table(myhcl))
+# myhcl_df <- melt(myhcl_mean_expr)
+# myhcl_df$pcw <- sorted_cols$age[struct_index]
+# colnames(myhcl_df)[1] = "expr"
+# colnames(myhcl_df)[2] = "cluster"
+# myhcl_df$freq <- myhcl_counts$Freq[match(myhcl_df$cluster, myhcl_counts$myhcl)]
+# myhcl_df$group_name <- paste0("cluster:",myhcl_df$cluster, ",num_genes:", myhcl_df$freq)
+
+
+high_hcl_counts <- as.data.frame(table(myhcl[,2]))
+high_hcl_df <- melt(high_hcl_mean_expr)
+high_hcl_df$pcw <- sorted_cols$age[struct_index]
+colnames(high_hcl_df)[1] = "expr"
+colnames(high_hcl_df)[2] = "cluster"
+# high_hcl_df$subcluster <- melt(modest_hcl_mean_expr)[,2]
+high_hcl_df$freq <- high_hcl_counts$Freq[match(high_hcl_df$cluster, high_hcl_counts$Var1)]
+high_hcl_df$group_name <- paste0("cluster:",high_hcl_df$cluster, ",num_genes:", high_hcl_df$freq)
+select_high_hcl_df <- high_hcl_df[which(high_hcl_df$freq >= 2),] # filter out clusters with 1 gene
+
+modest_hcl_counts <- as.data.frame(table(modest_hcl))
+modest_hcl_df <- melt(modest_hcl_mean_expr)
+modest_hcl_df$pcw <- sorted_cols$age[struct_index]
+colnames(modest_hcl_df)[1] = "expr"
+colnames(modest_hcl_df)[2] = "cluster"
+modest_hcl_df$freq <- modest_hcl_counts$Freq[match(modest_hcl_df$cluster, modest_hcl_counts$modest_hcl)]
+modest_hcl_df$group_name <- paste0("cluster:",modest_hcl_df$cluster, ",num_genes:", modest_hcl_df$freq)
+select_modest_hcl_df <- modest_hcl_df[which(modest_hcl_df$freq >= 2),] # filter out clusters with 1 gene
+
+ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
+      geom_point() + geom_line() +
+      facet_wrap(~factor(group_name, levels=unique(select_high_hcl_df$group_name))) +
+theme(legend.position = "none") +
+      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
+      labs(x = "log10(pcw)", y = "normalized expr") + 
+     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+
+ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
+      geom_point() + geom_line() +
+      facet_wrap(~factor(group_name, levels=unique(select_modest_hcl_df$group_name))) +
+theme(legend.position = "none") +
+      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) + 
+      labs(x = "log10(pcw)", y = "normalized expr") + 
+     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
 # see what these coexpression patterns look like 
-library(ggforce)
-
-# NEED TO FIX SO THAT FACETS IN CLUSTER ORDER TO ACCESS SUBPLOTS PROPERLY
-
-gg <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
+gg <- ggplot(myhcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
-      facet_wrap(group_name~.) +
+      facet_wrap(~factor(group_name, levels=unique(myhcl_df$group_name))) +
 theme(legend.position = "none") +
-      ggtitle("amygdaloid complex gene expression over time for each cluster") + 
+      ggtitle(paste0(struct, " gene expression over time for each cluster")) + 
       labs(x = "log10(pcw)", y = "normalized expr") + 
      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
 ggsave(paste0(dirs$cluster_analysis, struct, "/", struct, "_test_coexpression_over_time.png"), plot = gg, width = 10, height = 8)
+
+write.csv(rows_meta[strtoi(row.names(myhcl[which(myhcl$high == 3),])),], paste0(dirs$tables,date,"_genes_in_cluster3_dorso_prefr_cortex(cutoff=0.4).csv"))
 
 # create subdirectories in each structure results folder for plots for each cluster
 cluster_dirs <- paste0("cluster", 1:n_clusters, "/")
@@ -369,29 +450,19 @@ for(dir in figure_dirs){
   };rm(sub_dir)
 };rm(dir)
 
-subplots <- vector(mode = "list", length = n_clusters)
-
-# for (i in 1:n_clusters){
-#   subplots[i] <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
-#       geom_point() + geom_line() +
-#       facet_wrap_paginate(group_name~., nrow = 1, ncol = 1, page = i) +
-# theme(legend.position = "none") +
-#       ggtitle("amygdaloid complex gene expression over time for each cluster") + 
-#       labs(x = "log10(pcw)", y = "normalized expr") + 
-#      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
-# }
-
-subplots <- ggplot(test_df, aes(x = log10(pcw), y = expr)) +
+# FIX ORDER OF SUBPLOT FACETS SO ACTUALLY SAVES NAME PROPERLY
+subplots <- ggplot(myhcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
-      facet_wrap_paginate(group_name~., nrow = 1, ncol = 1) +
+  # facet_wrap_paginate(~factor(group_name, levels=unique(paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq))), nrow = 1, ncol = 1)+
+      facet_wrap_paginate(group_name~., nrow = 1, ncol = 1)+
 theme(legend.position = "none") +
       ggtitle("amygdaloid complex gene expression over time for each cluster") + 
       labs(x = "log10(pcw)", y = "normalized expr") + 
      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
 for(i in 1:n_pages(subplots)){
-  p_save <-  subplots + 
-    facet_wrap_paginate(group_name~., nrow = 1, ncol = 1, page = i)
+  p_save <- subplots + 
+    facet_wrap_paginate(~factor(group_name, levels=unique(paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq))), nrow = 1, ncol = 1, page = i)
   ggsave(paste0(dirs$cluster_analysis, struct, "/", "cluster", i, "/", struct, "_cluster_", i, "_test_coexpression_over_time.png"), plot = p_save, width = 10, height = 8)
 }
 
