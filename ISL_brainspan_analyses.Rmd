@@ -296,19 +296,20 @@ for(dir in figure_dirs){
 
 
 ```{r, correlation clustering}
-struct = "dorsolateral prefrontal cortex"
+# first select the structure - will turn into loop for all structures later
+struct = "amygdaloid complex"
 struct_index = grep(struct, sorted_cols$structure_name, fixed = T)
-struct = str_replace_all("dorsolateral prefrontal cortex", "[ /]", "_") 
+struct = str_replace_all(struct, "[ /]", "_") 
 
 # get matrix of correlation btwn pairs of genes
-# use 0.5 as cutoff for difference between genes
-# first subset expr matrix to get 1 structure (amygdaloid complex) & then filter chromatin modifier genes with a significant difference in expression level
+
+# first subset expr matrix to get 1 structure (amygdaloid complex) & then filter (cutoff = 0.5) chromatin modifier genes with a significant difference in expression level
 struct_matrix <- normal_expr[matched_modifiers, struct_index] # 711 genes
-sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),] # 498 genes
+sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),] # 498 genes (amygdaloid)
 
 # get list of genes that filtered out b/c low variation in expression
 cluster0 <- rows_meta[strtoi(row.names(struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)<=0.5),])),]
-
+# cluster 0 denotes the genes that are filtered out for insignificant change in expression over time
 write.csv(cluster0, paste0(dirs$tables, date, struct, "_cluster0.csv"))
 
 # mean (normalized to [0-1])  expression per timepoint for each cluster 
@@ -316,13 +317,24 @@ mean_expr <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
 
 # create matrix of correlation btwn pairs of genes
 gene_pairwise_corr <- -1*(cor(t(mean_expr))-1)
-# gene_pairwise_corr <- cor(t(sub_matrix))
 
-# for plotting
+# perform average clustering
 hc <- hclust(as.dist(gene_pairwise_corr), "ave")
-plot(hc)
-rect.hclust(hc, h=0.5)
 
+# for plotting dendrogram with clusters
+# cutoff height = 0.4
+png(filename = paste0(dirs$cluster_analysis, struct, "/", struct, "_clustering_dendrogram(cutoff=0.4).png"), width = 960, height = 480)
+plot(hc, main = "Cluster Dendrogram (cutoff = 0.4)")
+rect.hclust(hc, h=0.4)
+dev.off()
+
+# cutoff height = 0.2
+png(filename = paste0(dirs$cluster_analysis, struct, "/", struct, "_clustering_dendrogram(cutoff=0.2).png"), width = 960, height = 480)
+plot(hc, main = "Cluster Dendrogram (cutoff = 0.2)")
+rect.hclust(hc, h=0.2)
+dev.off()
+
+# dendrogram format of clustering (alternative visualization)
 # dend <- as.dendrogram(hc)
 # plot(dend)
 # get_branches_heights(dend)
@@ -330,25 +342,24 @@ rect.hclust(hc, h=0.5)
 # cut at a distance of 0.5, and get cluster memberships, also modest & high cutoffs of 0.2 and 0.4
 myhcl <- cutree(hc, h=c(0.2,0.4))
 # high_hcl <- cutree(hc, h=0.4)
-# modest_hcl <- cutree(hc, h=0.2)
-n_clusters_high <- max(myhcl[,2])
-n_clusters_modest <- max(myhcl[,1])
+# modest_hcl <- cutree(hc, h=0.2) 
+n_clusters_high <- max(myhcl[,2]) # 51 (amyg)
+n_clusters_modest <- max(myhcl[,1]) # 173 (amyg)
 
 # find subclusters for cutoff=0.4 clusters based on the cutoff=0.2 clusters
 myhcl <- as.data.frame(myhcl)
 colnames(myhcl)[1] = "modest"
 colnames(myhcl)[2] = "high"
-test <- vector("character", length(myhcl[,1]))
+subcluster_names <- vector("character", length(myhcl[,1]))
 for (i in 1:n_clusters_high){
   subclusters <- unique(myhcl$modest[which(myhcl$high == i)])
   subcluster_indexes <- which(myhcl$high == i)
   n_sub_clusters <- length(unique(myhcl$modest[subcluster_indexes]))
   for (j in 1:n_sub_clusters){
-    which(myhcl$modest[subcluster_indexes] == subclusters[j])
+    subcluster_names[which(myhcl$modest == subclusters[j])] = paste0(i,".",j)
   }
-  
 }
-# myhcl$subcluster <- 
+myhcl$subcluster <- subcluster_names
 
 # create dataframe with cluster mean expression per time point
 # myhcl_mean_expr <- vector("list", n_clusters)
@@ -362,16 +373,16 @@ for (i in 1:n_clusters_high){
 #   }
 # }
 
-high_hcl_mean_expr <- vector("list", n_clusters_high)
-for (i in 1:n_clusters_high){
-  # error in colMeans if only 1 gene in a cluster so check length
-  if(length(which(myhcl$high == i)) > 1){
-    high_hcl_mean_expr[[i]] = colMeans(mean_expr[which(myhcl$high == i),])
-  }
-  else{
-    high_hcl_mean_expr[[i]] = mean_expr[which(myhcl$high == i),]
-  }
-}
+# high_hcl_mean_expr <- vector("list", n_clusters_high)
+# for (i in 1:n_clusters_high){
+#   # error in colMeans if only 1 gene in a cluster so check length
+#   if(length(which(myhcl$high == i)) > 1){
+#     high_hcl_mean_expr[[i]] = colMeans(mean_expr[which(myhcl$high == i),])
+#   }
+#   else{
+#     high_hcl_mean_expr[[i]] = mean_expr[which(myhcl$high == i),]
+#   }
+# }
 
 modest_hcl_mean_expr <- vector("list", n_clusters_modest)
 for (i in 1:n_clusters_modest){
@@ -393,53 +404,47 @@ for (i in 1:n_clusters_modest){
 # myhcl_df$group_name <- paste0("cluster:",myhcl_df$cluster, ",num_genes:", myhcl_df$freq)
 
 
-high_hcl_counts <- as.data.frame(table(myhcl[,2]))
-high_hcl_df <- melt(high_hcl_mean_expr)
-high_hcl_df$pcw <- sorted_cols$age[struct_index]
-colnames(high_hcl_df)[1] = "expr"
-colnames(high_hcl_df)[2] = "cluster"
-# high_hcl_df$subcluster <- melt(modest_hcl_mean_expr)[,2]
-high_hcl_df$freq <- high_hcl_counts$Freq[match(high_hcl_df$cluster, high_hcl_counts$Var1)]
-high_hcl_df$group_name <- paste0("cluster:",high_hcl_df$cluster, ",num_genes:", high_hcl_df$freq)
-select_high_hcl_df <- high_hcl_df[which(high_hcl_df$freq >= 2),] # filter out clusters with 1 gene
+# high_hcl_counts <- as.data.frame(table(myhcl[,2]))
+# high_hcl_df <- melt(high_hcl_mean_expr)
+# high_hcl_df$pcw <- sorted_cols$age[struct_index]
+# colnames(high_hcl_df)[1] = "expr"
+# colnames(high_hcl_df)[2] = "cluster"
+# # high_hcl_df$subcluster <- melt(modest_hcl_mean_expr)[,2]
+# high_hcl_df$freq <- high_hcl_counts$Freq[match(high_hcl_df$cluster, high_hcl_counts$Var1)]
+# high_hcl_df$group_name <- paste0("cluster:",high_hcl_df$cluster, ",num_genes:", high_hcl_df$freq)
+# select_high_hcl_df <- high_hcl_df[which(high_hcl_df$freq >= 2),] # filter out clusters with 1 gene
 
-modest_hcl_counts <- as.data.frame(table(modest_hcl))
+subcluster_hcl_counts <- as.data.frame(table(myhcl$subcluster))
+
+modest_hcl_counts <- as.data.frame(table(myhcl$modest))
 modest_hcl_df <- melt(modest_hcl_mean_expr)
 modest_hcl_df$pcw <- sorted_cols$age[struct_index]
 colnames(modest_hcl_df)[1] = "expr"
 colnames(modest_hcl_df)[2] = "cluster"
-modest_hcl_df$freq <- modest_hcl_counts$Freq[match(modest_hcl_df$cluster, modest_hcl_counts$modest_hcl)]
-modest_hcl_df$group_name <- paste0("cluster:",modest_hcl_df$cluster, ",num_genes:", modest_hcl_df$freq)
+modest_hcl_df$freq <- modest_hcl_counts$Freq[match(modest_hcl_df$cluster, modest_hcl_counts$Var1)]
+modest_hcl_df$subcluster <- rep(unique(myhcl)$subcluster, each = length(struct_index))
+modest_hcl_df$group_name <- paste0("subcluster:",modest_hcl_df$subcluster, ",num_genes:", modest_hcl_df$freq)
 select_modest_hcl_df <- modest_hcl_df[which(modest_hcl_df$freq >= 2),] # filter out clusters with 1 gene
 
-ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
-      geom_point() + geom_line() +
-      facet_wrap(~factor(group_name, levels=unique(select_high_hcl_df$group_name))) +
-theme(legend.position = "none") +
-      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
-      labs(x = "log10(pcw)", y = "normalized expr") + 
-     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+# ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
+#       geom_point() + geom_line() +
+#       facet_wrap(~factor(group_name, levels=unique(select_high_hcl_df$group_name))) +
+# theme(legend.position = "none") +
+#       ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
+#       labs(x = "log10(pcw)", y = "normalized expr") + 
+#      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
-ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
+gg <- ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
       facet_wrap(~factor(group_name, levels=unique(select_modest_hcl_df$group_name))) +
-theme(legend.position = "none") +
+theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) +
       ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) + 
       labs(x = "log10(pcw)", y = "normalized expr") + 
      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
-# see what these coexpression patterns look like 
-gg <- ggplot(myhcl_df, aes(x = log10(pcw), y = expr)) +
-      geom_point() + geom_line() +
-      facet_wrap(~factor(group_name, levels=unique(myhcl_df$group_name))) +
-theme(legend.position = "none") +
-      ggtitle(paste0(struct, " gene expression over time for each cluster")) + 
-      labs(x = "log10(pcw)", y = "normalized expr") + 
-     geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+ggsave(paste0(dirs$cluster_analysis, struct, "/", struct, "_subcluster_expression_over_time(cutoff=0.2).png"), plot = gg, width = 10, height = 8)
 
-ggsave(paste0(dirs$cluster_analysis, struct, "/", struct, "_test_coexpression_over_time.png"), plot = gg, width = 10, height = 8)
-
-write.csv(rows_meta[strtoi(row.names(myhcl[which(myhcl$high == 3),])),], paste0(dirs$tables,date,"_genes_in_cluster3_dorso_prefr_cortex(cutoff=0.4).csv"))
+write.csv(rows_meta[strtoi(row.names(myhcl[which(myhcl$subcluster == "3.1"),])),], paste0(dirs$tables,date,"_genes_in_subcluster3.1_amg_complex(cutoff=0.2).csv"))
 
 # create subdirectories in each structure results folder for plots for each cluster
 cluster_dirs <- paste0("cluster", 1:n_clusters, "/")
@@ -467,21 +472,24 @@ for(i in 1:n_pages(subplots)){
 }
 
 
-# make histogram of max expression for genes within a cluster
-cluster_max_expr <- vector("list", max(n_clusters))
-for (i in 1:n_clusters){
+# make histogram of max expression for genes within a cluster - WHICH CUTOFF TO USE
+cluster_max_expr <- vector("list", max(n_clusters_high))
+for (i in 1:n_clusters_high){
   # 
-  if(length(which(myhcl == i)) > 1){
-    cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl == i),], 1, max, na.rm=TRUE)
+  if(length(which(myhcl$high == i)) > 1){
+    cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$high == i),], 1, max, na.rm=TRUE)
     
   }
   else{
-    cluster_max_expr[[i]] = max(sub_matrix[which(myhcl == i),])
+    cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$high == i),])
   }
 }
-plot(cluster_max_expr[[2]])
+hist(cluster_max_expr[[1]], breaks = 50)
 
 # GO analysis (get code from aileen)
+# code to pull a list of genes in a given cluster (what cluster cutoff to use or use subclusters?)
+rows_meta[strtoi(row.names(myhcl[which(myhcl$subcluster == "3.1"),])),]
+
 # plug into gene ontology analysis to see whether they fall into common functional group
 ```
 
