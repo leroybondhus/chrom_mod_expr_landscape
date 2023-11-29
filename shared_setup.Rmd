@@ -46,7 +46,8 @@ rm(OMIM_genemap2_URL)
 ```{r, load libraries}
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
-               "ggiraph","ggraph","igraph","collapsibleTree","webshot"),
+               "ggiraph","ggraph","igraph","collapsibleTree","webshot",
+               "dendextend","factoextra","cowplot","httr","jsonlite"),
   biocmanager = c("Gviz","biomaRt","ComplexHeatmap")
 )
 for(std_package in req_packages$standard ){
@@ -929,22 +930,40 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
 gene_sets$human_chromatin_modifiers <- list()
-gene_sets$human_chromatin_modifiers$go_terms = c("histone acetyltransferase activity",
-                                        "histone deacetylase activity",
-                                        "histone methyltransferase activity",
-                                        "histone demethylase activity",
-                                        "histone ubiquitin ligase activity",
-                                        "histone deubiquitinase activity",
-                                        "histone kinase activity",
-                                        "histone phosphatase activity",
-                                      ##  "chromatin remodeling", too broad
-                                      ##  "chromatin organization", too broad
-                                        "nucleosome organization",
-                                        "chromatin looping",
-                                        "heterochromatin organization",
-                                        "DNA-methyltransferase activity",
-                                        "DNA demethylase activity",
-                                        "structural constituent of chromatin"
+gene_sets$human_chromatin_modifiers$go_terms = c(
+  "histone acetyltransferase activity",
+  "histone deacetylase activity",
+  "histone methyltransferase activity",
+  "histone demethylase activity",
+  "histone ubiquitin ligase activity",
+  "histone deubiquitinase activity",
+  "histone kinase activity",
+  "histone phosphatase activity",
+  "DNA-methyltransferase activity",
+  "DNA demethylase activity",
+  # 
+  "chromatin looping",
+   "nucleosome organization",
+   "heterochromatin organization"
+  # 
+  # "histone modification",
+  # "histone acetylation",
+  # "histone deacetylation",
+  # "histone methylation",
+  # "histone demethylation",
+  # "histone deubiquitination",
+  # "histone ubiquitination"
+  # 
+  # "DNA methylation",
+  # "DNA demethylation"
+ 
+  # "chromatin remodeling", #too broad (?)
+  # "chromatin organization", #too broad (?)
+  #  
+  # "PcG protein complex",
+  # "SAGA-type complex",
+  # "Sin3-type complex"
+  # "structural constituent of chromatin"
                                       )
 
 
@@ -968,12 +987,23 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
 
 gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
 
-gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
-  gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-  gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
+# gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
+#   gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+#   gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
 
 gene_sets$human_chromatin_modifiers$AN_curated_set <- read.csv("./AN_curated_chromopathy_LB_mod.csv")
-gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id 
+
+gene_sets$human_chromatin_modifiers$x__gene_subsets <- gene_sets$human_chromatin_modifiers$gene_subsets
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  gene_sets$human_chromatin_modifiers$gene_subsets[[i]] <-intersect(gene_sets$human_chromatin_modifiers$gene_subsets[[i]],
+                                                                    gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id) 
+}
+gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <-
+  unique(gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id) 
+
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){print(paste0(names(gene_sets$human_chromatin_modifiers$gene_subsets)[i],"::", length(gene_sets$human_chromatin_modifiers$x__gene_subsets[[i]]) - length(gene_sets$human_chromatin_modifiers$gene_subsets[[i]])) )}
+print("")
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){print(paste0(names(gene_sets$human_chromatin_modifiers$gene_subsets)[i],"::", length(gene_sets$human_chromatin_modifiers$gene_subsets[[i]])) )}
 ## human
 ## mouse
 ## zebrafish
