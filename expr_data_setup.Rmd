@@ -6,17 +6,17 @@ output: html_document
 ---
 
 ```{r, load libraries}
-req_packages <- list(
-  standard = c("dendextend","factoextra","cowplot"),
-  biocmanager = c("Gviz","biomaRt")
-)
-for(std_package in req_packages$standard ){
-  if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
-};rm(std_package)
-for(bioc_package in req_packages$biocmanager ){
-  if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
-};rm(bioc_package)
-rm(req_packages)
+# req_packages <- list(
+#   standard = c("dendextend","factoextra","cowplot"),
+#   biocmanager = c("Gviz","biomaRt")
+# )
+# for(std_package in req_packages$standard ){
+#   if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
+# };rm(std_package)
+# for(bioc_package in req_packages$biocmanager ){
+#   if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
+# };rm(bioc_package)
+# rm(req_packages)
 
 ```
 
@@ -25,11 +25,11 @@ rm(req_packages)
 if(!exists("dataset_list")){dataset_list <- list()}
 registerDoParallel(detectCores()-2)
 files$temp_log <- paste0(dirs$temp_data,"temp.log")
-library(jsonlite)
-library(httr)
-library(dendextend)
-library(factoextra)
-library(cowplot)
+# library(jsonlite)
+# library(httr)
+# library(dendextend)
+# library(factoextra)
+# library(cowplot)
 ```
 ```{r}
 ### look into this as supplement/alt to encode

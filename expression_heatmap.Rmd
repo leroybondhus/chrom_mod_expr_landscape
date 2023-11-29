@@ -1,0 +1,194 @@
+---
+title: "expression_heatmap"
+author: "Leroy Bondhus"
+date: "2023-11-25"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r, chrom modifier specificity}
+onto <- ontos$uberon$ont
+mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene set to look at
+
+### want to perform clustering and reweighting using all genes
+coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+num_features <- nrow(mat)
+
+which_cols <- which( as.numeric(str_extract(coldata$age_group, "^[0-9]+")) >= 300 |
+                       is.na(str_extract(coldata$age_group, "^[0-9]+")))
+
+temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] )
+temp_mat <- mat[,temp_which_cols,drop=F]
+temp_coldata <- coldata[temp_which_cols,,drop=F]
+
+colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
+                                               ":",temp_coldata$age_group))
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+weight_zscores <- calc_weighted_zscore_matrix(temp_mat,weights)
+
+### for ms in major_systems
+### which genes with tau_global > 0.5, have z_global > 1 stdev mean_global i.e. specific to particular system
+### which genes with tau_global and NOT above condition have > 2 stdev mean_global i.e. specifc to particular biosample
+### stdev sensative to small changes in genes with very low variance - want more magnitude of change to select on e.g. log(fc)  
+### NOTE: log(x)-log(y) == log(x/y)
+
+biosample_gene_sets <- list()
+cutoff_sys2global_z = 1
+cutoff_sys2global_abs_delta_log10 = log10(1.5) ## i.e. at least a 50% diff in expression
+cutoff_point2global_z = 2
+cutoff_point2global_abs_delta_log10 = log10(2) ## i.e. at least 2x diff
+cutoff_min_expr = log10(2.5) ## log10(5 TPM) ~ doesn't account for median normalization but if factor close to 1 for most this is ok 
+
+global_means <- major_systems_expr$`anatomical entity.anatomical entity:mean_internal`
+global_sds <- major_systems_expr$`anatomical entity.anatomical entity:sd_internal`
+global_taus <- major_systems_expr$`anatomical entity.anatomical entity:tau_internal`
+names(global_taus) <- names(global_means) <- names(global_sds) <- rownames(major_systems_expr)
+
+
+
+
+
+#### for each specific gene
+##### find onto concept(s) that match greatest number of tissues with specific expression for that gene - add to temp_col_order w info r.e. onto concept used
+
+spec_genes <- names(global_taus)[which(global_taus > 0.7)]
+spec_genes <- spec_genes[which(is.element(spec_genes, gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
+
+spec_biosamples <- list()
+for(g in spec_genes){
+  spec_biosamples[[g]] <- list(colnames = colnames(weight_zscores[g, which(weight_zscores[g,] > 2),drop=F]))
+  spec_biosamples[[g]]$colids_spec <- which(
+    is.element(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group),
+               spec_biosamples[[g]]$colnames))
+  spec_biosamples[[g]]$colids_not_spec <- which(
+    is.element(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group),
+               colnames(temp_mat) ))
+  spec_biosamples[[g]]$colids_not_spec <- setdiff(spec_biosamples[[g]]$colids_not_spec, spec_biosamples[[g]]$colids_spec)
+  
+  temp_df <- data.frame(id=onto$id, name=onto$name,
+                        num_spec_and_onto=0, num_notspec_and_onto=0,
+                        num_spec_and_notonto=-1, num_notspec_and_notonto=-1,
+                        pval = 1, or_lb95ci =1, or=1,or_ub95ci=1)
+  for(i in 1:length(onto$ehh)){
+    ehh <- onto$ehh[[i]]
+    if(length(ehh)==0){next}
+    temp_df$num_spec_and_onto[i] <- sum(is.element(spec_biosamples[[g]]$colids_spec, ehh))
+    temp_df$num_notspec_and_onto[i] <- sum(is.element(spec_biosamples[[g]]$colids_not_spec, ehh))
+    temp_df$num_spec_and_notonto[i] <- sum(!is.element(spec_biosamples[[g]]$colids_spec, ehh))
+    temp_df$num_notspec_and_notonto[i] <- ncol(temp_mat) - sum(temp_df[i,grep(".*spec.*onto.*",colnames(temp_df))])
+    temp_testres <- fisher.test(matrix(unlist(temp_df[i,grep(".*spec.*onto.*",colnames(temp_df))]),ncol=2) )
+    temp_df$pval[i] <- temp_testres$p.value
+    temp_df$or_lb95ci[i] <- temp_testres$conf.int[1]
+    temp_df$or[i] <- temp_testres$estimate
+    temp_df$or_ub95ci[i] <- temp_testres$conf.int[2]
+  }
+  temp_df <- temp_df[which(temp_df$pval < 0.05
+                           & temp_df$num_spec_and_onto > 0
+                        #   & temp_df$num_spec_and_onto > temp_df$num_notspec_and_onto
+                           ),]
+  # 
+  # temp_df$prop_spec <- temp_df$num_spec_and_onto / (temp_df$num_spec_and_onto + temp_df$num_notspec_and_onto)
+  # temp_df <- temp_df[which( #temp_df$prop_spec == max(c(0.1, temp_df$prop_spec), na.rm = T) |
+  #                           temp_df$prop_spec > 0.3 ) ,]
+  # temp_df <- temp_df[which(temp_df$num_spec_and_onto > 1 ) ,]
+  # 
+  # temp_df <- temp_df[which(temp_df$num_spec_and_onto == max(temp_df$num_spec_and_onto, na.rm = T) |
+  #                            temp_df$num_spec_and_onto > 3) ,]
+  which <- which(temp_df$num_spec_and_onto / temp_df$num_notspec_and_onto  > 1/3) 
+  spec_biosamples[[g]]$uberon_subtable <- temp_df[which,]
+}
+
+
+sink(file=paste0(dirs$results,"spec_biosamples.txt"))
+for(i in 1:length(spec_biosamples)){
+  print(paste0(i,":",names(spec_biosamples)[i]))
+  print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
+  print("number of columns specific:")
+  print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
+  print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
+sink()
+
+
+
+### Criteria : if ancestor col stats == descendant col stats, keep descendant cut ancestor.
+### Criteria : Most (> 50%) observed children significant and specific, else cut and reform branches.
+
+for(i in 1:length(spec_biosamples)){
+  
+  uberon_subtable <- spec_biosamples[[i]]$uberon_subtable
+  uberon_subtable$keep <- T
+  
+  for(j in 1:nrow(uberon_subtable)){
+    if(!uberon_subtable$keep[j]){next}
+    
+    children <- onto$children[[which(onto$id==uberon_subtable$id[j])]]
+    descent_relations = c("has_part(SUPP_INV(part_of))","has_part")
+    children <- c(children,
+                  onto$relation[[which(onto$id==uberon_subtable$id[j])]]$id[
+                    which(is.element(onto$relation[[which(onto$id==uberon_subtable$id[j])]]$relation,
+                                     descent_relations))
+                  ] )
+    children <- unique(children) ## onto$children error has duplicates
+    
+    
+    if(length(children)==0){ 
+      ## keep node since is terminal
+      next
+    }
+    ## number of columns included in dataset for given term - i.e. "observed children"
+    observed_children <- sapply(children, function(x){length(intersect(temp_which_cols, onto$ehh[[which(onto$id==x)]])) } )
+    observed_children <- names(observed_children)[which(observed_children > 0)]
+    if(length(observed_children)==0){
+      ## keep node since is terminal observation point
+      next
+    }
+    num_signif_children <- sum(is.element(observed_children, uberon_subtable$id))
+    num_observed_children <- length(observed_children)
+    # if(num_signif_children / num_observed_children <= 1/2){
+    #   ## throw out parent node from list
+    #   uberon_subtable$keep[j] <- FALSE
+    #   next
+    # } 
+    # if(num_signif_children / num_observed_children > 1/2){
+    if(TRUE){
+      child_indices <- which(is.element(uberon_subtable$id,observed_children))
+      uberon_subtable[child_indices,]
+      uberon_subtable[j,]
+      ## if parent selection-col-stats "better" than any child selection-col-stats, keep parent and remove all descendants
+      ## else keep signif children and remove parent node from list
+      if(any(uberon_subtable$num_spec_and_onto[child_indices] == uberon_subtable$num_spec_and_onto[j])){
+        ## child fully captures all signal of parent so use more specific concept i.e. the child
+        uberon_subtable$keep[j] <- FALSE
+        next
+      } 
+      gain_over_loss <- (uberon_subtable$num_spec_and_onto[j] - uberon_subtable$num_spec_and_onto[child_indices]) / ## gain
+        (uberon_subtable$num_notspec_and_onto[j] - uberon_subtable$num_notspec_and_onto[child_indices]) ## loss
+      if( any(gain_over_loss <= 0.5) ){
+        ## >50% of sample domain added by inclusion of parent must be spec - i.e. contribute to signal else remove parent, keep children    
+        ## from previous criteria, parent must have more num_spec, need to apply cutoff for whether it added too many not_spec in condition above
+        uberon_subtable$keep[j] <- FALSE
+        next
+      }
+      ## if parent selection-col-stats "better" any child selection-col-stats, keep parent and remove all descendants
+      
+      which_is_descendant <- which(is.element(uberon_subtable$id, onto$descendants[[which(onto$id==uberon_subtable$id[j])]]))
+      uberon_subtable$keep[which_is_descendant] <- F
+    }
+    
+  }
+  spec_biosamples[[i]]$uberon_subtable <- uberon_subtable
+}
+
+
+
+
+```
