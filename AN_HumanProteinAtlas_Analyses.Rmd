@@ -7,7 +7,44 @@ output: html_document
 #objective:
 #data source:
 
+
+
 ```{r}
+
+
+# Install and load the required packages
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("AnnotationHub")
+BiocManager::install("biomaRt")
+
+library(AnnotationHub)
+library(biomaRt)
+
+# Use the appropriate Ensembl database for human genes
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+# Get the list of all protein-coding genes
+genes <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),
+               filters = "biotype",
+               values = "protein_coding",
+               mart = ensembl)
+
+# Create an AnnotationHub object for Pfam annotations
+dir.create(path = "~/.AnnotationHub")
+options(AnnotationHub.cache = "~/.AnnotationHub")
+
+ahub <- AnnotationHub()
+
+# Retrieve Pfam annotations
+pfam_key <- "AH73911"
+pfam_annotations <- query(ahub, keys = genes$ensembl_gene_id, columns = c("PFAM_ID", "GENEID"), keytype = "ENSEMBL")
+pfam_annotations <- merge(genes, pfam_annotations, by.x = "ensembl_gene_id", by.y = "QUERYID", all.x = TRUE)
+
+# View the resulting data frame
+print(pfam_annotations)
+
 
 ```
 
