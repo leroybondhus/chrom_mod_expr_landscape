@@ -47,7 +47,7 @@ rm(OMIM_genemap2_URL)
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
                "ggiraph","ggraph","igraph","collapsibleTree","webshot",
-               "dendextend","factoextra","cowplot","httr","jsonlite"),
+               "dendextend","factoextra","cowplot","httr","jsonlite", "circlize"),
   biocmanager = c("Gviz","biomaRt","ComplexHeatmap")
 )
 for(std_package in req_packages$standard ){

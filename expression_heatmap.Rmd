@@ -15,6 +15,9 @@ mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene 
 
 ### want to perform clustering and reweighting using all genes
 coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+colnames(mat) <- make.unique(paste0(coldata$biosample_ontology.term_name,
+                                    ":",coldata$age_group))
+
 
 num_features <- nrow(mat)
 
@@ -95,14 +98,7 @@ for(g in spec_genes){
                            & temp_df$num_spec_and_onto > 0
                         #   & temp_df$num_spec_and_onto > temp_df$num_notspec_and_onto
                            ),]
-  # 
-  # temp_df$prop_spec <- temp_df$num_spec_and_onto / (temp_df$num_spec_and_onto + temp_df$num_notspec_and_onto)
-  # temp_df <- temp_df[which( #temp_df$prop_spec == max(c(0.1, temp_df$prop_spec), na.rm = T) |
-  #                           temp_df$prop_spec > 0.3 ) ,]
-  # temp_df <- temp_df[which(temp_df$num_spec_and_onto > 1 ) ,]
-  # 
-  # temp_df <- temp_df[which(temp_df$num_spec_and_onto == max(temp_df$num_spec_and_onto, na.rm = T) |
-  #                            temp_df$num_spec_and_onto > 3) ,]
+
   which <- which(temp_df$num_spec_and_onto / temp_df$num_notspec_and_onto  > 1/3) 
   spec_biosamples[[g]]$uberon_subtable <- temp_df[which,]
 }
@@ -189,6 +185,283 @@ for(i in 1:length(spec_biosamples)){
 }
 
 
+sink(file=paste0(dirs$results,"spec_biosamples_subset_concepts.txt"))
+for(i in 1:length(spec_biosamples)){
+  print(paste0(i,":",names(spec_biosamples)[i]))
+  print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
+  print("number of columns specific:")
+  print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames);print("");print("select_onto_terms")
+  print(spec_biosamples[[i]]$uberon_subtable[which(spec_biosamples[[i]]$uberon_subtable$keep),]);print("");print("full_onto_table")
+  print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
+sink()
+
+
+save.image()
+```
+
+```{r}
+### 
+## for heatmap - order genes by similarity group + "nest" by subsumption statistic (i.e.  does_subsume(A,B) = (A / Union(A,B))  ) 
+
+spec_gene_sim_mat <- matrix(nrow =  length(names(spec_biosamples)), 
+                            ncol = length(names(spec_biosamples)),
+                            dimnames = list(names(spec_biosamples),names(spec_biosamples)) )
+spec_gene_sim_mat_onto <- matrix(nrow =  length(names(spec_biosamples)), 
+                            ncol = length(names(spec_biosamples)),
+                            dimnames = list(names(spec_biosamples),names(spec_biosamples)) )
+
+for(i in rownames(spec_gene_sim_mat)){
+  print(i)
+  for(j in colnames(spec_gene_sim_mat)){
+    spec_gene_sim_mat[i,j] <- length(intersect(spec_biosamples[[i]]$colids_spec,spec_biosamples[[j]]$colids_spec)) /
+      length(union(spec_biosamples[[i]]$colids_spec,spec_biosamples[[j]]$colids_spec))
+    
+    ### slower but better similarity matching... 
+    # i_onto_ids <- spec_biosamples[[i]]$uberon_subtable$id[which(spec_biosamples[[i]]$uberon_subtable$keep)]
+    # j_onto_ids <- spec_biosamples[[j]]$uberon_subtable$id[which(spec_biosamples[[i]]$uberon_subtable$keep)]
+    # i_onto_ids <- i_onto_ids[!is.na(i_onto_ids)]
+    # j_onto_ids <- j_onto_ids[!is.na(j_onto_ids)]
+    # if(length(i_onto_ids)==0 | length(j_onto_ids)==0){next}
+    # i_onto_id_set <- foreach(i_onto_id=i_onto_ids, .combine = c) %dopar% {
+    #   get_ancestors(i_onto_id, onto)
+    # }; i_onto_id_set <- unique(i_onto_id_set)
+    # j_onto_id_set <- foreach(j_onto_id=j_onto_ids, .combine = c) %dopar% {
+    #   get_ancestors(j_onto_id, onto)
+    # }; j_onto_id_set <- unique(j_onto_id_set)
+    # spec_gene_sim_mat_onto[i,j] <- length(intersect(i_onto_id_set, j_onto_id_set)) /
+    #   length(union(i_onto_id_set, j_onto_id_set))
+  }
+}
+
+
+hc <- hclust(as.dist(1-spec_gene_sim_mat), "ave")
+plot(as.dendrogram(hc))
+rect.hclust(hc, h=0.5)
+myhcl1 <- cutree(hc, h=c(0.5))
+sort(table(myhcl1), decreasing = T)
+spec_gene_sim_mat_onto[which(is.na(spec_gene_sim_mat_onto))] <- 0
+
+hc <- hclust(as.dist(1-spec_gene_sim_mat_onto ), "ave")
+plot(as.dendrogram(hc))
+rect.hclust(hc, h=0.5)
+myhcl2 <- cutree(hc, h=c(0.5))
+sort(table(myhcl2), decreasing = T)[1:25]-sort(table(myhcl1), decreasing = T)[1:25]
+myhcl <- as.data.frame(cutree(hc, h=c(0.5,0.1)))
+colnames(myhcl) <- c("cut_0.5_cluster","cut_0.1_cluster")
+myhcl$gene <- rownames(myhcl)
+
+genes_in_order <- c()
+temp_df <- data.frame(sort(table(myhcl$cut_0.5_cluster),decreasing = T))
+colnames(temp_df) <- c("cluster", "count_0.5_cluster")
+myhcl <- merge(myhcl, temp_df, by.x="cut_0.5_cluster", by.y="cluster")
+temp_df <- data.frame(sort(table(myhcl$cut_0.1_cluster),decreasing = T))
+colnames(temp_df) <- c("cluster", "count_0.1_cluster")
+myhcl <- merge(myhcl, temp_df, by.x="cut_0.1_cluster", by.y="cluster")
+
+myhcl <- myhcl[order(myhcl$count_0.5_cluster, myhcl$cut_0.5_cluster, 
+                     myhcl$count_0.1_cluster, myhcl$cut_0.1_cluster,decreasing = T),]
+
+
+
+top_onto_concepts = data.frame(id=character(),spec_gene_count=numeric(), w_descendant_spec_gene_count=numeric())
+temp_onto_gene_map = data.frame(onto_id=character(), gene_id=character())
+for(i in 1:length(spec_biosamples)){
+  temp_ids <- spec_biosamples[[i]]$uberon_subtable$id[which(spec_biosamples[[i]]$uberon_subtable$keep)]
+  if(length(temp_ids)==0){next}
+  temp_df <- data.frame(id=temp_ids,spec_gene_count=1,w_descendant_spec_gene_count=NA)
+  which <- which(is.element(top_onto_concepts$id, temp_df$id))
+  top_onto_concepts$spec_gene_count[which] <- top_onto_concepts$spec_gene_count[which]+1
+  top_onto_concepts <- rbind(top_onto_concepts, temp_df[which(!is.element(temp_df$id,top_onto_concepts$id)),])
+  temp_onto_gene_map <- rbind(temp_onto_gene_map, data.frame(onto_id=temp_ids,gene_id=names(spec_biosamples)[i]))
+}
+top_onto_concepts <- merge(top_onto_concepts, data.frame(id=onto$id,name=onto$name))
+top_onto_concepts$subsumed_by = ""
+top_onto_concepts$w_descendant_spec_gene_count <- 0
+top_onto_concepts$num_cols <- 0
+for(i in 1:nrow(top_onto_concepts)){
+  top_onto_concepts$id[i]
+  temp_desc <- onto$descendants[[which(onto$id==top_onto_concepts$id[i]) ]]
+  temp_desc <- temp_desc[!is.na(temp_desc)]
+  which <- which(is.element(top_onto_concepts$id, temp_desc))
+  top_onto_concepts$w_descendant_spec_gene_count[i] <- sum(top_onto_concepts$spec_gene_count[which])+top_onto_concepts$spec_gene_count[i]
+  top_onto_concepts$subsumed_by[which]<- paste(top_onto_concepts$subsumed_by[which],top_onto_concepts$id[i],sep=",")
+  
+  top_onto_concepts$num_cols[i] <- length(intersect(onto$ehh[[which(onto$id==top_onto_concepts$id[i])]],
+                                                   onto$ehh[[which(onto$name=="anatomical entity")]] ))
+}
+top_onto_concepts$subsumed_by <- str_remove(top_onto_concepts$subsumed_by,"^," )
+top_onto_concepts$num_subsumed_by <- str_count(top_onto_concepts$subsumed_by, "UBERON")
+
+
+
+
+### non-general functions for creating ordered concept tree from which to order anatomic concepts and genes
+
+temp_is_in_tree <- function(tree, id){
+  if(tree$concept$id == id){return(TRUE)}
+  if(length(tree$children)==0){return(FALSE)}
+  is_in_tree <- FALSE
+  for(i in 1:length(tree$children)){
+    is_in_tree <- is_in_tree | temp_is_in_tree(tree$children[[i]], id)
+    if(is_in_tree){return(TRUE)}
+  }
+  return(is_in_tree)
+}
+
+temp_add_to_tree <- function(tree,concept){
+  if(concept$num_subsumed_by == 0){
+    tree$children[[length(tree$children)+1]] <- list(concept=concept,children=list())
+    names(tree$children)[length(tree$children)] <- concept$id
+    return(tree)
+  }
+  temp_subsumed_by <- str_split(concept$subsumed_by, ",",simplify = T)
+  which <- which(is.element(names(tree$children),temp_subsumed_by) )
+  if(length(which)==0){ ## 
+    tree$children[[length(tree$children)+1]] <- list(concept=concept, children=list())
+    names(tree$children)[length(tree$children)] <- concept$id
+  } else {
+    for(i in which){
+      tree$children[[i]] <- temp_add_to_tree(tree$children[[i]], concept)
+    }
+  }
+  return(tree)
+}
+
+
+### functions require ordered dataframe  such that parent concepts (things that appear in 
+### "subsumed_by" column, will be added to tree first.  Not pretty code, but seems to work....
+
+top_onto_concepts <- top_onto_concepts[order(top_onto_concepts$num_subsumed_by,
+                                             -1 * top_onto_concepts$w_descendant_spec_gene_count),]
+
+temp_tree <- list(concept=top_onto_concepts[1,], children=list())
+temp_tree$concept[1,] <- NA
+temp_tree$concept$name = "root"; temp_tree$concept$id = "root"
+
+#temp_tree <- list(concept=data.frame(id="root",name="root"),children=list())
+for(i in 1:nrow(top_onto_concepts)){
+  temp_subsumed_by <- str_split(top_onto_concepts$subsumed_by[i], ",",simplify = T) 
+  if(top_onto_concepts$num_subsumed_by[i] > 0){
+    if(!all(sapply(temp_subsumed_by,FUN=function(x){temp_is_in_tree(tree=temp_tree, id=x)}))){
+      warning(print0("not all subsumed: ",i))
+    }
+  }
+  temp_tree <- temp_add_to_tree(temp_tree, top_onto_concepts[i,])
+}
+
+
+
+temp_extract_from_tree <- function(tree, result_df=NULL){
+ result_df <- rbind(result_df, tree$concept)
+ if(length(tree$children)==0){return(result_df)}
+ for(i in 1:length(tree$children) ){
+   result_df <- rbind(result_df, temp_extract_from_tree(tree$children[[i]]) )
+ }
+ return(result_df)
+}
+
+result_df <- temp_extract_from_tree(temp_tree)
+## reverse order so column and gene extraction can count and only take new cols...
+result_df <- result_df[nrow(result_df):1,]
+rownames(result_df) <- 1:nrow(result_df)
+result_df <- result_df[which(result_df$id != "root"),]
+
+genes_in_order <- data.frame(onto_id=character(), gene_id=character())
+cols_in_order <- data.frame(onto_id=character(), column_id=character())
+mask_genes <- c()
+mask_cols <- c()
+
+temp_which_cols
+
+print("SETTING SEED")
+set.seed(5)
+for(i in 1:nrow(result_df)){
+  
+  temp_onto_id <- result_df$id[i]
+  temp_gene_ids <- temp_onto_gene_map$gene_id[which(temp_onto_gene_map$onto_id==temp_onto_id)]
+  temp_gene_ids <- temp_gene_ids[!is.element(temp_gene_ids,mask_genes)]
+  if(length(temp_gene_ids)>0){
+    if(length(temp_gene_ids) > 5){
+      temp_gene_ids <- sample(temp_gene_ids, 5)
+    }
+    temp_df <- data.frame(onto_id=temp_onto_id,
+                          gene_id=temp_gene_ids)
+    genes_in_order <- rbind(genes_in_order, temp_df) 
+  }
+  mask_genes <- c(mask_genes, temp_gene_ids)
+  
+  temp_column_ids <- intersect(temp_which_cols, onto$ehh[[which(onto$id==temp_onto_id)]])
+  temp_column_ids <- temp_column_ids[!is.element(temp_column_ids, mask_cols)]
+  if(length(temp_column_ids)>0){
+    if(length(temp_column_ids)>5){
+      temp_column_ids <- sample(temp_column_ids,5)
+    }
+    temp_df <- data.frame(onto_id=temp_onto_id,
+                          column_id=temp_column_ids)
+    cols_in_order <- rbind(cols_in_order, temp_df)
+  }
+  
+  mask_cols <- c(mask_cols, temp_column_ids)
+  
+  if(result_df$num_subsumed_by[i]==0){
+    mask_genes <- c()
+    mask_cols <- c()
+  }
+}
+
+
+
+top_onto_concepts_sim_mat
+top_onto_concepts_subsum_mat
+simplified_onto_concepts = c()
 
 
 ```
+
+```{r}
+temp_mat2 <- mat
+
+genes_in_order$gene_name <- gene_sets$genes_all$external_gene_name[
+  match(genes_in_order$gene_id,
+        gene_sets$genes_all$ensembl_gene_id)]
+genes_in_order$name[which(genes_in_order$gene_name=="")] <-
+  genes_in_order$id[which(genes_in_order$gene_name=="")]
+
+temp <- rownames(temp_mat2)
+temp <-  gene_sets$genes_all$external_gene_name[match(temp, gene_sets$genes_all$ensembl_gene_id)]
+temp[which(temp=="")] <- rownames(temp_mat2)[which(temp=="")]
+rownames(temp_mat2) <- temp
+
+col_fun <- colorRamp2(c(0,2,2.5,max(mat[genes_in_order$gene_id,cols_in_order$column_id ])),
+                      c("white", "red3", "darkred","black"))
+
+
+png(filename=paste0(dirs$figures,"heatmap_ontologic_ordering.png"),
+    height = 30, width=24, res = 280,unit="in")
+Heatmap(temp_mat2[genes_in_order$gene_name,cols_in_order$column_id ],
+        cluster_rows = F,
+        cluster_columns = F,
+        col=col_fun)
+dev.off()
+
+png(filename=paste0(dirs$figures,"heatmap_ontologic_ordering_wo_redundancy.png"),
+    height = 18, width=24, res = 280,unit="in")
+Heatmap(temp_mat2[unique(genes_in_order$gene_name),unique(cols_in_order$column_id) ],
+        cluster_rows = F,
+        cluster_columns = F,
+        col=col_fun)
+dev.off()
+
+heatmap(mat[genes_in_order$gene_id,cols_in_order$column_id ],
+        Rowv = NA,
+        Colv = NA, scale="none")
+
+Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = T, cluster_rows = dend1)
+dev.off()
+
+```
+
+
+
+
+
