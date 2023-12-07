@@ -296,7 +296,7 @@ corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_tim
 ```{r, cluster analysis directory setup}
 
 # for figures and tables
-resolution_dirs <- c("high_res_cutoff_0.2/", "modest_res_cutoff_0.4/")
+resolution_dirs <- list(chrom_high = "high_res_cutoff_0.2/", chrom_modest = "modest_res_cutoff_0.4/", all_genes_high = "all_genes_high_res_cutoff_0.2/", all_genes_modest = "all_genes_modest_res_cutoff_0.4/")
 for(dir in resolution_dirs){
   if(!dir.exists(paste0(dirs$figure_cluster_analysis, dir))){dir.create(paste0(dirs$figure_cluster_analysis, dir))}
   if(!dir.exists(paste0(dirs$table_cluster_analysis, dir))){dir.create(paste0(dirs$table_cluster_analysis, dir))}
@@ -312,7 +312,7 @@ for(dir in resolution_dirs){
 ```
 
 
-```{r, correlation clustering}
+```{r, chromatin modifier correlation clustering}
 # first select the structure - will turn into loop for all structures later
 struct = "amygdaloid complex"
 struct_index = grep(struct, sorted_cols$structure_name, fixed = T)
@@ -420,9 +420,11 @@ modest_hcl_df$freq <- modest_hcl_counts$Freq[match(modest_hcl_df$cluster, modest
 modest_hcl_df$group_name <- paste0("cluster:",modest_hcl_df$cluster, ",num_genes:", modest_hcl_df$freq)
 select_modest_hcl_df <- modest_hcl_df[which(modest_hcl_df$freq >= 2),] # filter out clusters with 1 gene
 
+# to plot facets in df order: ~factor(group_name, levels=unique(select_high_hcl_df$group_name))
+
 gg_high <- ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
-      facet_wrap(~factor(group_name, levels=unique(select_high_hcl_df$group_name))) +
+      facet_wrap(~group_name) +
 theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) +
       ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) +
       labs(x = "log10(pcw)", y = "normalized expr") +
@@ -432,7 +434,7 @@ ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[1], struct, "/", dat
 
 gg_modest <- ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
-      facet_wrap(~factor(group_name, levels=unique(select_modest_hcl_df$group_name))) +
+      facet_wrap(~group_name) +
 theme(legend.position = "none") +
       ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) + 
       labs(x = "log10(pcw)", y = "normalized expr") + 
@@ -443,15 +445,17 @@ ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[2], struct, "/", dat
 # write.csv(rows_meta[strtoi(row.names(myhcl[which(myhcl$subcluster == "3.1"),])),], paste0(dirs$tables,date,"_genes_in_subcluster3.1_amg_complex(cutoff=0.2).csv"))
 
 # create subdirectories in each structure results folder for plots for each cluster (num clusters varies across diff cutoffs and diff structures)
-modest_cluster_dirs <- paste0("cluster", 1:n_clusters_modest, "/")
-high_cluster_dirs <- paste0("cluster", 1:n_clusters_high, "/")
+modest_cluster_names <- paste0("cluster", 1:n_clusters_modest)
+high_cluster_names <- paste0("cluster", 1:n_clusters_high)
 
-for (dir in modest_cluster_dirs){
-  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs[2],struct, "/", dir))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs[2],struct, "/", dir))}
+for (dir in modest_cluster_names){
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis,resolution_dirs$chrom_modest,struct,struct, "/", dir,"/"))}
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))}
 }
 
-for (dir in high_cluster_dirs){
-  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs[1],struct, "/", dir))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs[1],struct, "/", dir))}
+for (dir in high_cluster_names){
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))}
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))}
 }
 
 
@@ -472,34 +476,80 @@ for (dir in high_cluster_dirs){
 # }
 
 
-# make histogram of max expression for genes within a cluster - WHICH CUTOFF TO USE
-cluster_max_expr <- vector("list", max(n_clusters_high))
+# make histogram of max expression for genes within a cluster - both cutoffs
+high_cluster_max_expr <- vector("list", max(n_clusters_high))
 for (i in 1:n_clusters_high){
   # 
   if(length(which(myhcl$high == i)) > 1){
-    cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$high == i),], 1, max, na.rm=TRUE)
+    high_cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$high == i),], 1, max, na.rm=TRUE)
     
   }
   else{
-    cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$high == i),])
+    high_cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$high == i),])
   }
 }
+
+modest_cluster_max_expr <- vector("list", max(n_clusters_modest))
+for (i in 1:n_clusters_modest){
+  # 
+  if(length(which(myhcl$modest == i)) > 1){
+    modest_cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$modest == i),], 1, max, na.rm=TRUE)
+    
+  }
+  else{
+    modest_cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$modest == i),])
+  }
+}
+
 # need to create loop to save histograms for each cluster for both cutoffs
-hist(cluster_max_expr[[3]], breaks = 50)
+hist(high_cluster_max_expr[[3]], breaks = 50)
 ```
 
+```{r, coexpression}
+# expression matrix for all genes in given structure, then filter for significant change in expression
+struct_matrix <- normal_expr[, struct_index]
+row.names(struct_matrix) <- rows_meta$ensembl_gene_id
+sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),]
+
+# mean (normalized to [0-1])  expression per timepoint for each gene (need dataframe format to access row names when creating gene lists)
+normalized_expr_matrix <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
+significant_genes <- row.names(normalized_expr_matrix)
+
+# do analyses for modest cutoff = 0.4 first
+struct_modest_cluster_assignment <- vector("character", nrow(sub_matrix)) # vector to store cluster assignments for each gene
+
+for (i in 1:nrow(sub_matrix)){ # loop through all the genes
+  corr_vec <- vector("numeric", n_clusters_modest) # vector to store correlation values for each structure
+  names(corr_vec) <- modest_cluster_names
+  for (j in 1:n_clusters_modest){
+    corr_vec[j] = cor(normalized_expr_matrix[i,],modest_hcl_mean_expr[[j]])
+  }
+  index_max <- which.max(corr_vec)
+  if (corr_vec[index_max] >= 0.8){
+    struct_modest_cluster_assignment[i] = names(corr_vec)[index_max]
+  }
+};rm(corr_vec)
+
+all_gene_lists_modest <- vector("list", n_clusters_modest)
+names(all_gene_lists_modest) <- modest_cluster_names
+for(i in 1:n_clusters_modest){
+  all_gene_lists_modest[[i]] = significant_genes[which(struct_modest_cluster_assignment == modest_cluster_names[i])]
+}
+```
 
 ```{r}
-# GO analysis (get code from aileen)
+# GO analysis (code from aileen)
 # 
 chrom_gene_lists_modest <- vector("list", n_clusters_modest)
+names(chrom_gene_lists_modest) <- modest_cluster_names
 for(i in 1:n_clusters_modest){
   chrom_gene_lists_modest[[i]] = rows_meta$ensembl_gene_id[strtoi(row.names(myhcl[which(myhcl$modest == i),]))]
 }
 
 gene_universe <- rows_meta$ensembl_gene_id # all genes in brainspan
 
-output_file_names <- paste0(date, "_", "ClusterGO_modest_cutoff_cluster", 1:n_clusters_modest)
+# output_file_names <- paste0(date, "_", "ClusterGO_modest_cutoff_cluster", 1:n_clusters_modest)
+output_file_names <- paste0(date, "_", "ClusterGO_modest_cutoff_cluster_all_genes", 1:n_clusters_modest)
 
 ontologies <- c("ALL", "BP", "MF", "CC") # vector of ontology options
 
@@ -564,19 +614,14 @@ custom_theme_2 <- function(base_size = 12, base_family = "") {
 # you have a list of gene vectors called chrom_gene_lists_modest
 # chrom_gene_lists_modest should be a list of character vectors where each vector represents a gene set
 
-main_results_dir <- paste0(dirs$figure_cluster_analysis, resolution_dirs[2],struct, "/")
+main_results_dir <- paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/")
 main_subdir_names <- str_replace_all(modest_cluster_dirs, "/", "")
 gencode_genes <- gene_universe
 
-test = 1
-
-# chrom_gene_lists_modest <- chrom_gene_lists_modest[which(lengths(chrom_gene_lists_modest) > 1)]
-
 # Iterate through the gene lists and perform gene enrichment analysis
 # for (i in 1:length(chrom_gene_lists_modest)) {
-foreach(i = 1:length(chrom_gene_lists_modest)) %dopar% {
-  # if (length(chrom_gene_lists_modest[i]) == 1){test = 2}
-  # else{
+# all_genes_GO_results <- foreach(i = 1:18, .combine = rbind) %dopar% {
+all_genes_GO_results <- foreach(i = 1:length(all_gene_lists_modest), .combine = rbind) %dopar% {
     # Get the custom subdirectory name for this analysis
     main_subdir <- paste0(main_results_dir, main_subdir_names[i]) # changed file.path to paste0
     
@@ -594,7 +639,7 @@ foreach(i = 1:length(chrom_gene_lists_modest)) %dopar% {
         output_file <- file.path(main_subdir, paste0(output_file_names[i], "_", ont, ".csv"))
         
         # Perform gene enrichment analysis using clusterProfiler
-        enrich_result <- enrichGO(gene = chrom_gene_lists_modest[[i]],
+        enrich_result <- enrichGO(gene = all_gene_lists_modest[[i]],
                                   universe = gencode_genes,
                                   keyType = "ENSEMBL", 
                                   OrgDb = org.Hs.eg.db, 
@@ -687,37 +732,22 @@ foreach(i = 1:length(chrom_gene_lists_modest)) %dopar% {
     # names(current_enrichment_results) <- ontologies # ERROR HERE
     
     # Add the current vector's enrichment results to the main list with subdir name as the key
-    enrichment_results_list[[main_subdir]] <- current_enrichment_results
-  # }
+    # enrichment_results_list[[main_subdir]] <- current_enrichment_results
+    saved_enrich <- as.data.frame(current_enrichment_results$ALL)
+    if (nrow(saved_enrich) > 0){
+      saved_enrich$Cluster <- paste0("Cluster",i)
+    }else {
+       saved_enrich$Cluster <- character()
+    }
+    saved_enrich
 }
 
+write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, resolution_dirs$all_genes_modest, struct, "/", "all_genes_GO_results.csv"))
 # Note: The code above fixes the viewport error by setting appropriate dimensions for the plots.
 # Ensure to copy the entire solution, including this note, and paste it into your R console.
 
 
 
-
-```
-
-
-```{r, coexpression}
-# expression matrix for all genes in given structure, then filter for significant change in expression
-struct_matrix <- normal_expr[, struct_index]
-sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),]
-
-# mean (normalized to [0-1])  expression per timepoint for each gene 
-normalized_expr_matrix <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
-
-# do analyses for modest cutoff = 0.4 first
-cluster_assignment <- vector("integer", nrow(sub_matrix)) # vector to store cluster assignments for each gene
-
-for (i in 1:nrow(sub_matrix)){ # loop through all the genes
-  corr_vec <- vector("numeric", n_clusters_modest) # vector to store correlation values for each structure
-  for (j in 1:n_clusters_modest){
-    corr_vec[j] = cor(normalized_expr_matrix[i,],modest_hcl_mean_expr[[j]])
-  }
-  cluster_assignment[i] = suppressWarnings(max(which(corr_vec >= 0.8), na.rm=T))
-};rm(corr_vec)
 
 ```
 
