@@ -150,6 +150,33 @@ rm(data_list, query_result, query_table, temp_data, temp_df,
    data_list_concat, temp_missing_rownames, search_query, temp_rownames)
 
 
+temp <- tempfile()
+download.file("https://storage.googleapis.com/gtex_analysis_v8/rna_seq_data/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz",temp)
+dataset_list$GTEX <- list()
+dataset_list$GTEX$median_mat <- read.table( temp, skip=2, header = TRUE, sep = "\t")
+dataset_list$GTEX$median_mat_rowinfo <-  data.frame(Name=dataset_list$GTEX$median_mat$Name,
+                                                    Description=dataset_list$GTEX$median_mat$Description)
+rownames(dataset_list$GTEX$median_mat) <- dataset_list$GTEX$median_mat_rowinfo$Name
+dataset_list$GTEX$median_mat <- as.matrix(dataset_list$GTEX$median_mat[,3:ncol(dataset_list$GTEX$median_mat)])
+unlink(temp); rm(temp)
+
+
+temp <- tempfile() 
+download.file("https://storage.googleapis.com/gtex_analysis_v8/annotations/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt",
+              temp)
+temp <- read.csv( temp, skip=0, header = TRUE, sep = "\t")
+temp <- unique(data.frame(colname=temp$SMTSD,uberon_id=temp$SMUBRID))
+temp$sim_colname <- tolower(str_remove_all(temp$colname, "[ \\.\\-\\(\\)]"))  
+dataset_list$GTEX$median_mat_colinfo <- temp[match(tolower(str_remove_all(colnames(dataset_list$GTEX$median_mat),
+                                                                          "[ \\.\\-(\\)]")),
+                                                   temp$sim_colname,),]
+dataset_list$GTEX$median_mat_colinfo$colname <- colnames(dataset_list$GTEX$median_mat) 
+which_keep <- grep("EFO_",dataset_list$GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$GTEX$median_mat_colinfo <- dataset_list$GTEX$median_mat_colinfo[which_keep,] 
+dataset_list$GTEX$median_mat <- dataset_list$GTEX$median_mat[,which_keep]
+which <- grep("UBERON:",dataset_list$GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$GTEX$median_mat_colinfo$uberon_id[which] <- paste0("UBERON:",dataset_list$GTEX$median_mat_colinfo$uberon_id[which])
+
 ### merge common biosample types (e.g. get median expression for all)
 print(Sys.time())
 save.image("./post_full_mat.Rdata") ## next aggregate common samples into median expr values
