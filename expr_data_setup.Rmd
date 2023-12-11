@@ -64,14 +64,14 @@ data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% { 
   target <- paste0("https://www.encodeproject.org/",
                           query_table$accession[i],
                           "/?frame=embedded&format=json")
-  target <- GET(target)
-  target_result <- content(target, "text", encoding = "UTF-8")
-  target_result <- fromJSON(target_result, flatten = TRUE)
+  target <- httr::GET(target)
+  target_result <- httr::content(target, "text", encoding = "UTF-8")
+  target_result <- jsonlite::fromJSON(target_result, flatten = TRUE)
   temp_gene_anno <-  unique(target_result$files$genome_annotation)
   temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
   which <- which(target_result$files$file_format=="tsv" &
                  target_result$files$output_type=="gene quantifications" &
-                 grepl(max(as.numeric(str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
+                 grepl(max(as.numeric(stringr::str_remove_all(temp_gene_anno,"[a-zA-Z]")),na.rm = T),
                        target_result$files$genome_annotation) &
                  target_result$files$status == "released")
   if(length(which)==0){next}
@@ -91,7 +91,7 @@ data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% { 
   if(all(is.na(target_coldata$life_stage_age))){
     temp_pattern = paste0("[0-9-]+ day|day [0-9-]+|[0-9-]+ week|[0-9-]+ month|[0-9-]+ year",
                            "|embryo|fetus|neonat|newborn|child|teen|adult")
-    target_coldata$life_stage_age <- paste0(unlist(str_extract_all(tolower(query_table$biosample_summary[i]),temp_pattern)),collapse = ",")
+    target_coldata$life_stage_age <- paste0(unlist(stringr::str_extract_all(tolower(query_table$biosample_summary[i]),temp_pattern)),collapse = ",")
   }
   
   
@@ -102,7 +102,7 @@ data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% { 
     temp_data <- temp_data[grep("PAR_Y",temp_data$gene_id, invert=T),]
     temp_list <- list(TPM = data.frame(TPM=temp_data$TPM),
                       coldata = cbind(target_coldata[j,], read_count=sum(temp_data$posterior_mean_count) ) )
-    rownames(temp_list$TPM) <- str_remove(temp_data$gene_id,"\\..*")
+    rownames(temp_list$TPM) <- stringr::str_remove(temp_data$gene_id,"\\..*")
   }
   temp_list
 }
