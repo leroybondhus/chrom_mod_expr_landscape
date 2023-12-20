@@ -426,21 +426,21 @@ gg_high <- ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
       facet_wrap(~group_name) +
 theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) +
-      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) +
+      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) +
       labs(x = "log10(pcw)", y = "normalized expr") +
      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
-ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[1], struct, "/", date, struct, "_subcluster_expression_over_time(cutoff=0.2).png"), plot = gg_high, width = 10, height = 8)
+ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high, struct, "/", date,"_", struct, "_subcluster_expression_over_time(cutoff=0.2).png"), plot = gg_high, width = 10, height = 8)
 
 gg_modest <- ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
       geom_point() + geom_line() +
       facet_wrap(~group_name) +
-theme(legend.position = "none") +
-      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) + 
+theme(legend.position = "none", strip.text = element_text(size = 7, hjust = 0)) +
+      ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
       labs(x = "log10(pcw)", y = "normalized expr") + 
      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
-ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[2], struct, "/", date, struct, "_subcluster_expression_over_time(cutoff=0.4).png"), plot = gg_modest, width = 10, height = 8)
+ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest, struct, "/", date,"_", struct, "_subcluster_expression_over_time(cutoff=0.4).png"), plot = gg_modest, width = 10, height = 8)
 
 # write.csv(rows_meta[strtoi(row.names(myhcl[which(myhcl$subcluster == "3.1"),])),], paste0(dirs$tables,date,"_genes_in_subcluster3.1_amg_complex(cutoff=0.2).csv"))
 
@@ -449,7 +449,7 @@ modest_cluster_names <- paste0("cluster", 1:n_clusters_modest)
 high_cluster_names <- paste0("cluster", 1:n_clusters_high)
 
 for (dir in modest_cluster_names){
-  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis,resolution_dirs$chrom_modest,struct,struct, "/", dir,"/"))}
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))}
   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))}
 }
 
@@ -457,6 +457,7 @@ for (dir in high_cluster_names){
   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))}
   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))}
 }
+
 
 
 # FIX ORDER OF SUBPLOT FACETS SO ACTUALLY SAVES NAME PROPERLY
