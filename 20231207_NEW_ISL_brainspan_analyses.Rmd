@@ -18,11 +18,6 @@ dirs <- list(data="./data/",
 for(dir in dirs){
   if(!dir.exists(dir)){dir.create(dir)}
 };rm(dir)
-
-####
-date <- format(Sys.time(),"%Y%m%d")
-registerDoParallel(detectCores()-2)
-getDoParWorkers()
 ```
 
 
@@ -34,6 +29,14 @@ for(dir in resolution_dirs){
   if(!dir.exists(paste0(dirs$figure_cluster_analysis, dir))){dir.create(paste0(dirs$figure_cluster_analysis, dir))}
   if(!dir.exists(paste0(dirs$table_cluster_analysis, dir))){dir.create(paste0(dirs$table_cluster_analysis, dir))}
 };rm(dir)
+```
+
+
+```{r, set up environment}
+####
+date <- format(Sys.time(),"%Y%m%d")
+registerDoParallel(detectCores()-2)
+getDoParWorkers()
 ```
 
 
