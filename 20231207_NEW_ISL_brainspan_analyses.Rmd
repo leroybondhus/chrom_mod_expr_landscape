@@ -1,0 +1,945 @@
+---
+title: "ISL_brainspan_analyses"
+author: "Isabelle Liu"
+date: "2023-12-07"
+output: html_document
+---
+
+```{r, set up dir structure}
+# from shared_setup and added figure_cluster_analysis and table_cluster_analysis                 
+dirs <- list(data="./data/",
+             results = "./results/",
+             tables = "./results/tables/",
+             figures = "./results/figures/",
+             temp_data ="./temp_data/",
+             OMIM_data = "./data/omim_ra/",
+             figure_cluster_analysis = "./results/figures/cluster_analysis/",
+             table_cluster_analysis = "./results/tables/cluster_analysis/")
+for(dir in dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+
+####
+date <- format(Sys.time(),"%Y%m%d")
+registerDoParallel(detectCores()-2)
+getDoParWorkers()
+```
+
+
+```{r, cluster analysis directory setup}
+
+# for figures and tables
+resolution_dirs <- list(chrom_high = "high_res_cutoff_0.2/", chrom_modest = "modest_res_cutoff_0.4/", all_genes_high = "all_genes_high_res_cutoff_0.2/", all_genes_modest = "all_genes_modest_res_cutoff_0.4/")
+for(dir in resolution_dirs){
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, dir))){dir.create(paste0(dirs$figure_cluster_analysis, dir))}
+  if(!dir.exists(paste0(dirs$table_cluster_analysis, dir))){dir.create(paste0(dirs$table_cluster_analysis, dir))}
+};rm(dir)
+```
+
+
+```{r, setup}
+# packages to add to shared_setup
+library(dendextend) # - already added
+library(scales) # for rescale function to normalize values btwn 0 and 1
+library(ggforce) # use for facet_wrap_paginate() function
+# from aileen's clusterprofiler
+library(clusterProfiler) #enrichment testing
+library(org.Hs.eg.db) #genomewide annotation for humans
+library(enrichplot) #plot enrichment results
+library(ggnewscale)
+```
+
+```{r, load in brainspan files}
+columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
+rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
+expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
+colnames(expression_mat) <- columns_meta$structure_name
+
+```
+
+```{r, Uberon ontology term matching}
+unique_structures <- unique(columns_meta$structure_name)
+
+uberon_names <- ontos$uberon$ont$name
+uberon_ids <- ontos$uberon$ont$id
+
+mapped_ids <- vector(mode = "character", length = length(unique_structures))
+# could change into list of character vectors
+
+for (i in 1:length(unique_structures)){
+  match = uberon_ids[grep(unique_structures[i], uberon_names)]
+  if(length(match) == 0){
+    mapped_ids[i] = "NA"
+  }
+  else{
+    mapped_ids[i] = uberon_ids[grep(unique_structures[i], uberon_names)]
+  }
+}
+
+# manually assign uberon ids for inexact matches
+mapped_ids[1] = "UBERON:0016540" # occipital neocortex --> occipital cortex
+mapped_ids[2] = "UBERON:0001384" # primary motor-sensory cortex (samples) --> primary motor cortex
+mapped_ids[3] = "UBERON:0006107" # amygdaloid complex --> basolateral amygdaloid nuclear complex
+mapped_ids[5] = "UBERON:0013553,UBERON:0016538" # posterior (caudal) superior temporal cortex (area 22c) --> Brodmann (1909) area 22, temporal cortex
+mapped_ids[6] = "UBERON:0009841" # upper (rostral) rhombic lip --> upper rhombic lip
+mapped_ids[9] = "UBERON:0022438" # anterior (rostral) cingulate (medial prefrontal) cortex --> rostral anterior cingulate cortex
+mapped_ids[13] = "UBERON:0013551,UBERON:0016538" # inferolateral temporal cortex (area TEv, area 20) --> Brodmann (1909) area 20, temporal cortex
+mapped_ids[14] = "UBERON:0002421" # hippocampus (hippocampal formation) --> hippocampal formation
+mapped_ids[15] = "UBERON:0000451" # ventrolateral prefrontal cortex --> prefrontal cortex, COULD INCLUDE BRODMANN AREAS BUT NOT DIRECTLY LINKED
+mapped_ids[16] = "UBERON:0016530" # parietal neocortex --> parietal cortex
+mapped_ids[17] = "UBERON:0016538" # temporal neocortex --> temporal cortex
+mapped_ids[18] = "UBERON:0034751" # primary auditory cortex (core) --> primary auditory cortex
+mapped_ids[19] = "UBERON:8440010,UBERON:0002436" # primary visual cortex (striate cortex, area V1/17) --> Brodmann (1909) area 17, primary visual cortex
+mapped_ids[21] = "UBERON:0001384,UBERON:0013535" # primary motor cortex (area M1, area 4) --> primary motor cortex, Brodmann (1909) area 4
+mapped_ids[22] = "UBERON:0006088" # posteroventral (inferior) parietal cortex --> inferior parietal cortex
+mapped_ids[23] = "UBERON:0008933" # primary somatosensory cortex (area S1, areas 3,1,2) --> primary somatosensory cortex
+mapped_ids[26] = "UBERON:0002739" # mediodorsal nucleus of thalamus --> medial dorsal nucleus of thalamus
+
+struct_to_ids <- data.frame(unique_structures, mapped_ids)
+
+# sort in alphabetical order by structure
+struct_to_ids <- struct_to_ids[with(struct_to_ids, order(unique_structures)),]
+
+```
+
+```{r, add_annotation function for ontology}
+
+# modeled off expr_data_setup code
+# note that onto <- ontos$uberon$ont line also in main or phenotype_summary_analyses
+onto <- ontos$uberon$ont
+
+# create vector with uberon IDs in order of columns_meta
+mapped_uberon_ids <- vector("list", length(columns_meta$structure_name))
+
+for (i in 1:length(columns_meta$structure_name)){
+  mapped_uberon_ids[i] = struct_to_ids[,2] [grep(columns_meta$structure_name[i],struct_to_ids[,1], fixed = TRUE)]
+}
+
+# split strings for elements with multiple Uberon IDs
+for (i in 1:length(mapped_uberon_ids)){
+  mapped_uberon_ids[i] = str_split(mapped_uberon_ids[i], ",")
+}
+
+onto$brainspan_cols <- vector("list", length(onto$id))
+for(i in 1:length(columns_meta$structure_name)){
+  if(i %% 100 == 0){print(i)}
+  if(is.na(mapped_uberon_ids[i])){next}
+  # iterate through multiple uberon ids per structure
+  for(j in 1:length(mapped_uberon_ids[i])){
+    onto <- add_annotation(mapped_uberon_ids[[i]][j], onto, "brainspan_cols", i,
+                         transitive_relations = c("part_of", "is_a" ))
+  }
+}
+
+save(onto, file = "./onto.RData")
+
+```
+
+```{r, Uberon onto summary statistics}
+# histogram to show avg number of terms per brainspan column
+# brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[[1]])}) # need to fix to get length of list
+brainspan_terms <- sapply(onto$brainspan_cols,length) 
+ # 130 Uberon terms that relate to brainspan data
+
+hist(brainspan_terms[which(brainspan_terms>0)], breaks = 20, main = "Histogram of number of brainspan terms populated")
+
+
+# # calculate average gene expression per populated brainspan column in ontology
+# brainspan_avg_express <- vector("numeric", length(brainspan_terms))
+# for(i in 1:length(brainspan_terms)){
+#   for(j in 1:length(brainspan_terms[i])){
+#     brainspan_avg_express[i] =brainspan_avg_express[i] + sum(expression_mat[j])
+#   }
+# }
+
+# can use this code
+# calculate average gene expression of a row
+# rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
+```
+
+```{r, convert ages to weeks, normalize + sort expression matrix by brain structure and development time}
+# convert age data in columns_meta to be numeric (number of weeks)
+convert_age <- function(ages){
+  numeric_ages <- vector("integer", length(ages))
+  # replace pcw with just the number
+  numeric_ages[grepl("pcw", ages)] = strtoi(gsub(" pcw", "", ages[grepl("pcw", ages)]))
+  # replace mos with the number * 4
+  numeric_ages[grepl("mos", ages)] = strtoi(gsub(" mos", "", ages[grepl("mos", ages)]))*4
+  # replace yrs with the number * 52
+  numeric_ages[grepl("yrs", ages)] = strtoi(gsub(" yrs", "", ages[grepl("yrs", ages)]))*52
+
+  return(numeric_ages)
+}
+
+age_cols <- columns_meta
+age_cols$age <- convert_age(columns_meta$age)
+
+# sort columns_meta by brainspan structure name and then age ascending order
+sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_cols)
+
+# expression matrix convert RPKM to TPM
+# first get transcript lengths - seems like formula doesn't need transcript length
+# match genes in gene_sets$genes_all_transcript to the genes in rows_meta
+# matched_genes <- match(rows_meta$ensembl_gene_id, gene_sets$genes_all_transcript$ensembl_gene_id)
+# matched_genes_transcript_length <- gene_sets$genes_all_transcript$transcript_length[matched_genes]
+
+# first sort expression matrix
+sorted_expression = expression_mat[sorted_cols$column_num]
+
+# formula source - https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
+rpkmToTpm <- function(rpkm_col)
+{
+    rpkm_col/sum(rpkm_col)*(1e6)
+}
+
+TPM_expression <- apply(sorted_expression, 2, rpkmToTpm)
+
+# log transform expression data
+# log_TPM_expression <- log10(TPM_expression+1)
+  
+# median normalization of expression per gene
+# divide all within each sample by median within respective sample (median of all genes with log tpm > 0 or log tpm > very small number), essentially want typical expressed gene to have expression value around 1
+
+median_normalize <- function(expr_mat_col)
+{
+  median <- median(expr_mat_col[which(expr_mat_col > log10(2))])
+  # print(median)
+  expr_mat_col = expr_mat_col/median
+}
+
+normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
+
+# sorted_expression <- data.matrix(sorted_expression) # convert to matrix - CHECK IF STILL NEED - already in matrix form
+```
+
+```{r, heat maps for gene expression over time for each structure}
+# heatmap of "amygdaloid complex"
+
+# note that need to determine method to subset genes of interest b/c vector allocation issues - just need to select smaller set of genes of interest
+temp <- heatmap(normal_expr[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000], labCol = sorted_cols$structure_name, keep.dendro = T)
+
+# figure dendrogram height
+# visit each node until below cutpoint and return subdendrogram/tree
+```
+
+```{r, calculate gene expression correlation}
+# calculate gene expression for all genes for a given brain structure
+# CALC CORR BASED ON LOG TIME
+calc_correlation <- function(cols_meta,expr_mat){
+  corr <- vector("numeric", nrow(expr_mat))
+  p_val <- vector("numeric", nrow(expr_mat))
+  confidence_int_lower <- vector("numeric", nrow(expr_mat))
+  confidence_int_upper <- vector("numeric", nrow(expr_mat))
+  for(i in 1:nrow(expr_mat)){
+    output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
+    corr[i] = output$estimate
+    p_val[i] = output$p.value
+    if (length(output$conf.int) > 0){
+      confidence_int_lower[i] = output$conf.int[1]
+      confidence_int_upper[i] = output$conf.int[2]
+    }
+  }
+  return(data.frame(corr, p_val, confidence_int_lower, confidence_int_upper))
+}
+
+# first create matrix with columns for each brain structure and rows for the correlation of each gene
+# create list of matrices (time-correlation sum)
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+
+# also create vector to store number of time points for each unique brainspan structure
+num_struct_timepoints <- vector("integer", nrow(struct_to_ids))
+
+# index gene expression columns to obtain submatrices of each brain structure
+for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
+  struct <- struct_to_ids$unique_structures[i]
+  temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
+  temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+  num_struct_timepoints[i] = nrow(temp_cols)
+  if(nrow(temp_cols) > 2){
+    result = calc_correlation(temp_cols, temp_mat)
+    corr_matrix[,i] = result$corr
+    p_val_matrix[,i] = result$p_val
+    confidence_int_lower_matrix[,i] = result$confidence_int_lower
+    confidence_int_upper_matrix[,i] = result$confidence_int_upper
+  }
+}
+
+# note some individual correlation values are NA
+# error with "temporal neocortex" because only one sample - use if statement to test length of num cols before calculating correlation
+# using cor.test brainspan structures with only two samples also lead to error - corr values will be NA
+
+# can perform exploratory heat map analysis by taking certain sets of genes
+# should i use ComplexHeatMap or base heatmap
+
+```
+
+```{r, summary stats for p-values for correlation}
+# save for future
+
+```
+
+```{r, summary table for correlation values}
+count_corr <- function(corr_mat, lower_bound, upper_bound){
+  counts <- vector("integer", ncol(corr_mat))
+  for (i in 1:ncol(corr_mat)){
+      counts[i] = sum((corr_mat[,i] > lower_bound) & (corr_mat[,i] < upper_bound), na.rm = T)
+    }
+  return (counts)
+}
+
+# subset genes in corr_matrix that correspond to human chromatin modifer genes
+chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
+matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
+chrom_mod_corr <- corr_matrix[matched_modifiers,]
+
+# modify threshold cutoffs for correlation
+upper = 0.6
+lower = 0.2
+
+corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
+
+```
+
+```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
+# get list of brainpsan structure names in alphabetical order
+# structure_names <- unique(sorted_cols$structure_name)
+structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+
+structure_dirs <- paste0(str_replace_all(structure_names, "[ /]", "_"), "/")
+for(dir in resolution_dirs){
+  for (sub_dir in structure_dirs){
+    if(!dir.exists(paste0(dirs$figure_cluster_analysis, dir,sub_dir))){dir.create(paste0(dirs$figure_cluster_analysis, dir,sub_dir))}
+    if(!dir.exists(paste0(dirs$table_cluster_analysis, dir,sub_dir))){dir.create(paste0(dirs$table_cluster_analysis, dir,sub_dir))}
+  };rm(sub_dir)
+};rm(dir)
+
+gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %dopar% {
+  # STEP 1: select the structure of interest
+  struct_name = structure_names[k]
+  struct_index = grep(struct_name, sorted_cols$structure_name, fixed = T)
+  struct = str_replace_all(struct_name, "[ /]", "_") 
+  
+  # if (length(struct_index) > 1){ - did prefiltering above
+    # STEP 2: subset gene expression matrix for one brain region and filter (cutoff = 0.5) for genes with a significant difference in expression level
+    struct_matrix <- normal_expr[,struct_index]
+    row.names(struct_matrix) <- rows_meta$ensembl_gene_id
+    sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),]
+    
+    # mean (normalized to [0-1])  expression per time point for each gene (need dataframe format to access row names when creating gene lists)
+    normalized_expr_matrix <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
+    all_genes_significant <- row.names(normalized_expr_matrix)
+    
+    chrom_mod_normalized_expr <- na.omit(normalized_expr_matrix[match(rows_meta$ensembl_gene_id[matched_modifiers], row.names(normalized_expr_matrix)),])
+    
+    if(nrow(chrom_mod_normalized_expr) > 2){
+        # get list of genes that filtered out b/c low variation in expression
+      cluster0 <- rows_meta[strtoi(row.names(struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)<=0.5),])),]
+      # cluster 0 denotes the genes that are filtered out for insignificant change in expression over time
+      write.csv(cluster0, paste0(dirs$table_cluster_analysis, date, "_", struct, "_cluster0.csv"))
+      
+      
+      # STEP 3: create matrix of correlation btwn pairs of chromatin modifier genes & cluster
+      gene_pairwise_corr <- -1*(cor(t(chrom_mod_normalized_expr))-1)
+      
+      # perform average clustering
+      hc <- hclust(as.dist(gene_pairwise_corr), "ave")
+      
+      # plot dendrogram with clusters
+      # cutoff height = 0.4 (modest resolution)
+      png(filename = paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest, struct, "/", struct, "_clustering_dendrogram(cutoff=0.4).png"), width = 960, height = 480)
+      plot(hc, main = "Cluster Dendrogram (cutoff = 0.4)")
+      rect.hclust(hc, h=0.4)
+      dev.off()
+      
+      # cutoff height = 0.2 (high resolution)
+      png(filename = paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high, struct, "/", struct, "_clustering_dendrogram(cutoff=0.2).png"), width = 960, height = 480)
+      # plot(hc)
+      plot(hc, main = "Cluster Dendrogram (cutoff = 0.2)")
+     
+      rect.hclust(hc, h=0.2)
+      dev.off()
+      
+      
+      # STEP 4: cut dendrogram at heights 0.2 & 0.4 to get cluster/subcluster memberships
+      myhcl <- cutree(hc, h=c(0.2,0.4))
+      n_clusters_modest <- max(myhcl[,2]) # 51 (amyg)
+      n_clusters_high <- max(myhcl[,1]) # 173 (amyg)
+      
+      # find subclusters for cutoff=0.4 clusters based on the cutoff=0.2 clusters
+      myhcl <- as.data.frame(myhcl)
+      colnames(myhcl)[1] = "high"
+      colnames(myhcl)[2] = "modest"
+      subcluster_names <- vector("character", length(myhcl$modest))
+      for (i in 1:n_clusters_modest){
+        subclusters <- unique(myhcl$high[which(myhcl$modest == i)])
+        subcluster_indexes <- which(myhcl$modest == i)
+        n_sub_clusters <- length(unique(myhcl$high[subcluster_indexes]))
+        for (j in 1:n_sub_clusters){
+          subcluster_names[which(myhcl$high == subclusters[j])] = paste0(i,".",j)
+        }
+      }
+      myhcl$subcluster <- subcluster_names
+      
+      # STEP 5: create data frames with cluster mean expression for each time point
+      high_hcl_mean_expr <- vector("list", n_clusters_high)
+      for (i in 1:n_clusters_high){
+        # error in colMeans if only 1 gene in a cluster so check length
+        if(length(which(myhcl$high == i)) > 1){
+          high_hcl_mean_expr[[i]] = colMeans(chrom_mod_normalized_expr[which(myhcl$high == i),])
+        }
+        else{
+          high_hcl_mean_expr[[i]] = chrom_mod_normalized_expr[which(myhcl$high == i),]
+        }
+      }
+      
+      modest_hcl_mean_expr <- vector("list", n_clusters_modest)
+      for (i in 1:n_clusters_modest){
+        # error in colMeans if only 1 gene in a cluster so check length
+        if(length(which(myhcl$modest == i)) > 1){
+          modest_hcl_mean_expr[[i]] = colMeans(chrom_mod_normalized_expr[which(myhcl$modest == i),])
+        }
+        else{
+          modest_hcl_mean_expr[[i]] = chrom_mod_normalized_expr[which(myhcl$modest == i),]
+        }
+      }
+      
+      high_hcl_counts <- as.data.frame(table(myhcl$high))
+      high_hcl_df <- melt(high_hcl_mean_expr)
+      high_hcl_df$pcw <- sorted_cols$age[struct_index]
+      colnames(high_hcl_df)[1] = "expr"
+      colnames(high_hcl_df)[2] = "cluster"
+      high_hcl_df$freq <- high_hcl_counts$Freq[match(high_hcl_df$cluster, high_hcl_counts$Var1)]
+      high_hcl_df$subcluster <- rep(unique(myhcl)$subcluster, each = length(struct_index))
+      high_hcl_df$group_name <- paste0("subcluster:",high_hcl_df$subcluster, ",num_genes:", high_hcl_df$freq)
+      select_high_hcl_df <- high_hcl_df[which(high_hcl_df$freq >= 2),] # filter out clusters with 1 gene
+      
+      modest_hcl_counts <- as.data.frame(table(myhcl$modest))
+      modest_hcl_df <- melt(modest_hcl_mean_expr)
+      modest_hcl_df$pcw <- sorted_cols$age[struct_index]
+      colnames(modest_hcl_df)[1] = "expr"
+      colnames(modest_hcl_df)[2] = "cluster"
+      modest_hcl_df$freq <- modest_hcl_counts$Freq[match(modest_hcl_df$cluster, modest_hcl_counts$Var1)]
+      modest_hcl_df$group_name <- paste0("cluster:",modest_hcl_df$cluster, ",num_genes:", modest_hcl_df$freq)
+      select_modest_hcl_df <- modest_hcl_df[which(modest_hcl_df$freq >= 2),] # filter out clusters with 1 gene
+      
+      # STEP 6: facet plots for mean cluster expression over time for each cutoff
+      gg_high <- ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~group_name) +
+      theme(legend.position = "none", strip.text = element_text(size = 5)) +
+            ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) +
+            labs(x = "log10(pcw)", y = "normalized expr") +
+           geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+      
+      ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[1], struct, "/", date, "_", struct, "_subcluster_expression_over_time(cutoff=0.2).png"), plot = gg_high, width = 10, height = 8)
+      
+      gg_modest <- ggplot(select_modest_hcl_df, aes(x = log10(pcw), y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~group_name) +
+      theme(legend.position = "none", strip.text = element_text(size = 5)) +
+            ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
+            labs(x = "log10(pcw)", y = "normalized expr") + 
+           geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+      
+      ggsave(paste0(dirs$figure_cluster_analysis, resolution_dirs[2], struct, "/", date, "_", struct, "_subcluster_expression_over_time(cutoff=0.4).png"), plot = gg_modest, width = 10, height = 8)
+      
+      # create subdirectories in each structure results folder for plots for each cluster (num clusters varies across diff cutoffs and diff structures)
+      modest_cluster_names <- paste0("cluster", 1:n_clusters_modest)
+      # high_cluster_names <- paste0("cluster", 1:n_clusters_high)
+      high_cluster_names <- paste0("cluster", unique(subcluster_names))
+      
+      for (dir in modest_cluster_names){
+        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))}
+        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))}
+      }
+      
+      for (dir in high_cluster_names){
+        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))}
+        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))}
+      }
+     
+      # STEP 7: get gene lists for coexpression for both clustering cutoffs (0.2 and 0.4)
+      # create vector to store cluster assignments for each gene
+      struct_modest_cluster_assignment <- vector("character", nrow(sub_matrix)) 
+      struct_high_cluster_assignment <- vector("character", nrow(sub_matrix)) 
+
+      for (i in 1:nrow(sub_matrix)){ # loop through all the genes
+        corr_vec_modest <- vector("numeric", n_clusters_modest) # vector to store correlation values for each structure
+        names(corr_vec_modest) <- modest_cluster_names
+        for (j in 1:n_clusters_modest){
+          corr_vec_modest[j] = cor(normalized_expr_matrix[i,],modest_hcl_mean_expr[[j]])
+        }
+        index_max <- which.max(corr_vec_modest)
+        if (corr_vec_modest[index_max] >= 0.8){
+          struct_modest_cluster_assignment[i] = names(corr_vec_modest)[index_max]
+        }
+        
+        corr_vec_high <- vector("numeric", n_clusters_high) # vector to store correlation values for each structure
+        names(corr_vec_high) <- high_cluster_names
+        for (j in 1:n_clusters_high){
+          corr_vec_high[j] = cor(normalized_expr_matrix[i,],high_hcl_mean_expr[[j]])
+        }
+        index_max <- which.max(corr_vec_high)
+        if (corr_vec_high[index_max] >= 0.8){
+          struct_high_cluster_assignment[i] = names(corr_vec_high)[index_max]
+        }
+        
+      };rm(corr_vec_modest, corr_vec_high)
+      
+      all_gene_lists_modest <- vector("list", n_clusters_modest)
+      names(all_gene_lists_modest) <- modest_cluster_names
+      for(i in 1:n_clusters_modest){
+        all_gene_lists_modest[[i]] = significant_genes[which(struct_modest_cluster_assignment == modest_cluster_names[i])]
+      }
+      
+      all_gene_lists_high <- vector("list", n_clusters_high)
+      names(all_gene_lists_high) <- high_cluster_names
+      for(i in 1:n_clusters_high){
+        all_gene_lists_high[[i]] = significant_genes[which(struct_high_cluster_assignment == high_cluster_names[i])]
+      }
+      
+      list(high_cutoff_0.2 = all_gene_lists_high, modest_cutoff_0.4 = all_gene_lists_modest)
+    }
+  # }
+}
+
+names(gene_lists) <- structure_names
+
+```
+
+
+```{r, GO analysis setup}
+gene_universe <- rows_meta$ensembl_gene_id # all genes in brainspan
+
+ontologies <- c("ALL", "BP", "MF", "CC") # vector of ontology options
+
+# FROM AILEEN ClusterProfiler - define function for custom aesthetics of enrichment result plots
+#grid and x-axis/y-axis labeled
+custom_theme <- function(base_size = 12, base_family = "") {
+  theme_minimal(base_size = base_size, base_family = base_family) +
+    theme(
+      axis.title = element_text(size = base_size + 2),
+      axis.text = element_text(size = base_size),
+      legend.title = element_text(size = base_size + 1),
+      legend.text = element_text(size = base_size),
+      strip.text = element_text(size = base_size + 1),
+      plot.title = element_text(size = base_size + 3, face = "bold"),
+      panel.background = element_rect(fill = "white"),
+      plot.background = element_rect(fill = "white")
+    )
+}
+
+
+# Define a function to customize font sizes and background color for ggplot2 plots 
+custom_theme_2 <- function(base_size = 12, base_family = "") {
+  theme_void() +
+    theme(
+      axis.title = element_blank(),
+      axis.text = element_blank(),
+      legend.title = element_text(size = base_size + 1),
+      legend.text = element_text(size = base_size),
+      strip.text = element_text(size = base_size + 1),
+      plot.title = element_text(size = base_size + 3, face = "bold"),
+      panel.background = element_rect(fill = "white"),
+      plot.background = element_rect(fill = "white"),
+      panel.border = element_blank(),
+      panel.grid = element_blank()
+    )
+}
+```
+
+```{r}
+# flattened gene list
+flat_gene_lists <- unlist(unlist(gene_lists, recursive = FALSE), recursive = FALSE)
+
+# Iterate through the gene lists and perform gene enrichment analysis
+# for (i in 1:length(chrom_gene_lists_modest)) {
+ptm <- proc.time()
+all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind) %dopar% {
+  enrich_result <- enrichGO(gene = flat_gene_lists[[i]],
+                            universe = gene_universe,
+                            keyType = "ENSEMBL", 
+                            OrgDb = org.Hs.eg.db, 
+                            ont = ont, 
+                            pAdjustMethod = "BH", 
+                            qvalueCutoff = 0.05,
+                            readable = TRUE)
+  saved_enrich <- as.data.frame(enrich_result)
+  categories <- strsplit(gsub("[.]([^.]+[.])", "+\\1", names(flat_gene_lists)[i]),"\\+")
+  if(length(grep("modest_cutoff_0.4", categories))>0){
+    combined <- categories[[1]][2]
+    categories[[1]][2] <- str_split(gsub("([^.]+[.]+[^.])[.]", "\\1+", combined),"\\+")[[1]][1]
+    categories[[1]][3] <- str_split(gsub("([^.]+[.]+[^.])[.]", "\\1+", combined),"\\+")[[1]][2]
+  }
+  if (nrow(saved_enrich) > 0){
+    saved_enrich$Structure <- categories[[1]][1]
+    saved_enrich$Cutoff <- categories[[1]][2]
+    saved_enrich$Cluster <- categories[[1]][3]
+    }else {
+      saved_enrich$Structure <- character()
+      saved_enrich$Cutoff <- character()
+      saved_enrich$Cluster <- character()
+      }
+  saved_enrich
+}
+
+write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_genes_GO_results.csv"))
+```
+
+```{r, exploratory plots: individual facet plots + max expression histograms}
+# FIX ORDER OF SUBPLOT FACETS SO ACTUALLY SAVES NAME PROPERLY
+# subplots <- ggplot(myhcl_df, aes(x = log10(pcw), y = expr)) +
+#       geom_point() + geom_line() +
+#   # facet_wrap_paginate(~factor(group_name, levels=unique(paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq))), nrow = 1, ncol = 1)+
+#       facet_wrap_paginate(group_name~., nrow = 1, ncol = 1)+
+# theme(legend.position = "none") +
+#       ggtitle("amygdaloid complex gene expression over time for each cluster") + 
+#       labs(x = "log10(pcw)", y = "normalized expr") + 
+#      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+# 
+# for(i in 1:n_pages(subplots)){
+#   p_save <- subplots + 
+#     facet_wrap_paginate(~factor(group_name, levels=unique(paste0("cluster:",test_df$cluster, ",num_genes:", test_df$freq))), nrow = 1, ncol = 1, page = i)
+#   ggsave(paste0(dirs$figure_cluster_analysis, struct, "/", "cluster", i, "/", struct, "_cluster_", i, "_test_coexpression_over_time.png"), plot = p_save, width = 10, height = 8)
+# }
+
+
+# make histogram of max expression for genes within a cluster - both cutoffs
+# high_cluster_max_expr <- vector("list", max(n_clusters_high))
+# for (i in 1:n_clusters_high){
+#   # 
+#   if(length(which(myhcl$high == i)) > 1){
+#     high_cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$high == i),], 1, max, na.rm=TRUE)
+#     
+#   }
+#   else{
+#     high_cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$high == i),])
+#   }
+# }
+
+# modest_cluster_max_expr <- vector("list", max(n_clusters_modest))
+# for (i in 1:n_clusters_modest){
+#   # 
+#   if(length(which(myhcl$modest == i)) > 1){
+#     modest_cluster_max_expr[[i]] = apply(sub_matrix[which(myhcl$modest == i),], 1, max, na.rm=TRUE)
+#     
+#   }
+#   else{
+#     modest_cluster_max_expr[[i]] = max(sub_matrix[which(myhcl$modest == i),])
+#   }
+# }
+# 
+# # need to create loop to save histograms for each cluster for both cutoffs
+# hist(high_cluster_max_expr[[3]], breaks = 50)
+```
+
+
+```{r, exploratory plots for correlation}
+# test plot high corr genes for ventrolateral prefrontal cortex
+struct <- "ventrolateral prefrontal cortex"
+# find which column in the corr_matrix the struct corresponds to
+col_index <- grep(struct, struct_to_ids$unique_structures, fixed = T)
+interest_gene <- rows_meta$gene_symbol[which(chrom_mod_corr[,col_index]>0.8)]
+chrom_mod_expression <- normal_expr[matched_modifiers,]
+temp_mat <- chrom_mod_expression[,grep(struct, sorted_cols$structure_name, fixed = T)]
+temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+
+# use to center title in plot
+theme_update(plot.title = element_text(hjust = 0.5))
+
+# error now b/c multiple corr above threshold
+ggplot(data.frame(log10(temp_cols$age), temp_mat[which(chrom_mod_corr[,col_index]>0.9),]), aes(x = log10(temp_cols$age), y = temp_mat[which(chrom_mod_corr[,col_index]>0.8),])) + geom_line() + labs(x = "log10(age)", y = "expression level", title =paste0(interest_gene, " in ", struct, " over time"))
+
+
+```
+
+```{r}
+# for a structure, plot line for each of the genes
+# temp_mat based on struct from previous block
+
+formatted_data <- data.frame(temp_mat, row.names = rows_meta[matched_modifiers,]$gene_symbol)
+colnames(formatted_data) <- temp_cols$age
+formatted_data$id = row.names(formatted_data)
+melted <- melt(formatted_data)
+
+ggplot(melted, aes(x = variable, y = log10(value+1), color = id, group = id)) + 
+  geom_line() + 
+  theme(legend.position = "none")
+
+```
+
+```{r, percentile plots}
+# use temp_mat from previous chunk
+row <- which(rows_meta[matched_modifiers,]$gene_symbol == "KAT6A")
+ggplot(data.frame(temp_cols$age, temp_mat[row,]), aes(x = temp_cols$age, y = temp_mat[row,]))+ 
+      geom_line() + geom_point()
+```
+
+
+```{r, key gene expression plots}
+# list genes of interest (note BRPF2 not in rows_meta - alternate name BRD1)
+# KAT6A, KAT6B, ING5, BRPF1/2/3, (H)MEAF6, FOXG1
+# note that ING5 and FOXG1 aren't chromatin modifiers so need to search all available genes
+# add genes Pax6, nestin, kat7, map2, mki67
+gene_list <- c("KAT6A", "KAT6B", "ING5", "BRPF1", "BRD1", "BRPF3", "MEAF6", "FOXG1", "PAX6", "NES", "KAT7", "MAP2", "MKI67")
+
+# gene expression plots for each gene in gene list
+for (i in 1:length(gene_list)){
+  gene <- gene_list[i]
+  row <- which(rows_meta$gene_symbol == gene)
+  expression <- normal_expr[row,]
+  pcw <- sorted_cols$age
+  structures <- sorted_cols$structure_name
+  df <- data.frame(structures, pcw, expression)
+  early <- df[which(df$pcw <= 40),]
+  adolescent <- df[which(df$pcw > 40 & df$pcw <= 52*13),]
+  adult <- df[which(df$pcw > 52*13),]
+  partitioned_dfs <- list(df, early, adolescent, adult)
+  time_partitions <- c("full_span", "0-40pcw", "40pcw-13yrs", "13yrs-eol")
+  for (j in 1:length(partitioned_dfs)){
+      gg <- ggplot(partitioned_dfs[[j]], aes(x = partitioned_dfs[[j]]$pcw, y = partitioned_dfs[[j]]$expression, color = partitioned_dfs[[j]]$structures, group = partitioned_dfs[[j]]$structures)) + 
+      geom_line() + geom_point() + 
+      facet_wrap(structures~.) +
+      theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+      ggtitle(paste0(gene, "_", time_partitions[j], " expression over time for each brain region")) + 
+      labs(x = "number of pcw", y = "median normalized log expression (TPM)")
+    ggsave(paste0(dirs$figures, date, "_gene_expr_plots/", time_partitions[j], '/', gene, "_", time_partitions[j], "_expression_plot.png"), plot = gg, width = 7, height = 5) 
+  }
+}
+#   gg <- ggplot(df, aes(x = log10(df$pcw), y = df$expression, color = df$structures, group = df$structures)) + 
+#     geom_line() + geom_point() + 
+#     facet_wrap(structures~.) +
+#     theme(legend.position = "none", strip.text = element_text(size = 5, hjust = 0)) + 
+#     ggtitle(paste0(gene, " expression over time for each brain region")) + 
+#     geom_vline(xintercept = log10(40)) + geom_vline(xintercept = log10(52*15)) + geom_vline(xintercept = log10(52*10))
+#   ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
+# }
+```
+
+
+
+```{r collected functions used, include=FALSE}
+### slow with many samples ... prioritize for parallelization 
+calc_dot_product_similarity_matrix <- function(dat) {
+  colgroups <- split(1:ncol(dat), ceiling((1:ncol(dat))/ (ncol(dat)/getDoParWorkers()) ))
+  dot_product_similarity_matrix <- foreach(colids=colgroups, .combine = cbind) %dopar% {
+  #  dat <- dat[,colids, drop=F]
+    sub_sim_mat <- matrix(0, nrow = ncol(dat), ncol = length(colids))
+    for(i in 1:length(colids)){
+      for(j in 1:ncol(dat)){
+        which_i <- which(!is.na(dat[,colids[i]])) ## ignore NAs
+        which_j <- which(!is.na(dat[,j])) ## ignore NAs
+        sub_sim_mat[j,i] <- sum(dat[which_i,colids[i]] * dat[which_j,j]) /
+          (norm(dat[which_i,colids[i]],"2")*norm(dat[which_j,j],"2"))
+      }
+    }
+    sub_sim_mat
+  }
+  
+  colnames(dot_product_similarity_matrix) <- colnames(dat)
+  rownames(dot_product_similarity_matrix) <- colnames(dat)
+  
+  return(dot_product_similarity_matrix)
+}
+
+### uses Equation 1. from paper 
+add_dist_to_parent <- function(dend, dist_to_parent=0){
+  ## note: distance to parent is fed in at the start of the function
+  attributes(dend) <- c(attributes(dend), dist_to_parent=dist_to_parent)
+  ## test if at leaf node
+  if(!is.null(attributes(dend)$leaf) && attributes(dend)$leaf){
+    return(dend)
+  }
+  for(i in 1:length(dend)){ ## length of dend should be number of child nodes
+    ## distance to parent is simply the difference in height between parent and child
+    dist_to_parent <- attributes(dend)$height - attributes(dend[[i]])$height 
+    dend[[i]] <- add_dist_to_parent(dend[[i]], 
+                                             dist_to_parent = dist_to_parent)
+  }
+  return(dend)
+}
+
+## this functions calculates and adds weights to dendrogram object using the 'dist_to_parent' attribute added previously
+## weight_of_parent parameter exists only for recursion and should not be manually adjusted without understanding it's function
+add_weights <- function(dend, weight_of_parent=0){
+  weight <- (attributes(dend)$dist_to_parent / attributes(dend)$members) + weight_of_parent 
+  attributes(dend) <- c(attributes(dend), weight=weight)
+  ## test if at leaf node
+  if(!is.null(attributes(dend)$leaf) && attributes(dend)$leaf){
+    return(dend)
+  }
+  for(i in 1:length(dend)){ ## length of dend should be number of child nodes
+    dend[[i]] <- add_weights(dend[[i]], weight_of_parent=weight)
+  }
+  return(dend)
+}
+
+## this function returns the weights from a dendrogram object that has a "weight" attribute at leaves. Also requires the order of the vector to return based on names of leaves
+get_weights <- function(dend, name_order){
+  weights <- setNames(get_leaves_attr(dend,"weight"),nm=get_leaves_attr(dend,"lab") )
+  weights <- weights[order(factor(names(weights),levels = name_order))]
+  return(weights)
+}
+
+
+# function to calculate weighted zscores given matrix and vector of weights. column names of the matrix and names of the weight vector must match
+calc_weighted_zscore_matrix <- function(mat, weights){
+  if(any( colnames(mat) != names(weights) )){stop("WARNING: mismatch in weights names and matrix colnames order")}
+  weighted_mat <- mat; weighted_mat[] <- 0
+  for (i in 1:length(weights)){
+    weighted_mat[,i] <- weights[i]*mat[,i]
+  }
+  weighted_means <- numeric(length = nrow(weighted_mat))
+  sum_of_weights <- sum(weights)
+  for (i in 1:nrow(weighted_mat)){
+    weighted_means[i] <- sum(weighted_mat[i,]) / sum_of_weights
+  }
+  weighted_var <- numeric(length=nrow(mat))
+  for (i in 1:nrow(mat)){
+    weighted_var[i] <- Hmisc::wtd.var(mat[i,],weights=weights)
+  }
+  weighted_sd <- sqrt(weighted_var)
+  for(i in 1:ncol(mat)){
+    mat[,i] <- (mat[,i]-weighted_means)/weighted_sd
+  }
+  weighted_zscores <- mat
+  return(weighted_zscores)
+}
+
+# weighted tau
+calc_weighted_tau <- function(mat, weights){
+  xhat_matrix <- matrix(nrow=nrow(mat),ncol=ncol(mat))
+  te_row_maxima <- apply(mat, 1, max)
+  for(j in 1:ncol(mat)){
+    xhat_matrix[,j] <- mat[,j] / te_row_maxima
+  }
+  temp_matrix <- matrix(nrow=nrow(mat),ncol=ncol(mat))
+  for (i in 1:nrow(mat)){
+    temp_matrix[i,] <- weights - (xhat_matrix[i,] * weights)
+  }
+  tau <- numeric(length = nrow(temp_matrix))
+  for (i in 1:nrow(temp_matrix)){
+    temp <- sum(temp_matrix[i,]) / (sum(weights) - weights[which.max(temp_matrix[i,])])
+    tau[i] <- ifelse(length(temp)==0,NA,temp)
+  }
+  
+  ## add normalization (believe this is a numeric instability issue from dividing small numbers)
+  # tau <- tau / max(tau, na.rm=T)
+  ## alternative, set all > 1 to 1 (when looking at plots for different cutoffs, normalizing true 1 values causes issue)
+  tau[which(tau > 1)] <- 1
+  return(tau)
+}
+
+
+## only 1 similarity function tested for now, can make as list later
+similarity_func <- function(exp_mat){
+  weights <- setNames(rep(1,length(colnames(exp_mat))),colnames(exp_mat))
+  calc_dot_product_similarity_matrix(calc_weighted_zscore_matrix(exp_mat, weights))
+}
+
+## only 1 clustering fucntion tested for now, can make as a list later
+cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(hclust(as.dist(1-sim_mat), method = "average") ) ))}  
+
+```
+
+```{r, add summary level expr data to ontology}
+# onto <- ontos$uberon$ont - found in previous section already
+# mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+mat <- expression_mat
+# coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+coldata <- columns_meta
+num_terms <- length(onto$id)
+num_features <- nrow(mat)
+# onto$brainspan_summary_stats <- list(
+#   mean_internal = vector("list", num_terms),
+#   sd_internal = vector("list", num_terms),
+#   tau_internal = vector("list", num_terms),
+#   mean_external = vector("list", num_terms),
+#   sd_external = vector("list", num_terms),
+#   tau_external = vector("list", num_terms)
+# )
+onto$brainspan_summary_stats <- vector("list", num_terms)
+temp_stat_df_model <- data.frame(
+  mean_internal = numeric(length=num_features),
+  sd_internal = numeric(length=num_features),
+  tau_internal = numeric(length=num_features),
+  mean_external = numeric(length=num_features),
+  sd_external = numeric(length=num_features),
+  tau_external = numeric(length=num_features)
+  
+)
+rownames(temp_stat_df_model) <- rownames(mat)
+
+  
+  
+temp_num_els <- sapply(onto$brainspan_cols,length)
+# temp_els <- is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]])
+temp_els <- grepl("^brain$",onto$name)
+# temp_els <- temp_els | grepl("^mesoderm-derived",onto$name)
+# temp_els <- temp_els | grepl("^anatomical entity$",onto$name)
+temp_els <- which(temp_els & temp_num_els > 1)
+
+#temp_els <- which(is.element(onto$id, onto$descendants[[grep("^mesoderm-derived",onto$name)]]) &
+#                  temp_num_els > 1)   #which(temp_num_els > 1)
+#temp_els <- grep("^mesoderm-derived|^ectoderm-derived|^endoderm-derived", onto$name)
+for(i in 1:length(temp_els)){
+  print(i)
+  
+  uberon <- onto$brainspan_cols[[temp_els[i]]]
+  onto$brainspan_summary_stats[[temp_els[i]]] <- temp_stat_df_model
+  
+  for(set_and_complement in c(1,-1)){
+    if(set_and_complement==1){print("set")} else {print("complement")}
+    temp_mat <- mat[,uberon*set_and_complement,drop=F]
+    temp_coldata <- coldata[uberon*set_and_complement,,drop=F]
+    if(ncol(temp_mat)>0 & (length(uberon) > 5 | set_and_complement==1) ){
+      colnames(temp_mat) <- make.unique(paste0(temp_coldata$structure_name,
+                                               ":",temp_coldata$age))
+      dot_sim <- similarity_func(temp_mat)
+      rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) 
+      sim_tree <- cluster_func(dot_sim)
+      weights <- get_weights(sim_tree, colnames(temp_mat))
+      weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+      weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+      temp_tau <- calc_weighted_tau(temp_mat,weights)
+    } else {
+      temp_tau <- NA
+      weighted_means <- NA
+      weighted_sds <- NA
+    }
+    if(set_and_complement==1){
+      # onto$brainspan_summary_stats$tau_internal[[temp_els[i]]] <- temp_tau
+      # onto$brainspan_summary_stats$mean_internal[[temp_els[i]]] <- weighted_means
+      # onto$brainspan_summary_stats$sd_internal[[temp_els[i]]] <- weighted_sds
+      onto$brainspan_summary_stats[[temp_els[i]]]$tau_internal <- temp_tau 
+      onto$brainspan_summary_stats[[temp_els[i]]]$mean_internal <- weighted_means
+      onto$brainspan_summary_stats[[temp_els[i]]]$sd_internal <- weighted_sds
+    } else {
+      onto$brainspan_summary_stats[[temp_els[i]]]$tau_external <- temp_tau
+      onto$brainspan_summary_stats[[temp_els[i]]]$mean_external <- weighted_means
+      onto$brainspan_summary_stats[[temp_els[i]]]$sd_external <- weighted_sds
+    }
+    
+  }
+}
+
+
+save.image("post_summ_stat_brain.RData")
+```
+
+```{r}
+
+#### ubiquitous, specific
+#### all, mesoderm-derived, heart
+cutoff_tau_ubiq <- 0.4
+cutoff_tau_spec <- 0.8
+
+onto$brainspan_summary_stats[[grep("^mesoderm-derived",onto$name)]]
+## add heart composed primarily of "cardiac muscle tissue" to ontology##
+## NOTE: uberon already has for "smooth muscle tissue" relation "composed_primarily_of CL:0000192 smooth muscle cell # use this info to connect smooth muscle cells to smooth muscle tissue datasets under uberon id 
+ 
+```
