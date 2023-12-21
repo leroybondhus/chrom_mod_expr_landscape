@@ -1,0 +1,67 @@
+---
+title: "expr_phen_integrative_analyses"
+author: "Leroy Bondhus"
+date: "2023-12-19"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+
+```{r}
+
+## phenotype IC for anatomic entity:  log10(# genes associated with phenotype in anatomic entity / total # genes associated with any disease) 
+## expression IC for anatomic entity: log10(# genes specific to anatomic entity / total # genes specific anywhere)
+
+## each uberon term will have an IC value associated for phenotype AND an IC value associated for expression
+
+## each gene will have a set of uberon terms associated with phenotype AND expression
+
+## then calculate concordance between phenotype and expression
+```
+
+
+```{r}
+onto <- ontos$uberon$ont
+hpo_uberon_gene_map <- onto_maps$HPO_UBERON_GENE$map
+hpo_uberon_gene_map <- hpo_uberon_gene_map[which(!hpo_uberon_gene_map$non_syndrome_flag),]
+hpo_uberon_gene_map$non_syndrome_flag <- NULL
+```
+
+```{r, get phenotype IC for anatomic entities}
+## phenotype IC for anatomic entity:  log10(# genes associated with phenotype in anatomic entity / total # genes associated with any disease) 
+onto$phen_IC <- numeric(length=length(onto$id))
+onto$temp_phen_IC_associated_genes <- vector("list",length(onto$id))
+
+## OMIM : GENE <-> PHEN <-> UBERON
+omim_genes <- unique(hpo_uberon_gene_map$Ensembl_Gene_ID)
+for( i in 1:length(omim_genes)){
+  temp_uberon_ids <- hpo_uberon_gene_map$UBERON_ID[which(hpo_uberon_gene_map$Ensembl_Gene_ID==omim_genes[i])]
+  temp_uberon_ids <- unique(temp_uberon_ids[!is.na(temp_uberon_ids)])
+  temp_extended_ub_ids <- temp_uberon_ids
+  if(length(temp_uberon_ids)==0){next}
+  for(j in 1:length(temp_uberon_ids)){
+        temp_extended_ub_ids <- unique(c(temp_extended_ub_ids,
+                                         onto$ancestors[[which(onto$id==temp_uberon_ids[j])]]))
+  }
+  temp_extended_ub_ids <- temp_extended_ub_ids[!is.na(temp_extended_ub_ids)]
+  for(j in 1:length(temp_uberon_ids)){
+    onto$temp_phen_IC_associated_genes[[which(onto$id==temp_uberon_ids[j])]] <- c(
+      onto$temp_phen_IC_associated_genes[[which(onto$id==temp_uberon_ids[j])]],
+      omim_genes[i]
+    ) 
+  }
+}
+
+onto$phen_IC <- -log10( sapply(onto$temp_phen_IC_associated_genes,length) / length(omim_genes) ) 
+```
+
+```{r}
+onto$expr_IC <- numeric(length=length(onto$id))
+## EXPR: GENE <-> UBERON
+
+
+```
+
+
