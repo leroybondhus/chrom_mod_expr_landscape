@@ -309,7 +309,8 @@ corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_tim
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
 # get list of brainpsan structure names in alphabetical order
-# structure_names <- unique(sorted_cols$structure_name)
+
+ptm <- proc.time()
 structure_names <- names(which(table(sorted_cols$structure_name)>=5))
 
 structure_dirs <- paste0(str_replace_all(structure_names, "[ /]", "_"), "/")
@@ -416,8 +417,8 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       colnames(high_hcl_df)[1] = "expr"
       colnames(high_hcl_df)[2] = "cluster"
       high_hcl_df$freq <- high_hcl_counts$Freq[match(high_hcl_df$cluster, high_hcl_counts$Var1)]
-      high_hcl_df$subcluster <- rep(unique(myhcl)$subcluster, each = length(struct_index))
-      high_hcl_df$group_name <- paste0("subcluster:",high_hcl_df$subcluster, ",num_genes:", high_hcl_df$freq)
+      high_hcl_df$cluster <- rep(unique(myhcl)$subcluster, each = length(struct_index)) # replace cluster with subcluster
+      high_hcl_df$group_name <- paste0("cluster:",high_hcl_df$cluster, ",num_genes:", high_hcl_df$freq)
       select_high_hcl_df <- high_hcl_df[which(high_hcl_df$freq >= 2),] # filter out clusters with 1 gene
       
       modest_hcl_counts <- as.data.frame(table(myhcl$modest))
@@ -504,14 +505,14 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       for(i in 1:n_clusters_high){
         all_gene_lists_high[[i]] = significant_genes[which(struct_high_cluster_assignment == high_cluster_names[i])]
       }
-      
-      list(high_cutoff_0.2 = all_gene_lists_high, modest_cutoff_0.4 = all_gene_lists_modest)
+      expr_dfs <- rbind(high_hcl_df, modest_hcl_df)
+      list(high_cutoff_0.2 = all_gene_lists_high, modest_cutoff_0.4 = all_gene_lists_modest, expr_df = expr_dfs)
     }
   # }
 }
 
 names(gene_lists) <- structure_names
-
+proc.time() - ptm
 ```
 
 
@@ -561,7 +562,7 @@ flat_gene_lists <- unlist(unlist(gene_lists, recursive = FALSE), recursive = FAL
 
 # Iterate through the gene lists and perform gene enrichment analysis
 # for (i in 1:length(chrom_gene_lists_modest)) {
-ptm <- proc.time()
+
 all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind) %dopar% {
   enrich_result <- enrichGO(gene = flat_gene_lists[[i]],
                             universe = gene_universe,
@@ -592,6 +593,53 @@ all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind)
 
 write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_genes_GO_results.csv"))
 ```
+
+
+```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
+unique_pairs <- unique(paste(all_genes_GO_results$Structure, all_genes_GO_results$Cutoff, all_genes_GO_results$Cluster, sep = '-'))
+
+iagc_time_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
+
+i = 1
+j = 500
+
+first <- str_split(unique_pairs[i], '-')[[1]]
+second <- str_split(unique_pairs[j], '-')[[1]]
+
+first_expr <- gene_lists[[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2]), gene_lists[[first[1]]][["expr_df"]][["group_name"]]),]
+
+second_expr <- gene_lists[[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2]), gene_lists[[second[1]]][["expr_df"]][["group_name"]]),]
+
+expr_length <- max(nrow(first_expr), nrow(second_expr))
+
+
+
+
+write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
+```
+
+
+```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
+iag_gs_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
+
+#define Jaccard Similarity function
+jaccard <- function(a, b) {
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    return (intersection/union)
+}
+for (i in 1:length(unique_pairs)){
+  first <- str_split(unique_pairs[i], '-')[[1]]
+  for (j in 1:length(unique_pairs)){
+    second <- str_split(unique_pairs[j], '-')[[1]]
+    iag_gs_sim_mat[i,j] = jaccard(gene_lists[[first[1]]][[first[2]]][[first[3]]], gene_lists[[second[1]]][[second[2]]][[second[3]]])
+  }
+}
+
+write.csv(iag_gs_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iag_gs_sim_mat.csv"))
+```
+
+
 
 ```{r, exploratory plots: individual facet plots + max expression histograms}
 # FIX ORDER OF SUBPLOT FACETS SO ACTUALLY SAVES NAME PROPERLY
