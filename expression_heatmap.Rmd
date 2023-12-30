@@ -10,7 +10,7 @@ editor_options:
 
 
 ```{r, chrom modifier specificity}
-##### MOVE CHUNK TO SETUP FILE? ## 
+##### MOVE CHUNK TO A SETUP FILE? ## 
 onto <- ontos$uberon$ont
 #mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene set to look at
 mat <- dataset_list$ENCODE_GTEX_COMB$mat
@@ -124,7 +124,7 @@ sink()
 
 ### Criteria : if ancestor col stats == descendant col stats, keep descendant cut ancestor.
 ### Criteria : Most (> 50%) observed children significant and specific, else cut and reform branches.
-spec_biosamples_list_2 <- foreach(spec_biosamples=spec_biosamples_list) %dopar% {
+spec_biosamples_list <- foreach(spec_biosamples=spec_biosamples_list) %dopar% {
   for(i in 1:length(spec_biosamples)){
     
     

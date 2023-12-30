@@ -948,8 +948,26 @@ gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name"
 # temp <- tempfile()
 # download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz")) 
 # gene_sets$genes_all_go <- read.table( temp, skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
-
-
+gene_sets$paralogs <- NULL
+for(chr in c(as.character(1:22),"X","Y","MT" )){
+  print(chr)
+  temp <- getBM(attributes = c("ensembl_gene_id","external_gene_name",
+                                        "hsapiens_paralog_ensembl_gene",
+                                        "hsapiens_paralog_associated_gene_name",
+                                        "hsapiens_paralog_perc_id",
+                                        "hsapiens_paralog_perc_id_r1",
+                                        "hsapiens_paralog_subtype"),
+                              filters= c("chromosome_name","biotype"),
+                              values=list(chr,"protein_coding"),
+                              mart=ensembl,useCache = F)
+  if(is.null(gene_sets$paralogs)){
+    gene_sets$paralogs <- temp
+  } else{
+    gene_sets$paralogs <- rbind(gene_sets$paralogs, temp)
+  }
+  
+}
+save.image()
 for(chr in c(as.character(1:22),"X","Y","MT" )){
   print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
@@ -1063,6 +1081,39 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){print(paste
 rm(temp,temp2, chr,descendants,i,term_id, which)
 
 ```
+
+```{r, download taxonomy info}
+files$taxonomy <- paste0(dirs$temp_data,"taxmp.zip")
+download.file("https://ftp.ncbi.nih.gov/pub/taxonomy/taxdmp.zip",files$taxonomy)
+dirs$taxonomy <- paste0(dirs$temp_data,"taxonomy/")
+dir.create(dirs$taxonomy)
+system(paste0("unzip -o ", files$taxonomy," -d ",dirs$taxonomy))
+
+taxonomy <- list()
+taxonomy$names <- read.csv(paste0(dirs$taxonomy,"names.dmp"), sep="\t", header = F)
+taxonomy$names <- taxonomy$names[,which(!apply(taxonomy$names,2, function(x){all(x=="|")}))]
+colnames(taxonomy$names)[1:4] <- c("tax_id","name_txt","unique name", "name class")
+taxonomy$nodes <- read.csv(paste0(dirs$taxonomy,"nodes.dmp"), sep="\t", header = F)
+taxonomy$nodes <- taxonomy$nodes[,which(!apply(taxonomy$nodes,2, function(x){all(x=="|")}))]
+colnames(taxonomy$nodes)[1:2] <- c("tax_id","parent tax_id")
+
+h_sapiens_lineage <- data.frame(id=character(),name=character(), height=integer())
+next_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="Homo sapiens")]
+root_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="root")]
+height <- 1
+while(next_id != root_id){
+  temp_name <- taxonomy$names$name_txt[which(taxonomy$names$tax_id==next_id)]
+  if(length(temp_name)==0){temp_name <- NA}
+  temp_df <- data.frame(id=next_id, name=temp_name, height=height)
+  h_sapiens_lineage <- rbind(h_sapiens_lineage,temp_df)
+  next_id <- taxonomy$nodes$`parent tax_id`[which(taxonomy$nodes$tax_id==next_id)]
+  height=height+1
+}
+h_sapiens_lineage$depth <- max(h_sapiens_lineage$height) - h_sapiens_lineage$height
+taxonomy$human_lineage <- h_sapiens_lineage
+taxonomy$names <- taxonomy$nodes <- NULL
+```
+
 
 ```{r, custom ggplot themes}
 barcode_theme <- theme_classic()+
