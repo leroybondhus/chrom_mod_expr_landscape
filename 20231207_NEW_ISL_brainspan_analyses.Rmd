@@ -1,6 +1,6 @@
 ---
-title: "ISL_brainspan_analyses"
-author: "Isabelle Liu"
+title: "20231207_NEW_ISL_brainspan_analyses"
+author: "Isabelle Liu, Leroy Bondhus, Aileen Nava"
 date: "2023-12-07"
 output: html_document
 ---
@@ -33,7 +33,6 @@ for(dir in resolution_dirs){
 
 
 ```{r, set up environment}
-####
 date <- format(Sys.time(),"%Y%m%d")
 registerDoParallel(detectCores()-2)
 getDoParWorkers()
@@ -178,16 +177,30 @@ age_cols <- columns_meta
 age_cols$age <- convert_age(columns_meta$age)
 
 # sort columns_meta by brainspan structure name and then age ascending order
-sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_cols)
+og_sorted_cols <- age_cols[with(age_cols, order(structure_name, age)),]; rm(age_cols)
 
 # expression matrix convert RPKM to TPM
-# first get transcript lengths - seems like formula doesn't need transcript length
-# match genes in gene_sets$genes_all_transcript to the genes in rows_meta
-# matched_genes <- match(rows_meta$ensembl_gene_id, gene_sets$genes_all_transcript$ensembl_gene_id)
-# matched_genes_transcript_length <- gene_sets$genes_all_transcript$transcript_length[matched_genes]
-
 # first sort expression matrix
-sorted_expression = expression_mat[sorted_cols$column_num]
+og_sorted_expression = expression_mat[og_sorted_cols$column_num]
+
+# aggregate samples with same brain structure + time label - IGNORES GENDER
+sorted_cols <- og_sorted_cols[match(unique(paste0(og_sorted_cols$age, og_sorted_cols$structure_name)), paste0(og_sorted_cols$age, og_sorted_cols$structure_name)),]
+
+sorted_expression <- data.frame(matrix(nrow = nrow(og_sorted_expression), ncol = nrow(sorted_cols), dimnames = list(NULL, paste0(sorted_cols$structure_name, '.', sorted_cols$age))))
+
+cols_i = 1
+expr_i = 1
+while(cols_i <= nrow(og_sorted_cols) & expr_i <= nrow(sorted_expression)){
+  matches <- which(paste0(og_sorted_cols$age, og_sorted_cols$structure_name) == paste0(og_sorted_cols$age[cols_i], og_sorted_cols$structure_name[cols_i]))
+  if (length(matches) == 1){
+    sorted_expression[,expr_i] <- og_sorted_expression[,matches]
+  } else{
+    sorted_expression[,expr_i] <- apply(og_sorted_expression[,matches], 1, median)
+  }
+  cols_i = cols_i + length(matches)
+  expr_i = expr_i + 1
+}
+
 
 # formula source - https://haroldpimentel.wordpress.com/2014/05/08/what-the-fpkm-a-review-rna-seq-expression-units/
 rpkmToTpm <- function(rpkm_col)
@@ -196,9 +209,6 @@ rpkmToTpm <- function(rpkm_col)
 }
 
 TPM_expression <- apply(sorted_expression, 2, rpkmToTpm)
-
-# log transform expression data
-# log_TPM_expression <- log10(TPM_expression+1)
   
 # median normalization of expression per gene
 # divide all within each sample by median within respective sample (median of all genes with log tpm > 0 or log tpm > very small number), essentially want typical expressed gene to have expression value around 1
@@ -210,6 +220,7 @@ median_normalize <- function(expr_mat_col)
   expr_mat_col = expr_mat_col/median
 }
 
+# log transform expression data & median normalize
 normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 
 # sorted_expression <- data.matrix(sorted_expression) # convert to matrix - CHECK IF STILL NEED - already in matrix form
@@ -226,8 +237,7 @@ temp <- heatmap(normal_expr[1:1500,1:33], labRow = rows_meta$gene_symbol[1:1000]
 ```
 
 ```{r, calculate gene expression correlation}
-# calculate gene expression for all genes for a given brain structure
-# CALC CORR BASED ON LOG TIME
+# calculate gene expression for all genes for a given brain structure - based on log time
 calc_correlation <- function(cols_meta,expr_mat){
   corr <- vector("numeric", nrow(expr_mat))
   p_val <- vector("numeric", nrow(expr_mat))
@@ -247,16 +257,18 @@ calc_correlation <- function(cols_meta,expr_mat){
 
 # first create matrix with columns for each brain structure and rows for the correlation of each gene
 # create list of matrices (time-correlation sum)
-corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
-p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
-confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
-confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=nrow(struct_to_ids), dimnames = list(NULL, struct_to_ids$unique_structures))
+num_unique_structures <- length(unique(sorted_cols$structure_name))
+unique_structures <- unique(sorted_cols$structure_name)
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
 
 # also create vector to store number of time points for each unique brainspan structure
 num_struct_timepoints <- vector("integer", nrow(struct_to_ids))
 
 # index gene expression columns to obtain submatrices of each brain structure
-for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
+for(i in 1:length(unique(sorted_cols$structure_name))){ # for each unique brain structure
   struct <- struct_to_ids$unique_structures[i]
   temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
   temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
@@ -274,8 +286,7 @@ for(i in 1:nrow(struct_to_ids)){ # for each unique brain structure
 # error with "temporal neocortex" because only one sample - use if statement to test length of num cols before calculating correlation
 # using cor.test brainspan structures with only two samples also lead to error - corr values will be NA
 
-# can perform exploratory heat map analysis by taking certain sets of genes
-# should i use ComplexHeatMap or base heatmap
+# can perform exploratory heat map analysis (ComplexHeatMap or base heatmap) by taking certain sets of genes
 
 ```
 
@@ -453,18 +464,17 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       
       # create subdirectories in each structure results folder for plots for each cluster (num clusters varies across diff cutoffs and diff structures)
       modest_cluster_names <- paste0("cluster", 1:n_clusters_modest)
-      # high_cluster_names <- paste0("cluster", 1:n_clusters_high)
       high_cluster_names <- paste0("cluster", unique(subcluster_names))
       
-      for (dir in modest_cluster_names){
-        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))}
-        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))}
-      }
-      
-      for (dir in high_cluster_names){
-        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))}
-        if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))}
-      }
+      # for (dir in modest_cluster_names){
+      #   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_modest,struct, "/", dir,"/"))}
+      #   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_modest,struct, "/", dir,"/"))}
+      # }
+      # 
+      # for (dir in high_cluster_names){
+      #   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high,struct, "/", dir,"/"))}
+      #   if(!dir.exists(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))){dir.create(paste0(dirs$figure_cluster_analysis, resolution_dirs$all_genes_high,struct, "/", dir,"/"))}
+      # }
      
       # STEP 7: get gene lists for coexpression for both clustering cutoffs (0.2 and 0.4)
       # create vector to store cluster assignments for each gene
@@ -558,11 +568,11 @@ custom_theme_2 <- function(base_size = 12, base_family = "") {
 
 ```{r}
 # flattened gene list
-flat_gene_lists <- unlist(unlist(gene_lists, recursive = FALSE), recursive = FALSE)
+ptm <- proc.time()
+flat_gene_lists <- unlist(unlist(gene_lists, recursive = FALSE)[((1:length(unlist(gene_lists, recursive = FALSE))) %%3)!=0], recursive = FALSE)
+
 
 # Iterate through the gene lists and perform gene enrichment analysis
-# for (i in 1:length(chrom_gene_lists_modest)) {
-
 all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind) %dopar% {
   enrich_result <- enrichGO(gene = flat_gene_lists[[i]],
                             universe = gene_universe,
@@ -590,32 +600,82 @@ all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind)
       }
   saved_enrich
 }
-
+proc.time() - ptm
 write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_genes_GO_results.csv"))
 ```
 
 
 ```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
-unique_pairs <- unique(paste(all_genes_GO_results$Structure, all_genes_GO_results$Cutoff, all_genes_GO_results$Cluster, sep = '-'))
+ptm <- proc.time()
+unique_pairs <- unique(paste(all_genes_GO_results$Structure, all_genes_GO_results$Cutoff, all_genes_GO_results$Cluster, sep = '--'))
 
-iagc_time_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
+# iagc_time_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
 
-i = 1
-j = 500
+# iagc_time_sim_mat <- foreach(i = 1:5, .combine = 'rbind') %:%
+for (a in 1:500){
+  for (b in 1:500){
+  # foreach(i = 1:5, .combine = 'c') %dopar% {
+    first <- str_split(unique_pairs[a], '--')[[1]]
+    # iagc_time_sim_vec <- vector(mode = "numeric", length = 5)
+    second <- str_split(unique_pairs[b], '--')[[1]]
+    # For all clusters within the same anatomic group, just set inter-anatomic cluster dist = 0
+    if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
+      iagc_time_sim_mat[a,b] = 0
+    } else{
+          
+      first_expr <- gene_lists[[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2],','), gene_lists[[first[1]]][["expr_df"]][["group_name"]]),]
+  
+      second_expr <- gene_lists[[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2],','), gene_lists[[second[1]]][["expr_df"]][["group_name"]]),]
+      
+      pcw_pairs <- vector(mode = "integer")
+      
+      first_matches <- vector(mode = "integer", length = nrow(first_expr))
+      for (i in 1:length(first_matches)){
+        first_matches[i] = paste0(first_expr$pcw[i], '-',second_expr$pcw[which.min(abs(second_expr$pcw - first_expr$pcw[i]))])
+      }
+      
+      second_matches <- vector(mode = "integer", length = nrow(second_expr))
+      for (i in 1:length(second_matches)){
+        second_matches[i] = paste0(first_expr$pcw[which.min(abs(first_expr$pcw - second_expr$pcw[i]))], '-', second_expr$pcw[i])
+      }
+      pairs <- list(first_matches, second_matches)
+      pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
+      
+      for (i in 1:length(first_matches)){
+        if (is.na(match(first_matches[i], pcw_pairs))){
+          pcw_pairs <- append(pcw_pairs,first_matches[i])
+        }
+      }
+      unsorted_pcws <- length(pcw_pairs)
+      # sort matches to ascending weeks order
+      for (i in 1:length(pcw_pairs)){
+        unsorted_pcws[i] <- strtoi(str_split(pcw_pairs, '-')[[i]][1])
+      }
+      sorted_pairs <- pcw_pairs[order(unsorted_pcws)]
+      
+      new_first_expr <- vector(mode = "numeric", length = length(sorted_pairs))
+      new_second_expr <- vector(mode = "numeric",length = length(sorted_pairs))
+      
+      names(new_first_expr) <- sorted_pairs
+      names(new_second_expr) <- sorted_pairs
+      
+      for(k in 1:length(new_first_expr)){
+        first_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][1])
+        second_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][2])
+        first_pcw_match <- which(first_expr$pcw == first_pcw)
+        second_pcw_match <- which(second_expr$pcw == second_pcw)
+        new_first_expr[k] <- first_expr$expr[first_pcw_match]
+        new_second_expr[k] <- second_expr$expr[second_pcw_match]
+      }
+      # iagc_time_sim_vec[b] = 
+      iagc_time_sim_mat[a,b] = cor(new_first_expr, new_second_expr)
+    }
+  }
+  # iagc_time_sim_vec
+}
+proc.time() - ptm
 
-first <- str_split(unique_pairs[i], '-')[[1]]
-second <- str_split(unique_pairs[j], '-')[[1]]
-
-first_expr <- gene_lists[[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2]), gene_lists[[first[1]]][["expr_df"]][["group_name"]]),]
-
-second_expr <- gene_lists[[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2]), gene_lists[[second[1]]][["expr_df"]][["group_name"]]),]
-
-expr_length <- max(nrow(first_expr), nrow(second_expr))
-
-
-
-
-write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
+# write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
 ```
 
 
