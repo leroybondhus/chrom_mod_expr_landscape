@@ -216,7 +216,8 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   temp_list <- list(gene_id=chrom_subset)
   temp_list$complex_names <- vector(mode = "list", length=length(temp_list$gene_id))
   temp_list$complex_partners <- vector(mode = "list", length=length(temp_list$gene_id))
-  
+  temp_list$constitutive_partners <- vector(mode = "list", length=length(temp_list$gene_id))
+    
   for(j in 1:length(complex)){
     temp_modifiers <- complex[[j]]$members[is.element(complex[[j]]$members, temp_list$gene_id)]
     if(length(temp_modifiers)==0){next}
@@ -226,14 +227,29 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
       temp_list$complex_partners[[which]] <- c(temp_list$complex_partners[[which]],list(complex[[j]]$members))
     }
   }
+  for(j in 1:length(temp_list$complex_partners)){
+    if(is.null(temp_list$complex_partners[[j]])){next}
+    for(k in 1:length(temp_list$complex_partners[[j]])){
+      if(k==1){
+        tentative_constituitive <- temp_list$complex_partners[[j]][[k]]
+      } else{
+        tentative_constituitive <- intersect(tentative_constituitive, temp_list$complex_partners[[j]][[k]])
+      }
+    }
+    temp_list$constitutive_partners[[j]] <- tentative_constituitive
+  }
   if(all(sapply(temp_list$complex_names,function(x){all(is.null(x))}))){next}
-  names(temp_list$complex_names) <- names(temp_list$complex_partners) <- temp_list$gene_id
+  names(temp_list$complex_names) <- 
+    names(temp_list$complex_partners) <- 
+    names(temp_list$constitutive_partners) <-
+    temp_list$gene_id
   # temp_list2 <- temp_list
   # temp_list2$complex_names <- NULL
   
   temp_list$complex_partners_concat <- sapply(temp_list$complex_partners,function(x){sapply(x, paste,collapse=",")})
   temp_list$complex_partners_count <- lapply(temp_list$complex_partners,function(x){sapply(x,length)})
   
+ 
   temp_df <- melt(temp_list$complex_names[!sapply(temp_list$complex_names,is.null)], value.name="complex_name")
   temp_df_2 <- melt(temp_list$complex_partners_concat[!sapply(temp_list$complex_names,is.null)], value.name="complex_partners")
   temp_df <- cbind(temp_df, temp_df_2[,1,drop=F])
@@ -270,6 +286,30 @@ ggsave(filename, ggl$complex_partner_count, height = 6, width =8, units="in" )
 filename <- paste0(dirs$figures, "complex_count__partition_by_chromModType.png")
 ggsave(filename, ggl$complex_count, height = 6, width =8, units="in")
 ```
+
+```{r, paralog groups analysis}
+### number of paralogs per chrom mod
+### number of paralogs groups
+# for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+#   ## get current subset of genes
+#   chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
+#   chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+#   if(length(chrom_subset)==0){next}
+#   df <- data.frame(id=character(),
+#                    num_paralogs=numeric(),
+#                    paralog_group=character())
+# 
+#   
+#   
+# }
+
+### divergence points of paralogs ## consider representating in a tree
+
+#### want for downstream look at phenotype similarity between homologs
+
+## also ## look at constitutive partner phenotype and expression similarity 
+```
+
 
 ```{r, consider gene_families level analyses }
 ## https://ftp.ebi.ac.uk/pub/databases/genenames/hgnc/csv/genefamily_db_tables/

@@ -595,6 +595,8 @@ ontos$hpo$ont <- add_children_from_parents(ontos$hpo$ont)
 ontos$hpo$ont <- add_depth(ontos$hpo$ont)
 ontos$hpo$ont <- add_height(ontos$hpo$ont)
 ontos$hpo$ont <- add_descendants(ontos$hpo$ont)
+ontos$hpo$ont <- add_ancestors(ontos$hpo$ont)
+
 
 ## set up uberon ontology ###
 ontos$uberon <- list()

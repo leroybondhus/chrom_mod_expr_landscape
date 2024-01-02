@@ -37,29 +37,61 @@ onto$temp_phen_IC_associated_genes <- vector("list",length(onto$id))
 ## OMIM : GENE <-> PHEN <-> UBERON
 omim_genes <- unique(hpo_uberon_gene_map$Ensembl_Gene_ID)
 for( i in 1:length(omim_genes)){
+  if(i %% 500 == 1){print(i)}
   temp_uberon_ids <- hpo_uberon_gene_map$UBERON_ID[which(hpo_uberon_gene_map$Ensembl_Gene_ID==omim_genes[i])]
   temp_uberon_ids <- unique(temp_uberon_ids[!is.na(temp_uberon_ids)])
   temp_extended_ub_ids <- temp_uberon_ids
   if(length(temp_uberon_ids)==0){next}
-  for(j in 1:length(temp_uberon_ids)){
+  for(j in 1:length(temp_uberon_ids)){ 
         temp_extended_ub_ids <- unique(c(temp_extended_ub_ids,
                                          onto$ancestors[[which(onto$id==temp_uberon_ids[j])]]))
   }
   temp_extended_ub_ids <- temp_extended_ub_ids[!is.na(temp_extended_ub_ids)]
-  for(j in 1:length(temp_uberon_ids)){
-    onto$temp_phen_IC_associated_genes[[which(onto$id==temp_uberon_ids[j])]] <- c(
-      onto$temp_phen_IC_associated_genes[[which(onto$id==temp_uberon_ids[j])]],
-      omim_genes[i]
+  for(j in 1:length(temp_extended_ub_ids)){
+    onto$temp_phen_IC_associated_genes[[which(onto$id==temp_extended_ub_ids[j])]] <- unique(c(
+      onto$temp_phen_IC_associated_genes[[which(onto$id==temp_extended_ub_ids[j])]],
+      omim_genes[i])
     ) 
   }
 }
-
+onto$num_associated_genes <- sapply(onto$temp_phen_IC_associated_genes, length)
 onto$phen_IC <- -log10( sapply(onto$temp_phen_IC_associated_genes,length) / length(omim_genes) ) 
+```
+
+
+```{r, assess coverage of uberon ontology terms in HPO}
+onto$num_associated_hpo_terms <- numeric(length = length(onto$id))
+for(i in 1:length(onto$id)){
+  if(i %% 500 == 1){print(i)}
+  associated_hpos <- onto_maps$HPO_UBERON$map$HPO_ID[which(is.element(onto_maps$HPO_UBERON$map$UBERON_ID,
+                                                                     c(onto$id[i],onto$descendants[[i]]) ))]
+  if(length(associated_hpos) ==0){next}
+  associated_hpos <- associated_hpos[!is.na(associated_hpos)]
+  expanded_hpos <- unique(associated_hpos)
+  for(j in 1:length(associated_hpos)){
+    which <- which(ontos$hpo$ont$id==associated_hpos[j])
+    if(length(which)==0){print(paste0(associated_hpos[j],": not in loaded ontology"));stop}
+    expanded_hpos <- unique(expanded_hpos,
+                            ontos$hpo$ont$descendants[[which]])
+  }
+  if(i %% 500 == 1){
+    print("uberon name:")
+    print(onto$name[i])
+    print("associated hpo names:")
+    print(ontos$hpo$ont$name[which(is.element(ontos$hpo$ont$id, expanded_hpos))][1:10])
+  }
+  onto$num_associated_hpo_terms[i] <- length(expanded_hpos)
+}
+
 ```
 
 ```{r}
 onto$expr_IC <- numeric(length=length(onto$id))
 ## EXPR: GENE <-> UBERON
+
+## coldata ## expr data
+## for each UBERON id number of associated columns in expr data to give coverage sense. 
+## also to label underrepresented tissues/cells/contexts
 
 
 ```
