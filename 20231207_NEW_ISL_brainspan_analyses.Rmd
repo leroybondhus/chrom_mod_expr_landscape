@@ -607,20 +607,20 @@ write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_
 
 ```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
 ptm <- proc.time()
-unique_pairs <- unique(paste(all_genes_GO_results$Structure, all_genes_GO_results$Cutoff, all_genes_GO_results$Cluster, sep = '--'))
+modest_GO_indices <- which(all_genes_GO_results$Cutoff=='modest_cutoff_0.4')
+high_GO_indices <- which(all_genes_GO_results$Cutoff=='high_cutoff_0.2')
+unique_pairs_modest <- unique(paste(all_genes_GO_results$Structure[modest_GO_indices], all_genes_GO_results$Cutoff[modest_GO_indices], all_genes_GO_results$Cluster[modest_GO_indices], sep = '--'))
+unique_pairs_high <- unique(paste(all_genes_GO_results$Structure[high_GO_indices], all_genes_GO_results$Cutoff[high_GO_indices], all_genes_GO_results$Cluster[high_GO_indices], sep = '--'))
 
 # iagc_time_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
 
-# iagc_time_sim_mat <- foreach(i = 1:5, .combine = 'rbind') %:%
-for (a in 1:500){
-  for (b in 1:500){
-  # foreach(i = 1:5, .combine = 'c') %dopar% {
-    first <- str_split(unique_pairs[a], '--')[[1]]
-    # iagc_time_sim_vec <- vector(mode = "numeric", length = 5)
-    second <- str_split(unique_pairs[b], '--')[[1]]
+iagc_time_sim_mat_modest <- foreach(a = 1:length(unique_pairs_modest), .combine = 'rbind') %:%
+  foreach(b = 1:length(unique_pairs_modest), .combine = 'c') %dopar% {
+    first <- str_split(unique_pairs_modest[a], '--')[[1]]
+    second <- str_split(unique_pairs_modest[b], '--')[[1]]
     # For all clusters within the same anatomic group, just set inter-anatomic cluster dist = 0
     if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
-      iagc_time_sim_mat[a,b] = 0
+      result = 0
     } else{
           
       first_expr <- gene_lists[[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2],','), gene_lists[[first[1]]][["expr_df"]][["group_name"]]),]
@@ -639,11 +639,17 @@ for (a in 1:500){
         second_matches[i] = paste0(first_expr$pcw[which.min(abs(first_expr$pcw - second_expr$pcw[i]))], '-', second_expr$pcw[i])
       }
       pairs <- list(first_matches, second_matches)
-      pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
+      if(length(first_matches) == length(second_matches)){
+        pcw_pairs <- first_matches
+        to_append <- second_matches
+      } else{
+        pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
+        to_append <- pairs[[which.min(c(length(first_matches), length(second_matches)))]]
+      }
       
-      for (i in 1:length(first_matches)){
-        if (is.na(match(first_matches[i], pcw_pairs))){
-          pcw_pairs <- append(pcw_pairs,first_matches[i])
+      for (i in 1:length(to_append)){
+        if (is.na(match(to_append[i], pcw_pairs))){
+          pcw_pairs <- append(pcw_pairs,to_append[i])
         }
       }
       unsorted_pcws <- length(pcw_pairs)
@@ -667,20 +673,22 @@ for (a in 1:500){
         new_first_expr[k] <- first_expr$expr[first_pcw_match]
         new_second_expr[k] <- second_expr$expr[second_pcw_match]
       }
-      # iagc_time_sim_vec[b] = 
-      iagc_time_sim_mat[a,b] = cor(new_first_expr, new_second_expr)
+      result = cor(new_first_expr, new_second_expr)
     }
+    result
   }
-  # iagc_time_sim_vec
-}
+
+rownames(iagc_time_sim_mat_modest) <- unique_pairs_modest
+colnames(iagc_time_sim_mat_modest) <- unique_pairs_modest
+
 proc.time() - ptm
 
-# write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
+write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
 ```
 
 
 ```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
-iag_gs_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
+iagc_gs_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
 
 #define Jaccard Similarity function
 jaccard <- function(a, b) {
@@ -688,15 +696,17 @@ jaccard <- function(a, b) {
     union = length(a) + length(b) - intersection
     return (intersection/union)
 }
-for (i in 1:length(unique_pairs)){
-  first <- str_split(unique_pairs[i], '-')[[1]]
-  for (j in 1:length(unique_pairs)){
-    second <- str_split(unique_pairs[j], '-')[[1]]
-    iag_gs_sim_mat[i,j] = jaccard(gene_lists[[first[1]]][[first[2]]][[first[3]]], gene_lists[[second[1]]][[second[2]]][[second[3]]])
+iagc_gs_sim_mat_modest <- foreach(i = 1:length(unique_pairs_modest), .combine = 'rbind') %:%
+  foreach(j = 1:length(unique_pairs_modest), .combine = 'c') %dopar% {
+    first <- str_split(unique_pairs_modest[i], '--')[[1]]
+    second <- str_split(unique_pairs_modest[j], '--')[[1]]
+    jaccard(gene_lists[[first[1]]][[first[2]]][[first[3]]],gene_lists[[second[1]]][[second[2]]][[second[3]]])
   }
-}
 
-write.csv(iag_gs_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iag_gs_sim_mat.csv"))
+rownames(iagc_gs_sim_mat_modest) <- unique_pairs_modest
+colnames(iagc_gs_sim_mat_modest) <- unique_pairs_modest
+
+write.csv(iagc_gs_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_gs_sim_mat.csv"))
 ```
 
 
