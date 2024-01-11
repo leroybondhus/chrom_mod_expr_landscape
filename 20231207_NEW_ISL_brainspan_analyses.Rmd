@@ -372,9 +372,7 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       
       # cutoff height = 0.2 (high resolution)
       png(filename = paste0(dirs$figure_cluster_analysis, resolution_dirs$chrom_high, struct, "/", struct, "_clustering_dendrogram(cutoff=0.2).png"), width = 960, height = 480)
-      # plot(hc)
       plot(hc, main = "Cluster Dendrogram (cutoff = 0.2)")
-     
       rect.hclust(hc, h=0.2)
       dev.off()
       
@@ -605,7 +603,7 @@ write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_
 ```
 
 
-```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
+```{r,  inter-anatomic-gene-cluster-time-similarity-matrix - modest resolution}
 ptm <- proc.time()
 modest_GO_indices <- which(all_genes_GO_results$Cutoff=='modest_cutoff_0.4')
 high_GO_indices <- which(all_genes_GO_results$Cutoff=='high_cutoff_0.2')
@@ -683,30 +681,169 @@ colnames(iagc_time_sim_mat_modest) <- unique_pairs_modest
 
 proc.time() - ptm
 
-write.csv(iagc_time_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat.csv"))
+write.csv(iagc_time_sim_mat_modest, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat_modest.csv"))
+
+hc_time_modest <- hclust(as.dist(1-(iagc_time_sim_mat_modest+1)/2), "ave")
+plot(hc_time_modest,labels=FALSE, main = "metaclusters for iagc_time modest resolution (cutoff = 0.4)")
+rect.hclust(hc_time_modest, h=0.2)
+```
+
+
+```{r, iagc_time_sim_mat_high}
+ptm <- proc.time()
+iagc_time_sim_mat_high <- foreach(a = 1:length(unique_pairs_high), .combine = 'rbind') %:%
+  foreach(b = 1:length(unique_pairs_high), .combine = 'c') %dopar% {
+    first <- str_split(unique_pairs_high[a], '--')[[1]]
+    second <- str_split(unique_pairs_high[b], '--')[[1]]
+    # For all clusters within the same anatomic group, just set inter-anatomic cluster dist = 0
+    if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
+      result = 0
+    } else{
+          
+      first_expr <- gene_lists[[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2],','), gene_lists[[first[1]]][["expr_df"]][["group_name"]]),]
+  
+      second_expr <- gene_lists[[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2],','), gene_lists[[second[1]]][["expr_df"]][["group_name"]]),]
+      
+      pcw_pairs <- vector(mode = "integer")
+      
+      first_matches <- vector(mode = "integer", length = nrow(first_expr))
+      for (i in 1:length(first_matches)){
+        first_matches[i] = paste0(first_expr$pcw[i], '-',second_expr$pcw[which.min(abs(second_expr$pcw - first_expr$pcw[i]))])
+      }
+      
+      second_matches <- vector(mode = "integer", length = nrow(second_expr))
+      for (i in 1:length(second_matches)){
+        second_matches[i] = paste0(first_expr$pcw[which.min(abs(first_expr$pcw - second_expr$pcw[i]))], '-', second_expr$pcw[i])
+      }
+      pairs <- list(first_matches, second_matches)
+      if(length(first_matches) == length(second_matches)){
+        pcw_pairs <- first_matches
+        to_append <- second_matches
+      } else{
+        pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
+        to_append <- pairs[[which.min(c(length(first_matches), length(second_matches)))]]
+      }
+      pcw_pairs <- union(pcw_pairs, to_append)
+      # for (i in 1:length(to_append)){
+      #   if (is.na(match(to_append[i], pcw_pairs))){
+      #     pcw_pairs <- append(pcw_pairs,to_append[i])
+      #   }
+      # }
+      unsorted_pcws <- length(pcw_pairs)
+      # sort matches to ascending weeks order
+      for (i in 1:length(pcw_pairs)){
+        unsorted_pcws[i] <- strtoi(str_split(pcw_pairs, '-')[[i]][1])
+      }
+      sorted_pairs <- pcw_pairs[order(unsorted_pcws)]
+      
+      new_first_expr <- vector(mode = "numeric", length = length(sorted_pairs))
+      new_second_expr <- vector(mode = "numeric",length = length(sorted_pairs))
+      
+      names(new_first_expr) <- sorted_pairs
+      names(new_second_expr) <- sorted_pairs
+      
+      for(k in 1:length(new_first_expr)){
+        first_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][1])
+        second_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][2])
+        first_pcw_match <- which(first_expr$pcw == first_pcw)
+        second_pcw_match <- which(second_expr$pcw == second_pcw)
+        new_first_expr[k] <- first_expr$expr[first_pcw_match]
+        new_second_expr[k] <- second_expr$expr[second_pcw_match]
+      }
+      result = cor(new_first_expr, new_second_expr)
+    }
+    result
+  }
+
+rownames(iagc_time_sim_mat_high) <- unique_pairs_high
+colnames(iagc_time_sim_mat_high) <- unique_pairs_high
+
+proc.time() - ptm
+
+write.csv(iagc_time_sim_mat_high, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat_high.csv"))
+
+hc_time_high <- hclust(as.dist(1-(iagc_time_sim_mat_high+1)/2), "ave")
+plot(hc_time_high,labels=FALSE, main = "metaclusters for iagc_time high resolution (cutoff = 0.2)")
+rect.hclust(hc_time_high, h=0.2)
+
+mcl_time_modest <- cutree(hc_time_modest, h=0.2)
+
+# for each metacluster, get the union of all genes across all clusters in a given metacluster, 
+mcl_time_modest_genes <- vector("list", max(mcl_time_modest))
+names(mcl_time_modest_genes) <- paste0('metacluster',1:max(mcl_time_modest))
+
+for (i in 1:max(mcl_time_modest)){
+  names <- str_split(names(which(mcl_time_modest == i)), '--')
+  mcl_genes <- NULL
+  for (j in 1:length(names)){
+    mcl_genes = union(mcl_genes,gene_lists[[names[[j]][1]]][[names[[j]][2]]][[names[[j]][3]]])
+  }
+  mcl_time_modest_genes[[i]] <- mcl_genes
+}
+
+# then for each gene in the union count how many of the tissues that gene is in in one of the clusters that belongs to the metacluster - this might be better than the jaccard stat because we can then identify which genes are in most tissues in the same metacluster and which are more unique to a particular tissue.
+
 ```
 
 
 ```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
-iagc_gs_sim_mat <- matrix(nrow = length(unique_pairs), ncol = length(unique_pairs), dimnames = list(unique_pairs, unique_pairs))
-
 #define Jaccard Similarity function
-jaccard <- function(a, b) {
-    intersection = length(intersect(a, b))
-    union = length(a) + length(b) - intersection
-    return (intersection/union)
-}
-iagc_gs_sim_mat_modest <- foreach(i = 1:length(unique_pairs_modest), .combine = 'rbind') %:%
-  foreach(j = 1:length(unique_pairs_modest), .combine = 'c') %dopar% {
-    first <- str_split(unique_pairs_modest[i], '--')[[1]]
+# jaccard <- function(a, b) {
+#     intersection = length(intersect(a, b))
+#     union = length(a) + length(b) - intersection
+#     return (intersection/union)
+# }
+
+iagc_gs_sim_mat_modest <- foreach(i = 1:length(unique_pairs_modest), .combine = 'rbind') %dopar% {
+  first <- str_split(unique_pairs_modest[i], '--')[[1]]
+  jaccard_vector <- vector(mode = 'numeric', length = length(unique_pairs_modest))
+  for(j in 1:length(unique_pairs_modest)){ 
     second <- str_split(unique_pairs_modest[j], '--')[[1]]
-    jaccard(gene_lists[[first[1]]][[first[2]]][[first[3]]],gene_lists[[second[1]]][[second[2]]][[second[3]]])
+    if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
+      result = 0
+    } else{
+      a <- gene_lists[[first[1]]][[first[2]]][[first[3]]]
+      b <- gene_lists[[second[1]]][[second[2]]][[second[3]]]
+      result = length(intersect(a,b))/length(union(a,b))
+    }
+    jaccard_vector[j] = result
   }
+  jaccard_vector
+}
+
+iagc_gs_sim_mat_high <- foreach(i = 1:length(unique_pairs_high), .combine = 'rbind') %dopar% {
+  first <- str_split(unique_pairs_high[i], '--')[[1]]
+  jaccard_vector <- vector(mode = 'numeric', length = length(unique_pairs_high))
+  for(j in 1:length(unique_pairs_high)){ 
+    second <- str_split(unique_pairs_high[j], '--')[[1]]
+    if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
+      result = 0
+    } else{
+      a <- gene_lists[[first[1]]][[first[2]]][[first[3]]]
+      b <- gene_lists[[second[1]]][[second[2]]][[second[3]]]
+      result = length(intersect(a,b))/length(union(a,b))
+    }
+    jaccard_vector[j] = result
+  }
+  jaccard_vector
+}
 
 rownames(iagc_gs_sim_mat_modest) <- unique_pairs_modest
 colnames(iagc_gs_sim_mat_modest) <- unique_pairs_modest
 
-write.csv(iagc_gs_sim_mat, paste0(dirs$table_cluster_analysis, date, "_iagc_gs_sim_mat.csv"))
+rownames(iagc_gs_sim_mat_high) <- unique_pairs_high
+colnames(iagc_gs_sim_mat_high) <- unique_pairs_high
+
+write.csv(iagc_gs_sim_mat_high, paste0(dirs$table_cluster_analysis, date, "_iagc_gs_sim_mat_high.csv"))
+write.csv(iagc_gs_sim_mat_modest, paste0(dirs$table_cluster_analysis, date, "_iagc_gs_sim_mat_modest.csv"))
+
+hc_gs_modest <- hclust(as.dist(1-iagc_gs_sim_mat_modest), "ave")
+plot(hc_gs_modest,labels=FALSE, main = "metaclusters for iagc_gs modest resolution (cutoff = 0.4)")
+rect.hclust(hc_gs_modest, h=0.2)
+
+hc_gs_high <- hclust(as.dist(1-iagc_gs_sim_mat_high), "ave")
+plot(hc_gs_high,labels=FALSE, main = "metaclusters for iagc_gs high resolution (cutoff = 0.2)")
+rect.hclust(hc_gs_high, h=0.2)
 ```
 
 
