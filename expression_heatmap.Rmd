@@ -24,8 +24,9 @@ coldata <- dataset_list$ENCODE_GTEX_COMB$coldata
 
 num_features <- nrow(mat)
 
-which_cols <- which( as.numeric(str_extract(coldata$age_group, "^[0-9]+")) >= 300 |
-                       is.na(str_extract(coldata$age_group, "^[0-9]+")))
+which_cols <- onto$ehh[[which(onto$name=="anatomical entity")]]
+# which_cols <- which( as.numeric(str_extract(coldata$age_group, "^[0-9]+")) >= 300 |
+#                        is.na(str_extract(coldata$age_group, "^[0-9]+")))
 
 temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] )
 temp_mat <- mat[,temp_which_cols,drop=F]
@@ -72,10 +73,14 @@ spec_genes <- names(global_taus)
 
 #spec_biosamples <- list()
 #for(g in spec_genes){
+write("",files$temp_log)
 spec_gene_blocks <- split(spec_genes, ceiling(seq_along(spec_genes) / (length(spec_genes) /getDoParWorkers() )))
 spec_biosamples_list <- foreach(spec_gene_block=spec_gene_blocks) %dopar% {
   spec_biosamples <- list()
+  temp_index <- 0
   for(g in spec_gene_block){
+    temp_index <- temp_index+1
+    if(temp_index %% 50 == 1){write(paste0(temp_index,"::",g),file = files$temp_log,append = TRUE)}
     spec_biosamples[[g]] <- list(colnames = colnames(weighted_zscores[g, which(weighted_zscores[g,] > 2),drop=F]))
     spec_biosamples[[g]]$colids_spec <- which( is.element(coldata$colname, spec_biosamples[[g]]$colnames))
     spec_biosamples[[g]]$colids_not_spec <- which( is.element(coldata$colname, colnames(temp_mat) ))
@@ -109,24 +114,27 @@ spec_biosamples_list <- foreach(spec_gene_block=spec_gene_blocks) %dopar% {
   spec_biosamples
 }
 
+View(spec_biosamples_list)
+
+
 save.image()
 
-sink(file=paste0(dirs$results,"spec_biosamples_allgenes.txt"))
-for(i in 1:length(spec_biosamples)){
-  print(paste0(i,":",names(spec_biosamples)[i]))
-  print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
-  print("number of columns specific:")
-  print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
-  print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
-sink()
+# sink(file=paste0(dirs$results,"spec_biosamples_allgenes.txt"))
+# for(i in 1:length(spec_biosamples)){
+#   print(paste0(i,":",names(spec_biosamples)[i]))
+#   print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
+#   print("number of columns specific:")
+#   print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
+#   print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
+# sink()
 
 
-
+write("",files$temp_log)
 ### Criteria : if ancestor col stats == descendant col stats, keep descendant cut ancestor.
 ### Criteria : Most (> 50%) observed children significant and specific, else cut and reform branches.
 spec_biosamples_list <- foreach(spec_biosamples=spec_biosamples_list) %dopar% {
   for(i in 1:length(spec_biosamples)){
-    
+    if(i %% 50 == 1){write(paste0(i,"of",length(spec_biosamples)),file = files$temp_log,append = TRUE)}
     
     uberon_subtable <- spec_biosamples[[i]]$uberon_subtable
     if(nrow(uberon_subtable)==0){
@@ -196,6 +204,14 @@ spec_biosamples_list <- foreach(spec_biosamples=spec_biosamples_list) %dopar% {
   }
   spec_biosamples
 }
+save.image()
+
+temp <- list()
+for(i in 1:length(spec_biosamples_list)){
+  temp <- c(temp, spec_biosamples_list[[i]])
+}
+spec_biosamples_list <- temp
+rm(temp)
 
 sink(file=paste0(dirs$results,"spec_biosamples_subset_concepts_allgenes.txt"))
 for(i in 1:length(spec_biosamples)){
