@@ -124,6 +124,72 @@ for(i in 1:length(spec_biosamples_list)){
 onto$spec_expr_IC <- -log10( sapply(onto$genes_w_spec_expr_in_any,length) / length(spec_biosamples_list) ) 
 ```
 
+```{r, add visibility score to onto}
+
+## if leaf node
+## visibility = 1 / (1+exp(1)^(num_cols - num_cols_midvis))
+## else
+## visibility = sum()
+
+add_visibility_score <- function(onto,descendant_relations=c(),
+                                 mid_vis_col_count=3,data_col_name="num_ehh_cols"){
+  onto$visibility_score <- rep(NA,length(onto$id))
+  avs_helper_func <- function(onto,id,visited_ids=c(),
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name){
+    which <- which(onto$id == id)
+    relation_table <- onto$relations[[which]]
+    
+    child_ids <- c(onto$children[[which]],
+                        relation_table$id[is.element(relation_table$relation,
+                                                     descendant_relations)])
+    child_ids <- unique(child_ids)
+    ## below line should not be needed if onto + transitive does not include loops
+    child_ids <- child_ids[!is.element(child_ids,visited_ids)]
+    if(length(child_ids)==0){
+      if(onto[[data_col_name]][which]==0){
+        onto$visibility_score[which] <- 0
+      } else{
+        onto$visibility_score[which] <- 1/(1+exp(-onto[[data_col_name]][which]+mid_vis_col_count))
+      }
+      
+      return(onto)
+    }
+    child_vis <- onto$visibility_score[match(child_ids,onto$id)]
+    for(i in 1:length(child_ids)){
+      if(is.na(child_vis[i])){
+        visited_ids <- unique(c(visited_ids,child_ids[i], id))
+        onto <- avs_helper_func(onto=onto,id=child_ids[i],visited_ids=visited_ids,
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name)
+        child_vis[i] <- onto$visibility_score[which(onto$id==child_ids[i])]
+      }
+    }
+    if(onto[[data_col_name]][which]==0){
+        onto$visibility_score[which] <- 0
+    } else{
+      onto$visibility_score[which] <- ((1/(1+exp(-onto[[data_col_name]][which]+mid_vis_col_count)))+
+      sum(child_vis)) / (length(child_vis)+1)
+    }
+    
+    return(onto)
+  }
+  for(i in 1:length(onto$id)){
+    if(i %% 100 == 0){print(i)}
+    if(!is.na(onto$visibility_score[i])){next}
+    onto <- avs_helper_func(onto=onto,id=onto$id[i],
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name)
+  }
+}
+onto <- add_visibility_score(onto,
+                             descendant_relations = c("has_part(SUPP_INV(part_of))"))
+
+```
+
 
 ```{r, gene centric}
 #..# define IC for phenotype and expression pIC and eIC
@@ -141,7 +207,7 @@ onto$expr_phen_pminIC <- pmin(onto$phen_IC, onto$spec_expr_IC)
 ###### for each sEAC get nearest aPAC, naPAC
 ###### get common ancestor of noPAC and naPAC, pCA 
 ######## record: IC(pCA)/IC(noPAC) * IC(pCA)/IC(naPAC): as measure of phen-expr similarity.
-
+verbose_output <- TRUE
 gs <- gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers
 gs <- names(spec_biosamples)
 for(i in 1:length(gs)){
@@ -218,13 +284,51 @@ for(i in 1:length(gs)){
       temp_pacs_df$expr_noe_name[j] <- onto$name[which_n_opac_per_ca[which_sub]]
       temp_pacs_df$score[j] <- max((onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_eac_per_ca])
                                    * (onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_opac_per_ca]))
+      
+      ## CA: onto$name[which]
+      ## phen node: onto$name[which_n_opac_per_ca[which_sub]]
+      ## expr node: onto$name[which_n_eac_per_ca[which_sub]]
+      
+      ## for each pair of expr and phen in temp_pacs_df - get path and calc penalty
+      ## phen to ca (onto$id[which])
+      pac_w_anc
+      onto$descendants[[which]] ## intersect pac_w_anc and onto$descendants[[which]] includes nodes from all paths - may be > 1..
+      temp_path_des_to_anc <- function(onto, desc, anc_branch, ascendant_relations, visited_set=c()){
+        visited_set <- unique(c(visited_set,desc))
+        parent_set <- onto$parents[[which(onto$id==desc)]]
+        relation_table <- onto$relations[[which(onto$id==desc)]]
+        parent_set <- unique(c(parent_set, 
+                               relation_table$id[is.element(relation_table$relation, ascendant_relations)]))
+        parent_set <- parent_set[is.element(parent_set, anc_branch)]
+        parent_set <- parent_set[!is.element(parent_set, visited_set)]
+        visited_set <- unique(c(visited_set,parent_set))
+        if(length(parent_set)==0){return(desc)}
+        parent_paths <- list()
+        for(parent in parent_set){
+          parent_paths[[parent]] <- temp_path_des_to_anc(onto=onto,
+                                             desc=parent,
+                                             anc_branch = anc_branch,
+                                             ascendant_relations = ascendant_relations,
+                                             visited_set=visited_set)
+          parent_paths[[parent]] <- paste(desc, parent_paths[[parent]],sep=",")
+        }
+        ## apply(merge(temp1,temp2),1,paste0,collapse=",")
+        return(unique(unlist(parent_paths)))
+      }
+      
     }
+    temp_paths <- temp_path_des_to_anc(onto=onto,
+                                       desc=pacs[j],
+                                       anc_branch = c(onto$id[which],onto$descendants[[which]]),
+                                       ascendant_relations = "part_of")
     ## next identify nearest observable expression node for each pac
+    
     
     
     
   }
   spec_biosamples[[gs[i]]]$uberon_phen_expr_intersect <- temp_pacs_df
+  
   ### for each pac and eac record IC of nearest observable node to above node.
   
   
@@ -239,7 +343,6 @@ for(i in 1:length(spec_biosamples)){
 }
 
 temp <- unlist(sapply(spec_biosamples, function(x){if(!is.null(x$mean_ub_phen_expr_intersect)){return(x$mean_ub_phen_expr_intersect)}}))
-
 ```
 
 
