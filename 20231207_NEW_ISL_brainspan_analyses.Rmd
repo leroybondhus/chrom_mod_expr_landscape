@@ -343,15 +343,15 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
     row.names(struct_matrix) <- rows_meta$ensembl_gene_id
     sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),]
     
-    # mean (normalized to [0-1])  expression per time point for each gene (need dataframe format to access row names when creating gene lists)
-    normalized_expr_matrix <- t(apply(sub_matrix, 1, rescale)) # normalizes by row (gene)
+    # mean (normalized to [0-1])  expression per time point for each gene (need dataframe format to access row names when creating gene lists) - normalize to max expression instead (divide by max)
+    normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
     all_genes_significant <- row.names(normalized_expr_matrix)
     
     chrom_mod_normalized_expr <- na.omit(normalized_expr_matrix[match(rows_meta$ensembl_gene_id[matched_modifiers], row.names(normalized_expr_matrix)),])
     
     if(nrow(chrom_mod_normalized_expr) > 2){
         # get list of genes that filtered out b/c low variation in expression
-      cluster0 <- rows_meta[strtoi(row.names(struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)<=0.5),])),] ## NEED TO FIX BC ALL NA RIGHT NOW
+      cluster0 <- row.names(struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)<=0.5),]) 
       # cluster 0 denotes the genes that are filtered out for insignificant change in expression over time
       write.csv(cluster0, paste0(dirs$table_cluster_analysis, date, "_", struct, "_cluster0.csv"))
       
@@ -439,11 +439,29 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       select_modest_hcl_df <- modest_hcl_df[which(modest_hcl_df$freq >= 2),] # filter out clusters with 1 gene
       
       # STEP 6: facet plots for mean cluster expression over time for each cutoff
+      
+      ### NON-LOG TIME
+      # ggplot(select_high_hcl_df, aes(x = pcw, y = expr)) +
+      #   geom_point() + geom_line() +
+      #   facet_wrap(~group_name) +
+      #   theme(legend.position = "none", strip.text = element_text(size = 5)) +
+      #   ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) +
+      #   labs(x = "pcw", y = "normalized expr") +
+      #   geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") +           geom_vline(xintercept = 52*10, color = "red")
+      
+      ### ONLY DEVELOPMENTAL TIME
+      # ggplot(subset(select_high_hcl_df, pcw < 40), aes(x = pcw, y = expr)) +
+      #   geom_point() + geom_line() +
+      #   facet_wrap(~group_name) +
+      #   theme(legend.position = "none", strip.text = element_text(size = 5)) +
+      #   ggtitle(paste0(struct, " gene expression over developmental time for each cluster (cutoff = 0.2)")) +
+      #   labs(x = "pcw", y = "normalized expr") 
+      
       gg_high <- ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
             geom_point() + geom_line() +
             facet_wrap(~group_name) +
       theme(legend.position = "none", strip.text = element_text(size = 5)) +
-            ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.2)")) +
+            ggtitle(paste0(struct, " gene expression over log time for each cluster (cutoff = 0.2)")) +
             labs(x = "log10(pcw)", y = "normalized expr") +
            geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
       
@@ -453,7 +471,7 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
             geom_point() + geom_line() +
             facet_wrap(~group_name) +
       theme(legend.position = "none", strip.text = element_text(size = 5)) +
-            ggtitle(paste0(struct, " gene expression over time for each cluster (cutoff = 0.4)")) + 
+            ggtitle(paste0(struct, " gene expression over log time for each cluster (cutoff = 0.4)")) + 
             labs(x = "log10(pcw)", y = "normalized expr") + 
            geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
       
@@ -526,7 +544,7 @@ proc.time() - ptm
 ```{r, GO analysis setup}
 gene_universe <- rows_meta$ensembl_gene_id # all genes in brainspan
 
-ontologies <- c("ALL", "BP", "MF", "CC") # vector of ontology options
+# ontologies <- c("ALL", "BP", "MF", "CC") # vector of ontology options
 
 # FROM AILEEN ClusterProfiler - define function for custom aesthetics of enrichment result plots
 #grid and x-axis/y-axis labeled
@@ -564,7 +582,7 @@ custom_theme_2 <- function(base_size = 12, base_family = "") {
 ```
 
 ```{r}
-# flattened gene list
+# flattened gene list - NEED TO RERUN
 ptm <- proc.time()
 flat_gene_lists <- unlist(unlist(gene_lists, recursive = FALSE)[((1:length(unlist(gene_lists, recursive = FALSE))) %%3)!=0], recursive = FALSE)
 
@@ -697,10 +715,11 @@ write.csv(iagc_time_sim_mat_modest, paste0(dirs$table_cluster_analysis, date, "_
 
 hc_time_modest <- hclust(as.dist(1-(iagc_time_sim_mat_modest+1)/2), "ave")
 plot(hc_time_modest, main = "metaclusters for iagc_time modest resolution (cutoff = 0.4)", cex=0.25)
-rect.hclust(hc_time_modest, h=0.2, which = c(29,147))
+rect.hclust(hc_time_modest, h=0.4)
+# rect.hclust(hc_time_modest, h=0.2, which = c(29,147))
 # metacluster 2 = 29, metacluster 3 = 147
 
-mcl_time_modest <- cutree(hc_time_modest, h=0.2)
+mcl_time_modest <- cutree(hc_time_modest, h=0.4)
 
 # par(mar=c(6 + 5,4,4,2) + 0.1)
 # temp <- set(obj$lower[[29]], "labels_cex", 0.4)
@@ -731,8 +750,13 @@ mcl_time_modest_df$cluster <- sapply(str_split(rownames(mcl_time_modest_df), '--
 mcl_time_modest_gene_counts <- vector("list", max(mcl_time_modest))
 names(mcl_time_modest_gene_counts) <- paste0('metacluster',1:max(mcl_time_modest))
 
+# number of unique tissues per metacluster
+mcl_time_modest_tissues <- vector("numeric", max(mcl_time_modest))
+names(mcl_time_modest_tissues) <- paste0('metacluster',1:max(mcl_time_modest))
+
 for (i in 1:max(mcl_time_modest)){
   names <- str_split(names(which(mcl_time_modest == i)), '--')
+  mcl_time_modest_tissues[i] = length(unique(sapply(names,"[[",1)))
   mcl_genes <- NULL
   for (j in 1:length(names)){ # union of all genes across all clusters in a given metacluster
     mcl_genes = union(mcl_genes,gene_lists[[names[[j]][1]]][[names[[j]][2]]][[names[[j]][3]]])
@@ -752,14 +776,150 @@ for (i in 1:max(mcl_time_modest)){
   mcl_time_modest_gene_counts[[i]] <- gene_counts
 }
 
-count = 0
-for(i in 1:length(mcl_time_modest_gene_counts)){
-  print(max(mcl_time_modest_gene_counts[[i]]))
-  if (max(mcl_time_modest_gene_counts[[i]]) > 2){
-    count = count + 1
+write.csv(data.frame(mcl_time_modest_tissues), paste0(dirs$table_cluster_analysis, date, "_modest_unique_tissues_per_metacluster.csv"))
+
+# table 2. distribution of unique tissue count per gene
+mcl_time_modest_gene_dist <- vector("list", max(mcl_time_modest))
+names(mcl_time_modest_gene_dist) <- paste0('metacluster',1:max(mcl_time_modest))
+for(i in 1:length(mcl_time_modest_gene_counts)){mcl_time_modest_gene_dist[[i]] = as.vector(table(mcl_time_modest_gene_counts[[i]]), mode = "list")}
+
+mcl_time_modest_gene_dist_df <- melt(mcl_time_modest_gene_dist)
+colnames(mcl_time_modest_gene_dist_df)[1] = "gene_count"
+colnames(mcl_time_modest_gene_dist_df)[2] = "tissue_frequency"
+colnames(mcl_time_modest_gene_dist_df)[3] = "metacluster"
+col_order <- c('metacluster', 'tissue_frequency', 'gene_count')
+mcl_time_modest_gene_dist_df <- mcl_time_modest_gene_dist_df[,col_order]
+# add number of unique tissues to data frame
+mcl_time_modest_gene_dist_df$unique_tissues <- rep(mcl_time_modest_tissues,times=table(as.numeric(str_extract(mcl_time_modest_gene_dist_df$metacluster, "[0-9]+"))))
+
+write.csv(mcl_time_modest_gene_dist_df, paste0(dirs$table_cluster_analysis, date, "_unique_tissue_count_per_gene.csv"))
+
+# directory for all metaclusters
+mcl_dirs <- paste0(unique(mcl_time_modest_gene_dist_df$metacluster))
+for(dir in mcl_dirs){
+  if(!dir.exists(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', dir,'/')))
+    {dir.create(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', dir,'/'))}
+};rm(dir)
+
+# on left plot metacluster average temporal pattern (similar to cluster time plots)
+# need to find unique time points across all gene clusters
+# can change to in parallel for each metacluster
+all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
+# all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .errorhandling = 'pass') %dopar% {
+# for (n in 1:length(mcl_dirs)){
+  clusters <- str_split(rownames(mcl_time_modest_df[which(mcl_time_modest_df$metacluster == n),]),'--')
+  gene_expr_df <- foreach(i = 1:length(clusters), .combine = rbind) %dopar% {
+    expr <- gene_lists[[clusters[[i]][1]]][["expr_df"]][grep(paste0("cluster:",str_split(clusters[[i]][3], 'r')[[1]][2],','), gene_lists[[clusters[[i]][1]]][["expr_df"]][["group_name"]]),]
+    expr$structure <- clusters[[i]][1]
+    expr
   }
+  
+  # get unique list of time points
+  timepoints <- sort(unique(gene_expr_df$pcw))
+  
+  # impute time points for missing data
+  new_gene_expr_df <- foreach(i = 1:length(clusters), .combine = cbind) %dopar% {
+    expr_df <- gene_lists[[clusters[[i]][1]]][["expr_df"]][grep(paste0("cluster:",str_split(clusters[[i]][3], 'r')[[1]][2],','), gene_lists[[clusters[[i]][1]]][["expr_df"]][["group_name"]]),]
+    expr_df$structure <- clusters[[i]][1]
+    new_expr <- vector('numeric', length(timepoints))
+    names(new_expr) <- timepoints
+    for(j in 1:length(new_expr)){
+      if (length(which(expr_df$pcw == timepoints[j]))>0){
+        new_expr[j] <- expr_df$expr[which(expr_df$pcw == timepoints[j])]
+      }
+      else{
+        new_expr[j] <- NA
+      }
+    }
+    filled_expr <- new_expr
+    names(filled_expr) <- timepoints
+    # fill in NA values with average of nearest non-NA data points
+    for (k in 1:length(new_expr)){
+      if (is.na(new_expr[k])){
+        if (all(is.na(new_expr[1:k]))){ # no non-NA value to the left
+          filled_expr[k] <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
+        }
+        else if (all(is.na(new_expr[k:length(new_expr)]))){ # no non-NA value to the right
+          filled_expr[k] <- new_expr[max(which(!is.na(new_expr[1:k])))]
+        }
+        else{ # average of nearest right/left non-NA values
+          filled_expr[k] = (new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1] + new_expr[max(which(!is.na(new_expr[1:k])))])/2 
+        }
+      }
+    }
+    filled_expr
+    }
+  
+  # average expression of metacluster is average of columns
+  if (is.null(ncol(new_gene_expr_df))){ # only 1 cluster
+    mcl_avg_expr <- new_gene_expr_df
+  }else{
+    mcl_avg_expr <- rowMeans(new_gene_expr_df)
+  }
+  
+  mcl_avg_expr_df <- data.frame(pcw = strtoi(names(mcl_avg_expr)), expr = mcl_avg_expr)
+  mcl_avg_expr_df$metacluster <- mcl_dirs[n]
+  
+  log_mcl_expr <- ggplot(mcl_avg_expr_df, aes(x = log10(pcw), y = expr)) +
+              geom_point() + geom_line() +
+              ggtitle(paste0(mcl_dirs[n],' average log expression over time')) + 
+              labs(x = "log10(pcw)", y = "average expr") + 
+             geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+  
+  mcl_expr <- ggplot(mcl_avg_expr_df, aes(x = pcw, y = expr)) +
+              geom_point() + geom_line() +
+              ggtitle(paste0(mcl_dirs[n],' average expression over time')) + 
+              labs(x = "pcw", y = "average expr") + 
+             geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
+        
+  ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_expression_over_time.png'), plot = mcl_expr, width = 10, height = 8)
+  ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_log_expression_over_time.png'), plot = log_mcl_expr, width = 10, height = 8)
+  
+  mcl_avg_expr_df # object to save
 }
-print(count)
+
+all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~metacluster) +
+      theme(legend.position = "none") +
+            ggtitle('metacluster average log expression over time') + 
+            labs(x = "log10(pcw)", y = "normalized expr") + 
+           geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+
+ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_expression_over_time.png'), plot = all_mcl_expr_plot, width = 10, height = 8)
+
+# plot only developmental time
+develop_mcl_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~metacluster) +
+      theme(legend.position = "none") +
+            ggtitle('metacluster average log expression over developmental time') + 
+            labs(x = "log10(pcw)", y = "normalized expr") + 
+           geom_vline(xintercept = log10(40), color = "red")
+
+ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_expression_over_developmental_time.png'), plot = develop_mcl_expr_plot, width = 10, height = 8)
+
+# on right plot histogram of genes by number of tissues they belong
+# for (i in 1:length(mcl_dirs)){
+all_mcl_gene_tissue_freq <- foreach(i = 1:length(mcl_dirs), .combine = rbind) %dopar% {
+  df <- as.data.frame(as.numeric(rep(mcl_time_modest_gene_dist_df[which(mcl_time_modest_gene_dist_df$metacluster==mcl_dirs[i]),2],mcl_time_modest_gene_dist_df[which(mcl_time_modest_gene_dist_df$metacluster==mcl_dirs[i]),3])))
+  colnames(df) <- c('freq')
+  df2 <- rbind(df,data.frame(freq = unique(df$freq)))
+  df2$metacluster <- mcl_dirs[i]
+  hist <- ggplot(df2, aes(x=freq)) + geom_histogram(bins=50)+scale_y_log10(breaks = trans_breaks("log10", function(x) 10^(x+1)),labels = trans_format("log10", math_format(10^.x))) + ggtitle(paste0(mcl_dirs[i], " histogram of genes based on tissue membership frequency")) + labs(x = "tissue frequency", y = "count")
+  ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_gene_tissue_freq_hist.png'), plot = hist, width = 10, height = 8) 
+  df2 # object to save
+}
+
+ggplot(all_mcl_gene_tissue_freq, aes(x=freq)) + geom_histogram(bins=50)+scale_y_log10(breaks = trans_breaks("log10", function(x) 10^(x+1)),labels = trans_format("log10", math_format(10^.x))) +
+facet_wrap(~metacluster) + 
+  ggtitle("metacluster histogram of genes based on tissue membership frequency") + 
+  labs(x = "tissue frequency", y = "count")
+
+# summary of gene count - genes in each cluster, genes in each metacluster
+
+
+# run GO analysis on genes belonging to at least 3-4 tissues
 
 ```
 
@@ -843,7 +1003,7 @@ rect.hclust(hc_time_high, h=0.2)
 ```
 
 
-```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
+```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix - SKIP B/C BAD RESULTS}
 #define Jaccard Similarity function
 # jaccard <- function(a, b) {
 #     intersection = length(intersect(a, b))
