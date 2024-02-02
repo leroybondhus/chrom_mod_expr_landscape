@@ -1,0 +1,48 @@
+---
+title: "expr_sc_data_setup"
+author: "Leroy Bondhus"
+date: "2024-02-01"
+output: html_document
+---
+
+
+```{r}
+#devtools::install_github("stemangiola/CuratedAtlasQueryR")
+library(CuratedAtlasQueryR)
+```
+
+
+```{r}
+metadata <- get_metadata()
+
+sc_metadata_df <- as.data.frame(metadata |>  dplyr::distinct(cell_type,cell_type_ontology_term_id,
+                                                             tissue,tissue_ontology_term_id,
+                                                             development_stage,disease,organism))
+sc_metadata_df <- sc_metadata_df[which(sc_metadata_df$disease=="normal" &
+                                         sc_metadata_df$organism=="Homo sapiens"),]
+
+temp <- as.data.frame(metadata |> dplyr::filter(
+  stringr::str_like(assay,"%10x%") &
+  disease=="normal" &
+  organism=="Homo sapiens" &
+    confidence_class==1 &
+    cell_type=="B cell")) 
+# mean_genes_per_cell > 1e4
+# sample up to 10 from - temp$sample_ - each unique 
+
+
+i=460
+cell_types <- unique(sc_metadata_df$cell_type)
+single_cell_counts <-  metadata |> dplyr::filter(
+  stringr::str_like(assay,"%10x%") &
+  disease=="normal" &
+  organism=="Homo sapiens" &
+  confidence_class==1 &
+  cell_type==!!cell_types[i]) |> get_single_cell_experiment(assays = "cpm") ### dplyr requires the "!!" to evaluate this first or something... 
+
+
+View(data.frame(means=rowMeans(as.matrix(SingleCellExperiment::cpm(single_cell_counts)))))
+sum(single_cell_counts@colData$mean_genes_per_cell)
+```
+
+

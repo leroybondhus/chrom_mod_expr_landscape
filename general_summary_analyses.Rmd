@@ -25,24 +25,24 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 }
 
 ggl <- list()
-ggl[["all_density"]] <- ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(gene_length)))+
+ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(gene_length), color=chrom_subset_name))+
   coord_cartesian(xlim = c(2, 6.5))+
   geom_density(alpha=0.5)+
   barcode_theme+
   theme(axis.title.x = element_blank())
 
-ggl[["barcodes"]] <- ggplot(df, aes(x=log10(gene_length),xend=log10(gene_length), y=0,yend=1))+
+ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name,invert=T),], aes(x=log10(gene_length),xend=log10(gene_length), y=0,yend=1))+
   geom_segment(alpha=0.5)+
   coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
   barcode_theme+
   facet_grid(chrom_subset_name ~ . )+
   theme(strip.text.y = element_text(angle = 0))
   
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(3,8))
 ggl$composite
 
 filename <- paste0(dirs$figures, "gene_size__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite)
+save_plot(filename = filename, ggl$composite, base_height = 6, base_asp = 1.2)
 ```
 
 ```{r, transcript length barcode plot, pretty}
@@ -66,24 +66,24 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
 }
 
 ggl <- list()
-ggl[["all_density"]] <- ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(transcript_length)))+
+ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(transcript_length),color=chrom_subset_name))+
   coord_cartesian(xlim = c(2, 6.5))+
   geom_density(alpha=0.5)+
   barcode_theme+
   theme(axis.title.x = element_blank())
 
-ggl[["barcodes"]] <- ggplot(df, aes(x=log10(transcript_length),xend=log10(transcript_length), y=0,yend=1))+
+ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name,invert=T),], aes(x=log10(transcript_length),xend=log10(transcript_length), y=0,yend=1))+
   geom_segment(alpha=0.5)+
   coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
   barcode_theme+
   facet_grid(chrom_subset_name ~ . )+
   theme(strip.text.y = element_text(angle = 0))
   
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(3,8))
 ggl$composite
 
 filename <- paste0(dirs$figures, "transcript_size__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite)
+save_plot(filename = filename, ggl$composite,base_height = 6, base_asp = 1.2)
 ```
 
 ```{r, first and last exon v all exons, pretty}
@@ -131,14 +131,17 @@ df$first_last_single_middle[which(df$exon_count==1)] <- "single"
 df$first_last_single_middle[which(df$is_first)] <- "first"
 df$first_last_single_middle[which(df$is_last)] <- "last"
 
-ggl[["all_density"]] <- ggplot(df[grep("^all_",df$chrom_subset_name),], aes(x=log10(exon_length), color=first_last_single_middle))+
+ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(exon_length),
+                                                                                     color=first_last_single_middle,
+                                                                                     linetype=chrom_subset_name))+
   coord_cartesian(xlim = c(0, 5.5))+
   geom_density(alpha=0.5)+
   barcode_theme+
-  theme(axis.title.x = element_blank())
+  theme(axis.title.x = element_blank())+
+  facet_grid(first_last_single_middle ~  .)
 table(df$first_last_single_middle)
 
-ggl[["barcodes"]] <- ggplot(df, aes(x=log10(exon_length),xend=log10(exon_length),
+ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name, invert=T),], aes(x=log10(exon_length),xend=log10(exon_length),
                y=0.25*as.numeric(as.factor(first_last_single_middle)),
                yend=0.25*as.numeric(as.factor(first_last_single_middle))+0.25,
                color=first_last_single_middle))+
@@ -148,11 +151,20 @@ ggl[["barcodes"]] <- ggplot(df, aes(x=log10(exon_length),xend=log10(exon_length)
   facet_grid(chrom_subset_name ~ . )+
   theme(strip.text.y = element_text(angle = 0))
   
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(2,8))
+ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(6,8))
 ggl$composite
 
 filename <- paste0(dirs$figures, "exon_size__group_by_fmls__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite)
+save_plot(filename = filename, ggl$composite, base_height = 6, base_asp = 1.2)
+
+
+# ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(exon_length), color=chrom_subset_name))+
+#   coord_cartesian(xlim = c(0, 5.5))+
+#   geom_density(alpha=0.5)+
+#   barcode_theme+
+#   theme(axis.title.x = element_blank())+
+#   facet_grid(first_last_single_middle ~ . )
+# table(df$first_last_single_middle)
 ```
 
 
