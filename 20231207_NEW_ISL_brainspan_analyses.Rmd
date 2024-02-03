@@ -49,6 +49,9 @@ library(clusterProfiler) #enrichment testing
 library(org.Hs.eg.db) #genomewide annotation for humans
 library(enrichplot) #plot enrichment results
 library(ggnewscale)
+# library(DOSE) # for GO visualization - need enrichplot
+
+# BiocManager::install("DOSE") # for GO visualization
 ```
 
 ```{r, load in brainspan files}
@@ -522,13 +525,13 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       all_gene_lists_modest <- vector("list", n_clusters_modest)
       names(all_gene_lists_modest) <- modest_cluster_names
       for(i in 1:n_clusters_modest){
-        all_gene_lists_modest[[i]] = significant_genes[which(struct_modest_cluster_assignment == modest_cluster_names[i])]
+        all_gene_lists_modest[[i]] = all_genes_significant[which(struct_modest_cluster_assignment == modest_cluster_names[i])]
       }
       
       all_gene_lists_high <- vector("list", n_clusters_high)
       names(all_gene_lists_high) <- high_cluster_names
       for(i in 1:n_clusters_high){
-        all_gene_lists_high[[i]] = significant_genes[which(struct_high_cluster_assignment == high_cluster_names[i])]
+        all_gene_lists_high[[i]] = all_genes_significant[which(struct_high_cluster_assignment == high_cluster_names[i])]
       }
       expr_dfs <- rbind(high_hcl_df, modest_hcl_df)
       list(high_cutoff_0.2 = all_gene_lists_high, modest_cutoff_0.4 = all_gene_lists_modest, expr_df = expr_dfs)
@@ -754,6 +757,11 @@ names(mcl_time_modest_gene_counts) <- paste0('metacluster',1:max(mcl_time_modest
 mcl_time_modest_tissues <- vector("numeric", max(mcl_time_modest))
 names(mcl_time_modest_tissues) <- paste0('metacluster',1:max(mcl_time_modest))
 
+# for (j in 1:length(names)){ # union of all genes across all clusters in a given metacluster
+#     print(paste0("j = ", j))
+#     print(gene_lists[[names[[j]][1]]][[names[[j]][2]]][[names[[j]][3]]])
+# }
+
 for (i in 1:max(mcl_time_modest)){
   names <- str_split(names(which(mcl_time_modest == i)), '--')
   mcl_time_modest_tissues[i] = length(unique(sapply(names,"[[",1)))
@@ -772,7 +780,6 @@ for (i in 1:max(mcl_time_modest)){
     }
     gene_counts[[mcl_genes[k]]] <- count
   }
-
   mcl_time_modest_gene_counts[[i]] <- gene_counts
 }
 
@@ -781,7 +788,9 @@ write.csv(data.frame(mcl_time_modest_tissues), paste0(dirs$table_cluster_analysi
 # table 2. distribution of unique tissue count per gene
 mcl_time_modest_gene_dist <- vector("list", max(mcl_time_modest))
 names(mcl_time_modest_gene_dist) <- paste0('metacluster',1:max(mcl_time_modest))
-for(i in 1:length(mcl_time_modest_gene_counts)){mcl_time_modest_gene_dist[[i]] = as.vector(table(mcl_time_modest_gene_counts[[i]]), mode = "list")}
+for (i in 1:length(mcl_time_modest_gene_counts)){
+  mcl_time_modest_gene_dist[[i]] = as.vector(table(mcl_time_modest_gene_counts[[i]]), mode = "list")
+}
 
 mcl_time_modest_gene_dist_df <- melt(mcl_time_modest_gene_dist)
 colnames(mcl_time_modest_gene_dist_df)[1] = "gene_count"
@@ -878,7 +887,7 @@ all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
   mcl_avg_expr_df # object to save
 }
 
-all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
+all_mcl_log_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
             geom_point() + geom_line() +
             facet_wrap(~metacluster) +
       theme(legend.position = "none") +
@@ -886,16 +895,36 @@ all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
             labs(x = "log10(pcw)", y = "normalized expr") + 
            geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
 
+ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_log_expression_over_time.png'), plot = all_mcl_log_expr_plot, width = 10, height = 8)
+
+all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = pcw, y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~metacluster) +
+      theme(legend.position = "none") +
+            ggtitle('metacluster average expression over time') + 
+            labs(x = "pcw", y = "normalized expr") + 
+           geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
+
 ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_expression_over_time.png'), plot = all_mcl_expr_plot, width = 10, height = 8)
 
 # plot only developmental time
-develop_mcl_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
+develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
             geom_point() + geom_line() +
             facet_wrap(~metacluster) +
       theme(legend.position = "none") +
             ggtitle('metacluster average log expression over developmental time') + 
             labs(x = "log10(pcw)", y = "normalized expr") + 
            geom_vline(xintercept = log10(40), color = "red")
+
+ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_expression_over_log_developmental_time.png'), plot = develop_mcl_log_expr_plot, width = 10, height = 8)
+
+develop_mcl_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = pcw, y = expr)) +
+            geom_point() + geom_line() +
+            facet_wrap(~metacluster) +
+      theme(legend.position = "none") +
+            ggtitle('metacluster average expression over developmental time') + 
+            labs(x = "pcw", y = "normalized expr") + 
+           geom_vline(xintercept = 40, color = "red")
 
 ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_average_expression_over_developmental_time.png'), plot = develop_mcl_expr_plot, width = 10, height = 8)
 
@@ -911,16 +940,67 @@ all_mcl_gene_tissue_freq <- foreach(i = 1:length(mcl_dirs), .combine = rbind) %d
   df2 # object to save
 }
 
-ggplot(all_mcl_gene_tissue_freq, aes(x=freq)) + geom_histogram(bins=50)+scale_y_log10(breaks = trans_breaks("log10", function(x) 10^(x+1)),labels = trans_format("log10", math_format(10^.x))) +
+mcl_hist <- ggplot(all_mcl_gene_tissue_freq, aes(x=freq)) + geom_histogram(bins=50)+scale_y_log10(breaks = trans_breaks("log10", function(x) 10^(x+1)),labels = trans_format("log10", math_format(10^.x))) +
 facet_wrap(~metacluster) + 
   ggtitle("metacluster histogram of genes based on tissue membership frequency") + 
   labs(x = "tissue frequency", y = "count")
 
+ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', date, '_all_metaclusters_gene_tissue_freq_hist.png'), plot = mcl_hist, width = 10, height = 8) 
 # summary of gene count - genes in each cluster, genes in each metacluster
+```
 
 
-# run GO analysis on genes belonging to at least 3-4 tissues
+```{r,  inter-anatomic-gene-cluster-time-similarity-matrix - modest resolution}
+# run GO analysis on genes belonging to at least 3-5 tissues
+mcl_gene_list <- vector("list", length(mcl_dirs))
+names(mcl_gene_list) <- mcl_dirs
+for (i in 1:length(mcl_dirs)){
+  mcl_gene_list[[mcl_dirs[i]]] <- names(mcl_time_modest_gene_counts[[mcl_dirs[i]]][which(mcl_time_modest_gene_counts[[mcl_dirs[i]]]>=3)])
+}
+ptm <- proc.time()
+all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %dopar% {
+  if(length(mcl_gene_list[[i]])>0){
+      enrich_result <- enrichGO(gene = mcl_gene_list[[i]],
+                            universe = gene_universe,
+                            keyType = "ENSEMBL", 
+                            OrgDb = org.Hs.eg.db, 
+                            ont = ont, 
+                            pAdjustMethod = "BH", 
+                            qvalueCutoff = 0.05,
+                            readable = TRUE)
+    saved_enrich <- as.data.frame(enrich_result)
+    if (nrow(saved_enrich) > 0){
+      saved_enrich$Metacluster <- mcl_dirs[i]
+      
+      p_cnetplot <- cnetplot(enrich_result, showCategory = 5, layout = "kk", circular = FALSE,
+         color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
+         cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
+         title = paste("Enrichment Cnetplot -", mcl_dirs[[i]])) +
+              custom_theme_2() +
+              ggtitle(paste("Enrichment Cnetplot -", mcl_dirs[[i]]))
+      ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_cnetplot.png'), p_cnetplot, width = 15, height = 10, units = "in", bg = "white")
+      
+      term_sim_matrix <- pairwise_termsim(enrich_result)
+      p_emapplot <- emapplot(term_sim_matrix, showCategory = 15, layout = "kk", circular = FALSE,
+         color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
+         cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
+         title = paste("Enrichment emapplot -", mcl_dirs[[i]])) +
+              custom_theme_2() +
+              ggtitle(paste("Enrichment emapplot -", mcl_dirs[[i]]))
+      ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_emapplot.png'), p_emapplot, width = 15, height = 10, units = "in", bg = "white")
+      
+    } else{
+      saved_enrich$Metacluster <- character()
+    }
+  } else{
+    saved_enrich <- NULL
+  }
+  saved_enrich
+}
+proc.time() - ptm
+            
 
+write.csv(all_mcl_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_mcl_GO_results.csv"))
 ```
 
 
@@ -1003,7 +1083,7 @@ rect.hclust(hc_time_high, h=0.2)
 ```
 
 
-```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix - SKIP B/C BAD RESULTS}
+```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
 #define Jaccard Similarity function
 # jaccard <- function(a, b) {
 #     intersection = length(intersect(a, b))
