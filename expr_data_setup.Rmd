@@ -389,8 +389,9 @@ colnames(temp_mat) <- c(colnames(temp_gtex_mat),colnames(temp_encode_mat))
 all(colnames(temp_mat)==temp_coldata$colname)
 dataset_list$ENCODE_GTEX_COMB <- list(mat=temp_mat,
                                       coldata=temp_coldata)
-
-
+which_rm <- grep("mole|layer of hippocamp",dataset_list$ENCODE_GTEX_COMB$coldata$colname)
+dataset_list$ENCODE_GTEX_COMB$coldata <- dataset_list$ENCODE_GTEX_COMB$coldata[-which_rm,]  
+dataset_list$ENCODE_GTEX_COMB$mat <- dataset_list$ENCODE_GTEX_COMB$mat[,-which_rm]
 ```
 
 
@@ -524,7 +525,7 @@ names(temp_list) <- ontos$cl$ont$name[match(temp_cl_ids,ontos$cl$ont$id)]
 for(i in 1:length(temp_list)){temp_list[[i]]$name <- ontos$uberon$ont$name[match(temp_list[[i]]$id, ontos$uberon$ont$id)]}
 
 ###
-save.image("./setup_w_expr_dat.RData")
+save.image()
 ```
 
 
