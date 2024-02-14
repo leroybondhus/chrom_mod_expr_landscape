@@ -605,7 +605,6 @@ dev.off()
 
 
 
-
 which_R <- which(result_df$name=="immune system" & result_df$subsumed_by=="")+1
 which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="immune system")])
 
@@ -661,6 +660,7 @@ Heatmap(temp_mat4,
         column_names_gp = gpar(fontsize = 12),
         column_names_max_height = unit(6,"in") )
 dev.off()
+
 
 
 
@@ -754,5 +754,37 @@ dev.off()
 
 
 
+```{r}
+gene_sets$ubiq <-names(global_taus)[which(global_taus < 0.4)]
+gene_sets$ubiq_chrom <-names(global_taus)[which(global_taus < 0.4 & is.element(names(global_taus), 
+                    gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
 
+df <- data.frame(tau=global_taus,
+                 gene_id=names(global_taus),
+                 is_chrom=is.element(names(global_taus), gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+ggplot(df, aes(x=tau, color=is_chrom,fill=is_chrom))+
+  geom_density(alpha=0.2)
+
+ggplot(df, aes(x=tau))+
+  geom_histogram()+
+  facet_grid(is_chrom ~ . , scales="free_y")
+
+ggplot(df, aes(x=tau, color=is_chrom))+
+  geom_step(aes(y=..y..),stat="ecdf")
+
+
+## phenotype analysis of ubiquitous and the blocks of interest (immune, muscle, .. ) 
+### temp_onto_gene_map ## onto term to genes spec - get genes spec to onto or descendant - get phenotypes from omim map
+### matched gene set  to phenotype set
+### perform GO and phenotype analysis on gene sets. 
+
+temp_onto_names <- c("immune system", "nervous system", "intestine", "striated muscle tissue")
+gene_sets$spec_onto <- setNames(vector(mode="list",length=4),temp_onto_names)
+for(i in 1:length(gene_sets$spec_onto)){
+  temp_onto_id <- onto$id[match(names(gene_sets$spec_onto)[i], onto$name)]
+  temp_onto_ids <- c(temp_onto_id, onto$descendants[[which(onto$id==temp_onto_id)]])
+  gene_sets$spec_onto[[i]]  <- unique(temp_onto_gene_map$gene_id[is.element(temp_onto_gene_map$onto_id, temp_onto_ids)])
+}
+
+```
 

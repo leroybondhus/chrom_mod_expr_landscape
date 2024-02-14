@@ -1,0 +1,179 @@
+---
+title: "expr_sc_data_setup"
+author: "Leroy Bondhus"
+date: "2024-02-01"
+output: html_document
+---
+
+
+```{r}
+#devtools::install_github("stemangiola/CuratedAtlasQueryR")
+library(CuratedAtlasQueryR)
+# dirs$cache <- "./cache"
+# if(!dir.exists(dirs$cache)){dir.create(dirs$cache)}
+dirs$sc_temp_dir <- paste0(dirs$temp_data,"sc/")
+if(!dir.exists(dirs$sc_temp_dir)){dir.create(dirs$sc_temp_dir)}
+
+```
+
+
+```{r}
+metadata <- get_metadata()
+
+sc_metadata_df <- as.data.frame(metadata |>  dplyr::distinct(cell_type,cell_type_ontology_term_id,
+                                                             tissue,tissue_ontology_term_id,
+                                                             development_stage,disease,organism,
+                                                             assay))
+sc_metadata_df <- sc_metadata_df[which(sc_metadata_df$disease=="normal" &
+                                         sc_metadata_df$organism=="Homo sapiens" &
+                                         stringr::str_like(sc_metadata_df$assay, "%10x%")),]
+
+cell_types <- unique(sc_metadata_df$cell_type)
+processed_cell_types <- str_extract(list.files(dirs$sc_temp_dir),"CL_[0-9]*")
+cell_types <- cell_types[!is.element(sc_metadata_df$cell_type_ontology_term_id[match(cell_types, sc_metadata_df$cell_type)],
+                                     str_replace(processed_cell_types,"_",":" ))]
+#sc_full_list <- list()
+for(i in 1:length(cell_types)){
+  ## limited space so clean cache as we go
+  try(system(paste0("rm -r ",CuratedAtlasQueryR:::get_default_cache_dir(),"/*/original")))
+  try(system(paste0("rm -r ",CuratedAtlasQueryR:::get_default_cache_dir(),"/*/cpm")))
+  temp <- as.data.frame(metadata |> dplyr::filter(
+    stringr::str_like(assay,"%10x%") &
+    disease=="normal" &
+    organism=="Homo sapiens" &
+    confidence_class==1 &
+    cell_type==!!cell_types[i]
+      #cell_type=="B cell"
+    ))
+  
+  ## if N samples have at least M reads, sample n from those  
+  ## else 
+  min_reads <- 5e5
+  num_left_to_sample <- 5
+  to_extract <- c()
+  temp2 <- merge(dplyr::count(temp, dataset_id,mean_genes_per_cell, sample_, name="cells_per_sample"),
+                 dplyr::count(temp, dataset_id,mean_genes_per_cell, name="cells_per_dataset"))
+  temp2$reads_per_sample <- temp2$mean_genes_per_cell * temp2$cells_per_sample
+  temp2$reads_per_dataset <- temp2$mean_genes_per_cell * temp2$cells_per_dataset
+  temp2 <- temp2[which(temp2$reads_per_dataset > min_reads),]
+  
+  ## first get datasets with samples with sufficient sequencing depth
+  
+  valid_samples <- unique(temp2$sample_[which(temp2$reads_per_sample > min_reads)])
+  if(length(valid_samples) > 0){
+    sampled_samples <- sample(valid_samples,min(length(valid_samples),num_left_to_sample))
+    sampled_datasets <- unique(temp2$dataset_id[is.element(temp2$sample_, sampled_samples)])
+    attempt <- 1
+    single_cell_counts <- NULL
+    while( is.null(single_cell_counts) && attempt <= 3){
+      set.seed(attempt)
+      attempt <- attempt + 1
+      try(
+        single_cell_counts <-  metadata |> dplyr::filter(
+          stringr::str_like(assay,"%10x%") &
+            disease=="normal" &
+            organism=="Homo sapiens" &
+            confidence_class==1 &
+            cell_type==!!cell_types[i] &
+            dataset_id %in% sampled_datasets )  |>
+          get_single_cell_experiment(assays = c("counts")) #,"cpm") )
+        # https://stackoverflow.com/questions/20770497/how-to-retry-a-statement-on-error
+        # https://stackoverflow.com/questions/8217901/breaking-loop-when-warnings-appear-in-r
+      )
+    }
+    if(is.null(single_cell_counts)){
+      ## log sample as not downloaded
+      next
+    }
+    num_left_to_sample <- num_left_to_sample - length(sampled_samples)
+    coldata <- as.data.frame(single_cell_counts@colData)
+    
+    ## get row means for each samples
+    samp_df <- setNames(data.frame(matrix(nrow=nrow(single_cell_counts),ncol=length(sampled_samples))),
+                        sampled_samples)
+    rownames(samp_df) <- rownames(single_cell_counts)
+    for(samp in sampled_samples){
+      samp_df[samp] <- data.frame(means=rowMeans(as.matrix(SingleCellExperiment::counts(single_cell_counts[,single_cell_counts$sample_ == samp])))) ## idk why counts aren't whole numbers
+    }
+    samp_df <- as.data.frame(samp_df)
+    ## for each col with max < 10, assume currently logp1 scale - convert back to count like measure via 10^(val)-1
+    which <- which(apply(samp_df,2,max, na.rm=T) < 10)
+    samp_df[,which] <- apply(samp_df[,which,drop=F],2,function(x){-1+10^x})
+    #samp_df$names <- rownames(samp_df)
+  }
+  #sc_full_list[[cell_types[i]]] <- samp_df
+  temp_file_name_part <- unique(sc_metadata_df$cell_type_ontology_term_id[sc_metadata_df$cell_type==cell_types[i]])
+  temp_file_name_part <- str_replace(temp_file_name_part,":","_")
+  write.csv(samp_df, file = paste0(dirs$sc_temp_dir, temp_file_name_part,".csv"))
+}
+
+## next, if necessary, get datasets that need to aggregate across samples for sufficient read depth 
+ 
+# 
+# 
+# i=460
+# 
+# single_cell_counts <-  metadata |> dplyr::filter(
+#   stringr::str_like(assay,"%10x%") &
+#   disease=="normal" &
+#   organism=="Homo sapiens" &
+#   confidence_class==1 &
+#   cell_type==!!cell_types[i]) |> get_single_cell_experiment(assays = "cpm") ### dplyr requires the "!!" to evaluate this first or something... 
+
+# 
+# View(data.frame(means=rowMeans(as.matrix(SingleCellExperiment::cpm(single_cell_counts)))))
+# sum(single_cell_counts@colData$mean_genes_per_cell)
+```
+
+```{r}
+dataset_list$SC_DAT <- list()
+dataset_list$SC_DAT$mat <- matrix(nrow = nrow(dataset_list$ENCODE_GTEX_COMB$mat),
+                                  ncol = 0, dimnames = list(rownames(dataset_list$ENCODE_GTEX_COMB$mat)))
+dataset_list$SC_DAT$coldata <- data.frame(colname=character(),
+                                          onto_id=character(),
+                                          age_group=character(),
+                                          assay=character())
+sc_data_files <- list.files(dirs$sc_temp_dir,)
+gene_order <- rownames(dataset_list$ENCODE_GTEX_COMB$mat)
+for(i in 1:length(sc_data_files)){
+  print(i)
+  temp <- read.csv(paste0(dirs$sc_temp_dir,sc_data_files[i]), row.names = 1 )
+  temp_onto_id <- str_replace(str_remove(sc_data_files[i],"\\.csv"),"_",":")
+  temp_name <- ontos$cl$ont$name[ontos$cl$ont$id==temp_onto_id]
+  if(grepl("obsolete",temp_name)){next}
+  
+  temp_genes <- gene_sets$genes_all$ensembl_gene_id[match(rownames(temp),gene_sets$genes_all$external_gene_name)]
+  rownames(temp)[!is.na(temp_genes)] <- temp_genes[!is.na(temp_genes)]
+  temp <- temp[!is.na(temp_genes),,drop=F]
+  
+  missing_genes <- gene_order[which(!is.element(gene_order,rownames(temp)))]
+  temp <- rbind(temp,as.data.frame(matrix(nrow=length(missing_genes),ncol=ncol(temp),
+                                          dimnames = list(missing_genes,colnames(temp) ))))
+  
+  temp <- temp[gene_order,,drop=F]
+  temp <- apply(temp,2,function(x){x*1e6/sum(x,na.rm=T)})
+  ## median norm
+  temp <- log10(temp+1)
+  temp <- apply(temp, 2, function(x){x / median(x[which(x>1e-5)])})
+  colnames(temp) <- paste0(temp_name,"..",1:ncol(temp))
+  
+  if(max(colSums(temp ,na.rm=T)) > 1e9 ){next} ## Cludge fix to early transform error - removes affected samples 
+  dataset_list$SC_DAT$coldata <-  rbind(dataset_list$SC_DAT$coldata,
+                                        data.frame(colname=colnames(temp),
+                                                   onto_id=temp_onto_id,
+                                                   age_group="",
+                                                   assay="scRNAseq")[1:min(ncol(temp),3),])
+  
+  dataset_list$SC_DAT$mat <- cbind(dataset_list$SC_DAT$mat,temp[,1:min(ncol(temp),3)])
+  
+  
+}
+
+
+dataset_list$ENCODE_GTEX_COMB$coldata <- rbind(dataset_list$ENCODE_GTEX_COMB$coldata,
+                                               dataset_list$SC_DAT$coldata)
+dataset_list$ENCODE_GTEX_COMB$mat <- cbind(dataset_list$ENCODE_GTEX_COMB$mat,
+                                           dataset_list$SC_DAT$mat)
+```
+
+

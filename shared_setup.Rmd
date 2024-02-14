@@ -682,6 +682,7 @@ close(con);rm(con, line, term_num, num_terms,
 ##### remove: UBERON:0001380 part_of UBERON:0001377  ## quadriceps femoris has_part vastus medialis ## preserve is_a relation
 ##### remove: UBERON:0014847 part_of UBERON:0001377  ## quadriceps femoris has_part vastus intermedius ## preserve is_a relation
 ##### add: UBERON:0018254 part_of UBERON:0002204 ## skeletal musculature part_of musculoskeletal system
+##### add: UBERON: is_a UBERON: ## heart is_a muscle organ
 
 which <- which(ontos$uberon$ont$id=="UBERON:0003983")
 which_keep <- which(!(grepl("UBERON:000718[12]",ontos$uberon$ont$relations[[which]]$id) &
@@ -698,7 +699,16 @@ ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")
   ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")]],
   data.frame(relation="part_of",id=ontos$uberon$ont$id[which(ontos$uberon$ont$name=="musculoskeletal system")])
 ))
-rm(which, which_keep, id)
+
+which_child <- which(ontos$uberon$ont$name=="heart")
+which_parent <- which(ontos$uberon$ont$name=="muscle organ")
+ontos$uberon$ont$children[[which_parent]] <- c(ontos$uberon$ont$children[[which_parent]],
+                                               ontos$uberon$ont$id[[which_child]])  
+ontos$uberon$ont$parents[[which_child]] <- c(ontos$uberon$ont$parents[[which_child]],
+                                               ontos$uberon$ont$id[[which_parent]])
+
+
+rm(which, which_keep, id, which_parent, which_child)
 #################
 
 
@@ -943,33 +953,32 @@ options(timeout=300)
 gene_sets <- list()
 ### these pulls are fairly time intensive -> consider saving to data in short term and load if exists
 gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
-                                          "start_position","end_position"),
+                                          "start_position","end_position","gene_biotype"),
                  mart = ensembl, useCache = F)
 
-## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
+# alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
 # temp <- tempfile()
-# download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz")) 
-# gene_sets$genes_all_go <- read.table( temp, skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
-gene_sets$paralogs <- NULL
-for(chr in c(as.character(1:22),"X","Y","MT" )){
-  print(chr)
-  temp <- getBM(attributes = c("ensembl_gene_id","external_gene_name",
-                                        "hsapiens_paralog_ensembl_gene",
-                                        "hsapiens_paralog_associated_gene_name",
-                                        "hsapiens_paralog_perc_id",
-                                        "hsapiens_paralog_perc_id_r1",
-                                        "hsapiens_paralog_subtype"),
-                              filters= c("chromosome_name","biotype"),
-                              values=list(chr,"protein_coding"),
-                              mart=ensembl,useCache = F)
-  if(is.null(gene_sets$paralogs)){
-    gene_sets$paralogs <- temp
-  } else{
-    gene_sets$paralogs <- rbind(gene_sets$paralogs, temp)
-  }
-  
-}
-save.image()
+# download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz"))
+# gene_sets$genes_all_go <- read.table( paste0(dirs$temp_data,"goa_human.gaf.gz"), skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
+# gene_sets$paralogs <- NULL
+# for(chr in c(as.character(1:22),"X","Y","MT" )){
+#   print(chr)
+#   temp <- getBM(attributes = c("ensembl_gene_id","external_gene_name",
+#                                         "hsapiens_paralog_ensembl_gene",
+#                                         "hsapiens_paralog_associated_gene_name",
+#                                         "hsapiens_paralog_perc_id",
+#                                         "hsapiens_paralog_perc_id_r1",
+#                                         "hsapiens_paralog_subtype"),
+#                               filters= c("chromosome_name","biotype"),
+#                               values=list(chr,"protein_coding"),
+#                               mart=ensembl,useCache = F)
+#   if(is.null(gene_sets$paralogs)){
+#     gene_sets$paralogs <- temp
+#   } else{
+#     gene_sets$paralogs <- rbind(gene_sets$paralogs, temp)
+#   }
+# 
+# }
 for(chr in c(as.character(1:22),"X","Y","MT" )){
   print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
@@ -1084,42 +1093,43 @@ rm(temp,temp2, chr,descendants,i,term_id, which)
 
 ### Add control gene sets
 gene_sets$human_chromatin_modifiers$gene_subsets$control_set__non_chrom_mod <-
-  setdiff(gene_sets$paralogs$ensembl_gene_id,
+  setdiff(  gene_sets$genes_all$ensembl_gene_id[which(gene_sets$genes_all$gene_biotype=="protein_coding")] ,
   gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
 
+save.image()
 ```
 
-```{r, download taxonomy info}
-files$taxonomy <- paste0(dirs$temp_data,"taxmp.zip")
-download.file("https://ftp.ncbi.nih.gov/pub/taxonomy/taxdmp.zip",files$taxonomy)
-dirs$taxonomy <- paste0(dirs$temp_data,"taxonomy/")
-dir.create(dirs$taxonomy)
-system(paste0("unzip -o ", files$taxonomy," -d ",dirs$taxonomy))
-
-taxonomy <- list()
-taxonomy$names <- read.csv(paste0(dirs$taxonomy,"names.dmp"), sep="\t", header = F)
-taxonomy$names <- taxonomy$names[,which(!apply(taxonomy$names,2, function(x){all(x=="|")}))]
-colnames(taxonomy$names)[1:4] <- c("tax_id","name_txt","unique name", "name class")
-taxonomy$nodes <- read.csv(paste0(dirs$taxonomy,"nodes.dmp"), sep="\t", header = F)
-taxonomy$nodes <- taxonomy$nodes[,which(!apply(taxonomy$nodes,2, function(x){all(x=="|")}))]
-colnames(taxonomy$nodes)[1:2] <- c("tax_id","parent tax_id")
-
-h_sapiens_lineage <- data.frame(id=character(),name=character(), height=integer())
-next_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="Homo sapiens")]
-root_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="root")]
-height <- 1
-while(next_id != root_id){
-  temp_name <- taxonomy$names$name_txt[which(taxonomy$names$tax_id==next_id)]
-  if(length(temp_name)==0){temp_name <- NA}
-  temp_df <- data.frame(id=next_id, name=temp_name, height=height)
-  h_sapiens_lineage <- rbind(h_sapiens_lineage,temp_df)
-  next_id <- taxonomy$nodes$`parent tax_id`[which(taxonomy$nodes$tax_id==next_id)]
-  height=height+1
-}
-h_sapiens_lineage$depth <- max(h_sapiens_lineage$height) - h_sapiens_lineage$height
-taxonomy$human_lineage <- h_sapiens_lineage
-taxonomy$names <- taxonomy$nodes <- NULL
-```
+# ```{r, download taxonomy info}
+# files$taxonomy <- paste0(dirs$temp_data,"taxmp.zip")
+# download.file("https://ftp.ncbi.nih.gov/pub/taxonomy/taxdmp.zip",files$taxonomy)
+# dirs$taxonomy <- paste0(dirs$temp_data,"taxonomy/")
+# dir.create(dirs$taxonomy)
+# system(paste0("unzip -o ", files$taxonomy," -d ",dirs$taxonomy))
+# 
+# taxonomy <- list()
+# taxonomy$names <- read.csv(paste0(dirs$taxonomy,"names.dmp"), sep="\t", header = F)
+# taxonomy$names <- taxonomy$names[,which(!apply(taxonomy$names,2, function(x){all(x=="|")}))]
+# colnames(taxonomy$names)[1:4] <- c("tax_id","name_txt","unique name", "name class")
+# taxonomy$nodes <- read.csv(paste0(dirs$taxonomy,"nodes.dmp"), sep="\t", header = F)
+# taxonomy$nodes <- taxonomy$nodes[,which(!apply(taxonomy$nodes,2, function(x){all(x=="|")}))]
+# colnames(taxonomy$nodes)[1:2] <- c("tax_id","parent tax_id")
+# 
+# h_sapiens_lineage <- data.frame(id=character(),name=character(), height=integer())
+# next_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="Homo sapiens")]
+# root_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="root")]
+# height <- 1
+# while(next_id != root_id){
+#   temp_name <- taxonomy$names$name_txt[which(taxonomy$names$tax_id==next_id)]
+#   if(length(temp_name)==0){temp_name <- NA}
+#   temp_df <- data.frame(id=next_id, name=temp_name, height=height)
+#   h_sapiens_lineage <- rbind(h_sapiens_lineage,temp_df)
+#   next_id <- taxonomy$nodes$`parent tax_id`[which(taxonomy$nodes$tax_id==next_id)]
+#   height=height+1
+# }
+# h_sapiens_lineage$depth <- max(h_sapiens_lineage$height) - h_sapiens_lineage$height
+# taxonomy$human_lineage <- h_sapiens_lineage
+# taxonomy$names <- taxonomy$nodes <- NULL
+# ```
 
 
 ```{r, custom ggplot themes}
