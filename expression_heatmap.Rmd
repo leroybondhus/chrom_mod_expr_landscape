@@ -605,118 +605,151 @@ dev.off()
 
 
 
-which_R <- which(result_df$name=="immune system" & result_df$subsumed_by=="")+1
-which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="immune system")])
 
-subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
-                                                          genes_in_order$result_df_row > which_L)]
-subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
-                                                          cols_in_order$result_df_row > which_L)]
-col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
-                        -2,-1,0,1,2,3,
-                        max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
-                      c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
-png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__immune.png"),
-    height = 6, width=4, res = 250,unit="in")
-temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
-colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
-colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
-Heatmap(temp_mat4,
-        cluster_rows = F,
-        cluster_columns = F,
-        col=col_fun,
-        row_names_gp = gpar(fontsize = 12),
-        column_names_gp = gpar(fontsize = 12),
-        column_names_max_height = unit(6,"in") )
-dev.off()
+temp_df <- data.frame(name=c("immune system", "nervous system", "intestine", "musculature"),
+                      plot_height=c(4,4,4,4),
+                      plot_width=c(4,4,4,4),
+                      plot_font=c(4,4,4,4))
 
-
-
-
-
-
-
-which_R <- which(result_df$name=="nervous system" & result_df$subsumed_by=="")+1
-which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="nervous system")])
-
-subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
-                                                          genes_in_order$result_df_row > which_L)]
-subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
-                                                          cols_in_order$result_df_row > which_L)]
-col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
-                        -2,-1,0,1,2,3,
-                        max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
-                      c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
-png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__nervous.png"),
-    height = 16, width=8, res = 250,unit="in")
-temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
-colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
-colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
-Heatmap(temp_mat4,
-        cluster_rows = F,
-        cluster_columns = F,
-        col=col_fun,
-        row_names_gp = gpar(fontsize = 12),
-        column_names_gp = gpar(fontsize = 12),
-        column_names_max_height = unit(6,"in") )
-dev.off()
-
-
-
-
-which_R <- which(result_df$name=="intestine" & result_df$subsumed_by=="")+1
-which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="intestine")])
-
-subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
-                                                          genes_in_order$result_df_row > which_L)]
-subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
-                                                          cols_in_order$result_df_row > which_L)]
-col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
-                        -2,-1,0,1,2,3,
-                        max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
-                      c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
-png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__intestine.png"),
-    height = 6, width=5, res = 250,unit="in")
-temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
-colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
-colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
-Heatmap(temp_mat4,
-        cluster_rows = F,
-        cluster_columns = F,
-        col=col_fun,
-        row_names_gp = gpar(fontsize = 12),
-        column_names_gp = gpar(fontsize = 12),
-        column_names_max_height = unit(6,"in") )
-dev.off()
-
-
-
-which_R <- which(result_df$name=="striated muscle tissue" & result_df$subsumed_by=="")+1
-which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="striated muscle tissue")])
-
-subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
-                                                          genes_in_order$result_df_row > which_L)]
-subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
-                                                          cols_in_order$result_df_row > which_L)]
-col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
-                        -2,-1,0,1,2,3,
-                        max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
-                      c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
-png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__muscle.png"),
-    height = 5, width=4, res = 250,unit="in")
-temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
-colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
-colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
-Heatmap(temp_mat4,
-        cluster_rows = F,
-        cluster_columns = F,
-        col=col_fun,
-        row_names_gp = gpar(fontsize = 12),
-        column_names_gp = gpar(fontsize = 12),
-        column_names_max_height = unit(6,"in") )
-dev.off()
-
-
+for(i in 1:nrow(temp_df)){
+  print(i)
+  which_R <- which(result_df$name==temp_df$name[i] & result_df$subsumed_by=="")+1
+  which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name==temp_df$name[i])])
+  
+  subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
+                                                            genes_in_order$result_df_row > which_L)]
+  subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
+                                                            cols_in_order$result_df_row > which_L)]
+  col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
+                          -2,-1,0,1,2,3,
+                          max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
+                        c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
+  png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__",str_remove_all(temp_df$name[i]," "),".png"),
+      height = temp_df$plot_height[i], width=temp_df$plot_height[i], res = 250,unit="in")
+  temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
+  colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
+  colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
+  print(Heatmap(temp_mat4,
+          cluster_rows = F,
+          cluster_columns = F,
+          col=col_fun,
+          row_names_gp = gpar(fontsize = temp_df$plot_font[i]),
+          column_names_gp = gpar(fontsize = temp_df$plot_font[i]),
+          column_names_max_height = unit(6,"in") ))
+  dev.off()
+}
+# which_R <- which(result_df$name=="immune system" & result_df$subsumed_by=="")+1
+# which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="immune system")])
+# 
+# subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
+#                                                           genes_in_order$result_df_row > which_L)]
+# subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
+#                                                           cols_in_order$result_df_row > which_L)]
+# col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
+#                         -2,-1,0,1,2,3,
+#                         max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
+#                       c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
+# png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__immune.png"),
+#     height = 6, width=4, res = 250,unit="in")
+# temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
+# colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
+# colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
+# Heatmap(temp_mat4,
+#         cluster_rows = F,
+#         cluster_columns = F,
+#         col=col_fun,
+#         row_names_gp = gpar(fontsize = 12),
+#         column_names_gp = gpar(fontsize = 12),
+#         column_names_max_height = unit(6,"in") )
+# dev.off()
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# which_R <- which(result_df$name=="nervous system" & result_df$subsumed_by=="")+1
+# which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="nervous system")])
+# 
+# subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
+#                                                           genes_in_order$result_df_row > which_L)]
+# subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
+#                                                           cols_in_order$result_df_row > which_L)]
+# col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
+#                         -2,-1,0,1,2,3,
+#                         max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
+#                       c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
+# png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__nervous.png"),
+#     height = 16, width=8, res = 250,unit="in")
+# temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
+# colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
+# colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
+# Heatmap(temp_mat4,
+#         cluster_rows = F,
+#         cluster_columns = F,
+#         col=col_fun,
+#         row_names_gp = gpar(fontsize = 12),
+#         column_names_gp = gpar(fontsize = 12),
+#         column_names_max_height = unit(6,"in") )
+# dev.off()
+# 
+# 
+# 
+# 
+# which_R <- which(result_df$name=="intestine" & result_df$subsumed_by=="")+1
+# which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="intestine")])
+# 
+# subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
+#                                                           genes_in_order$result_df_row > which_L)]
+# subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
+#                                                           cols_in_order$result_df_row > which_L)]
+# col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
+#                         -2,-1,0,1,2,3,
+#                         max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
+#                       c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
+# png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__intestine.png"),
+#     height = 6, width=5, res = 250,unit="in")
+# temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
+# colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
+# colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
+# Heatmap(temp_mat4,
+#         cluster_rows = F,
+#         cluster_columns = F,
+#         col=col_fun,
+#         row_names_gp = gpar(fontsize = 12),
+#         column_names_gp = gpar(fontsize = 12),
+#         column_names_max_height = unit(6,"in") )
+# dev.off()
+# 
+# 
+# 
+# which_R <- which(result_df$name=="musculature" & result_df$subsumed_by=="")+1
+# which_L <- max(which(result_df$subsumed_by=="")[which(result_df$subsumed_by=="") < which(result_df$name=="musculature")])
+# 
+# subset_genes_in_order <- genes_in_order$gene_name[which(genes_in_order$result_df_row < which_R &
+#                                                           genes_in_order$result_df_row > which_L)]
+# subset_columns_in_order <- cols_in_order$columnames[which(cols_in_order$result_df_row < which_R &
+#                                                           cols_in_order$result_df_row > which_L)]
+# col_fun <- colorRamp2(c(min(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ]),
+#                         -2,-1,0,1,2,3,
+#                         max(temp_mat3[genes_in_order$gene_name,cols_in_order$columnames ])),
+#                       c("cyan4","cyan","lightcyan","white","pink", "red3", "darkred","black"))
+# png(filename=paste0(dirs$figures,"full__heatmap_ontologic_ordering_zscores__muscle.png"),
+#     height = 7, width=7, res = 250,unit="in")
+# temp_mat4 <- temp_mat3[subset_genes_in_order,subset_columns_in_order]
+# colnames(temp_mat4) <- make.unique(str_replace(colnames(temp_mat4),"\\.\\.\\.","."))
+# colnames(temp_mat4) <- make.unique(str_remove(colnames(temp_mat4),"\\.\\..*"))
+# Heatmap(temp_mat4,
+#         cluster_rows = F,
+#         cluster_columns = F,
+#         col=col_fun,
+#         row_names_gp = gpar(fontsize = 6),
+#         column_names_gp = gpar(fontsize = 6),
+#         column_names_max_height = unit(6,"in") )
+# dev.off()
+# 
+# 
 
 # 
 # panel_fun = function(index, nm) {
@@ -758,6 +791,15 @@ dev.off()
 gene_sets$ubiq <-names(global_taus)[which(global_taus < 0.4)]
 gene_sets$ubiq_chrom <-names(global_taus)[which(global_taus < 0.4 & is.element(names(global_taus), 
                     gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
+gene_sets$human_chromatin_modifiers$gene_subsets$ubiq <- gene_sets$ubiq_chrom
+
+gene_sets$human_chromatin_modifiers$gene_subsets$non_ubiq <- setdiff(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+                                                                     gene_sets$human_chromatin_modifiers$gene_subsets$ubiq)
+```
+
+
+
+```{r}
 
 df <- data.frame(tau=global_taus,
                  gene_id=names(global_taus),
@@ -771,14 +813,16 @@ ggplot(df, aes(x=tau))+
 
 ggplot(df, aes(x=tau, color=is_chrom))+
   geom_step(aes(y=..y..),stat="ecdf")
+```
 
 
+```{r}
 ## phenotype analysis of ubiquitous and the blocks of interest (immune, muscle, .. ) 
 ### temp_onto_gene_map ## onto term to genes spec - get genes spec to onto or descendant - get phenotypes from omim map
 ### matched gene set  to phenotype set
 ### perform GO and phenotype analysis on gene sets. 
 
-temp_onto_names <- c("immune system", "nervous system", "intestine", "striated muscle tissue")
+temp_onto_names <- c("immune system", "nervous system", "intestine", "musculature")
 gene_sets$spec_onto <- setNames(vector(mode="list",length=4),temp_onto_names)
 for(i in 1:length(gene_sets$spec_onto)){
   temp_onto_id <- onto$id[match(names(gene_sets$spec_onto)[i], onto$name)]
@@ -786,5 +830,280 @@ for(i in 1:length(gene_sets$spec_onto)){
   gene_sets$spec_onto[[i]]  <- unique(temp_onto_gene_map$gene_id[is.element(temp_onto_gene_map$onto_id, temp_onto_ids)])
 }
 
+onto_maps$HPO_UBERON_GENE
+
+
+phen_onto <- ontos$hpo$ont
+which <- which(phen_onto$name=="Phenotypic abnormality")
+major_systems <- phen_onto$name[is.element(phen_onto$id,phen_onto$children[[which]])] 
+to_remove <- c("Constitutional symptom",
+               "Abnormality of the thoracic cavity",
+               "Abnormality of prenatal development or birth",
+               "Neoplasm",
+               "Abnormal cellular phenotype",
+               "Growth abnormality",
+               paste0("Abnormality of ",c("the eye","the voice","the ear","head or neck","limbs","the breast")))
+major_systems <- major_systems[-which(is.element(major_systems,to_remove ))]
+major_systems <- list(system_name=major_systems,
+                      descendent_ids=vector(mode="list",length=length(major_systems))  )
+for(i in 1:length(major_systems$descendent_ids)){
+  major_systems$descendent_ids[[i]] <- phen_onto$descendants[[which(phen_onto$name== major_systems$system_name[i] )]]
+}
+
+
+
+df <-  data.frame(ensembl_gene_id = character(),
+                  omim_id = character(),
+                  major_systems_affected = character(),
+                  complexity  = numeric(),
+                  chrom_subset_name = character())
+
+temp_list <- c(gene_sets$spec_onto,list(ubiq_chrom=gene_sets$ubiq_chrom))
+for(i in 1:length(temp_list)){
+  chrom_subset <- temp_list[[i]]
+  chrom_subset_name <- names(temp_list)[i]
+  
+  temp_map <- onto_maps$HPO_UBERON_GENE$map
+  temp_map <- temp_map[is.element(temp_map$Ensembl_Gene_ID, chrom_subset),]
+  temp_map <- temp_map[!temp_map$non_syndrome_flag,]
+  
+  for(temp_omim_id in unique(temp_map$OMIM_ID) ){
+    temp_submap <- temp_map[which(temp_map$OMIM_ID==temp_omim_id),] 
+    major_systems_affected <- character()
+    if(nrow(temp_submap)>0){
+      for(j in 1:length(major_systems$system_name)){
+        if(any(is.element(temp_submap$HPO_ID,major_systems$descendent_ids[[j]]))){
+          major_systems_affected <- paste(c(major_systems_affected,
+                                          major_systems$system_name[j]),collapse = ",")
+        }
+      }
+    }
+    if(length(major_systems_affected)==0){next}
+    temp_df <- merge(data.frame(ensembl_gene_id = unique(temp_submap$Ensembl_Gene_ID)),
+                     data.frame(omim_id = temp_omim_id,
+                                major_systems_affected = strsplit(major_systems_affected,",")[[1]],
+                                complexity = length(strsplit(major_systems_affected,",")[[1]]),
+                                chrom_subset_name = chrom_subset_name))
+    df <- rbind(df, temp_df)
+  }
+}
+
+
+
+ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complexity))+
+  geom_bar()+
+  facet_grid(chrom_subset_name ~ . )+
+  theme(strip.text.y = element_text(angle = 0))
+
+
+
+
+
+df$system_name <- str_remove(str_remove(df$major_systems_affected,"Abnormality of "),"the ")
+temp <- aggregate(df$system_name,by=list(df$system_name),FUN=length)
+temp <- temp[order(temp$x,decreasing = T),]
+df$system_name <- factor(df$system_name, levels = temp$Group.1)
+
+ggplot(df, aes(x=system_name, fill=system_name))+
+  geom_bar()+
+  #scale_fill_grey()+
+  facet_grid(chrom_subset_name ~ . , scales = "free_y")+
+  theme_bw()+
+  theme(strip.text.y = element_text(angle = 0),
+        axis.text.x =  element_text(angle=45,hjust=0.95))
+
+###  make upset plot here ##
+
+upset_df <- data.frame(omim_id=character(),
+                       chrom_subset_name=character(),
+                       combination_name=character())
+for(i in 1:length(unique(df$chrom_subset_name))){
+  temp_csn <- unique(df$chrom_subset_name)[i]
+  for(j in 1:length(unique(df$omim_id[which(df$chrom_subset_name==temp_csn)]))){
+    temp_omim_id <-  unique(df$omim_id[which(df$chrom_subset_name==temp_csn)])[j]
+    which <- which(df$omim_id==temp_omim_id & df$chrom_subset_name==temp_csn)
+    temp_combo <- paste0(sort(as.character(df$system_name[which])),collapse="&")
+    upset_df <- rbind(upset_df,
+                      data.frame(
+                        omim_id=temp_omim_id,
+                        chrom_subset_name=temp_csn,
+                        combination_name=temp_combo
+                      ))
+  }
+}
+
+temp_df <-  aggregate(omim_id ~ chrom_subset_name + combination_name, data = upset_df, FUN = length)
+plot_list <- list()
+for(i in 1:length(unique(temp_df$chrom_subset_name))){
+  which <- which(temp_df$chrom_subset_name==unique(temp_df$chrom_subset_name)[i])
+  temp_upvec <- setNames(temp_df$omim_id[which], temp_df$combination_name[which])
+  plot_list[[i]] <- upset(fromExpression(temp_upvec), 
+        nintersects = 40, 
+        nsets = 14, #length(unique(df$major_systems_affected)), 
+        order.by = "freq", 
+        decreasing = T, 
+        mb.ratio = c(0.6, 0.4),
+        number.angles = 0, 
+        text.scale = 1.1, 
+        point.size = 2.8, 
+        line.size = 1
+        ) 
+}
+
+for(i in 1:length(plot_list)){print(plot_list[[i]]);print(unique(temp_df$chrom_subset_name)[i])}
+
 ```
 
+
+
+```{r, test hpo enrichments}
+## for each HPO, test enrichment of chrom modifiers in set
+## plot by signif and OR, add labels (padj by bonferroni)
+temp_set_names <- c("all_chrom_modifiers","ubiq","non_ubiq")
+w_nonsyndrome <- FALSE
+for(temp_set_name in temp_set_names){
+    
+  which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+             gene_sets$human_chromatin_modifiers$gene_subsets[[temp_set_name]]))
+  which_rm <- c()
+  if(!w_nonsyndrome){
+    which_rm <- which(onto_maps$HPO_OMIM_GENE$map$non_syndrome_flag)
+  }
+  temp_chrom <- onto_maps$HPO_OMIM_GENE$map[setdiff(which,which_rm),]
+  temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-c(which,which_rm),]
+  temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+  temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
+                            odds_ratio=numeric(length(ontos$hpo$ont$id)),
+                            odds_ratio_lb=numeric(length(ontos$hpo$ont$id)),
+                            odds_ratio_ub=numeric(length(ontos$hpo$ont$id)),
+                            num_chrom_associated=numeric(length(ontos$hpo$ont$id)),
+                            num_non_chrom_associated=numeric(length(ontos$hpo$ont$id)))
+  
+  for(i in 1:length(ontos$hpo$ont$id)){
+    if(i %% 1000 == 1){print(i)}
+    hps <- c(ontos$hpo$ont$id[i],ontos$hpo$ont$descendants[[i]])
+    which <- which(is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+      ### Use all genes or only those with some HP association ?
+    which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+    
+  
+    temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                    c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+    
+    ## Odds Ratio
+    temp_res_df$p.value[i] <- temp_res$p.value
+    temp_res_df$odds_ratio[i] <- temp_res$estimate
+    temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
+    temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
+    temp_res_df$num_chrom_associated[i] <- temp_chrom_hp
+    temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_hp 
+  }
+  
+  ## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
+  ## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
+  
+  
+  which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+             gene_sets$human_chromatin_modifiers$gene_subsets[[temp_set_name]]))
+  temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+  temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
+  temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+  onto <- ontos$hpo$ont
+  
+  onto$is_signif <- rep(F,length(onto$id))
+  for( layer in 1:max(onto$height)){
+    print(paste0("layer is: ",layer ))
+    els_in_layer <- which(onto$height==layer)
+    i = 1
+    for( el in els_in_layer ){
+      if(i %% 250 == 0){print(i)}
+      i <- i+1
+      hps <-  c(onto$id[el],onto$descendants[[el]])
+    
+      which <- which(is.element(temp_chrom$HPO_ID, hps))
+      temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+      which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+      temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+    
+        ### Use all genes or only those with some HP association ?
+      which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+      temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+      which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+      temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+      
+      temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                    c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+      
+      is_signif <- temp_res$p.value < 0.05
+      if(!is_signif){next}
+      ## get list of signif children - these form the mask set.. 
+      ## actually.. probs want all signif descendants? Probs don't
+      ## need to deal with children of signif children, but children of
+      ## insignif children may themselves have substantial signal/ be signif...
+      ## and then drive association at later ancestor level.. 
+      
+  
+      signif_descendants <- get_mask_set(onto$id[el], onto)
+      
+      if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
+        for( child in signif_descendants){
+          hps <- onto$id[el] ## want to retain any that are directly associated with _self_.. 
+          ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
+          ## only include most specific instance and NOT also all ancestors of that instance ..
+          for( other_child in signif_descendants){
+            if( other_child == child){next}
+            hps <- c(hps, onto$descendants[[which(onto$id==other_child)]])
+          } 
+    
+          which <- which(is.element(temp_chrom$HPO_ID, hps))
+          temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+          which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+          temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+        
+            ### Use all genes or only those with some HP association ?
+          which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+          temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+          which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+          temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+          
+          temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                        c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+          is_signif <- temp_res$p.value < 0.05 
+          if(!is_signif){break}
+        }
+        
+      }
+      onto$is_signif[el] <- is_signif
+    }
+  }
+  
+  
+  temp_df <- cbind(data.frame(id=onto$id, name=onto$name, is_signif=onto$is_signif,
+                              height=onto$height, depth=onto$depth),
+                   temp_res_df)
+  rownames(temp_df) <- temp_df$id
+  
+  ontos$hpo[[paste0("enrichments__",temp_set_name,ifelse(w_nonsyndrome,"_w_nonsyndrome",""))]] <- temp_df
+  
+  filename <- paste0(dirs$tables,"hpo_enrichments_",temp_set_name,ifelse(w_nonsyndrome,"_w_nonsyndrome",""),".csv")
+  write.csv(ontos$hpo[[paste0("enrichments__",temp_set_name)]], file=filename)
+
+  
+}
+
+df <- data.frame(phen=ontos$hpo$enrichments__non_ubiq$name,num_ubiq=ontos$hpo$enrichments__ubiq$num_chrom_associated,num_nonubiq=ontos$hpo$enrichments__non_ubiq$num_chrom_associated, or_ubiq=ontos$hpo$enrichments__ubiq$odds_ratio, or_nonubiq=ontos$hpo$enrichments__non_ubiq$odds_ratio,p_ubiq=ontos$hpo$enrichments__ubiq$p.value,p_nonubiq=ontos$hpo$enrichments__non_ubiq$p.value)
+
+save.image()
+
+### specific more likely neoplasm 
+### ubiquitous more likely dominant, specific more likely recessive
+### ubiquitous more likely abnormal height, abnormal testis morphology, few female sex organ disorders ... expect
+###  
+```
