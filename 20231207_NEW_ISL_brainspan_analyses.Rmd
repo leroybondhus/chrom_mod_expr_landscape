@@ -49,7 +49,8 @@ library(clusterProfiler) #enrichment testing
 library(org.Hs.eg.db) #genomewide annotation for humans
 library(enrichplot) #plot enrichment results
 library(ggnewscale)
-# library(DOSE) # for GO visualization - need enrichplot
+library(DOSE) # for GO visualization - need enrichplot
+library(gridExtra) # for multiple plots in one page
 
 # BiocManager::install("DOSE") # for GO visualization
 ```
@@ -226,7 +227,6 @@ median_normalize <- function(expr_mat_col)
 # log transform expression data & median normalize
 normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 
-# sorted_expression <- data.matrix(sorted_expression) # convert to matrix - CHECK IF STILL NEED - already in matrix form
 ```
 
 ```{r, heat maps for gene expression over time for each structure}
@@ -360,7 +360,18 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       
       
       # STEP 3: create matrix of correlation btwn pairs of chromatin modifier genes & cluster
-      gene_pairwise_corr <- -1*(cor(t(chrom_mod_normalized_expr))-1)
+      pcw <- sorted_cols$age[struct_index]
+      pcw_range <- c(pcw[1], pcw[length(pcw)])
+      window_size <- 10
+      pcw_weights <- vector("numeric", length = length(pcw))
+      # pcw_weights <- vector("numeric", length = (pcw_range[2]/window_size))
+      i = pcw_range[1]
+      while(i <= pcw_range[2]){
+        pcw_weights[which(pcw < i+window_size & pcw >= i)] <- 1/length(pcw[which(pcw < i+window_size & pcw >= i)])
+        i = i + window_size
+      }
+      old_gene_pairwise_corr <- -1*(cor(t(chrom_mod_normalized_expr))-1)
+      gene_pairwise_corr <- -1*(cov.wt(t(chrom_mod_normalized_expr), wt = pcw_weights, cor = TRUE)$cor-1)
       
       # perform average clustering
       hc <- hclust(as.dist(gene_pairwise_corr), "ave")
@@ -453,12 +464,14 @@ gene_lists <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %d
       #   geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") +           geom_vline(xintercept = 52*10, color = "red")
       
       ### ONLY DEVELOPMENTAL TIME
-      # ggplot(subset(select_high_hcl_df, pcw < 40), aes(x = pcw, y = expr)) +
-      #   geom_point() + geom_line() +
-      #   facet_wrap(~group_name) +
-      #   theme(legend.position = "none", strip.text = element_text(size = 5)) +
-      #   ggtitle(paste0(struct, " gene expression over developmental time for each cluster (cutoff = 0.2)")) +
-      #   labs(x = "pcw", y = "normalized expr") 
+      ggplot(subset(select_high_hcl_df, pcw < 40), aes(x = pcw, y = expr)) +
+        geom_point() + geom_line() +
+        facet_wrap(~group_name) +
+        theme(legend.position = "none", strip.text = element_text(size = 5)) +
+        ggtitle(paste0(struct, " gene expression over developmental time for each cluster (cutoff = 0.2)")) +
+        labs(x = "pcw", y = "normalized expr")
+      
+      # OVERLAY LOWER ALPHA EXPR FOR EACH GENE
       
       gg_high <- ggplot(select_high_hcl_df, aes(x = log10(pcw), y = expr)) +
             geom_point() + geom_line() +
@@ -618,6 +631,7 @@ all_genes_GO_results <- foreach(i = 1:length(flat_gene_lists), .combine = rbind)
       }
   saved_enrich
 }
+
 proc.time() - ptm
 write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_genes_GO_results.csv"))
 ```
@@ -715,7 +729,10 @@ colnames(iagc_time_sim_mat_modest) <- sapply(seq(1, length(unlist(unique_pairs_m
 proc.time() - ptm
 
 write.csv(iagc_time_sim_mat_modest, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat_modest.csv"))
+```
 
+
+```{r,  inter-anatomic-gene-cluster-time-similarity-matrix - modest resolution}
 hc_time_modest <- hclust(as.dist(1-(iagc_time_sim_mat_modest+1)/2), "ave")
 plot(hc_time_modest, main = "metaclusters for iagc_time modest resolution (cutoff = 0.4)", cex=0.25)
 rect.hclust(hc_time_modest, h=0.4)
@@ -840,30 +857,31 @@ all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
         new_expr[j] <- NA
       }
     }
-    filled_expr <- new_expr
-    names(filled_expr) <- timepoints
-    # fill in NA values with average of nearest non-NA data points
-    for (k in 1:length(new_expr)){
-      if (is.na(new_expr[k])){
-        if (all(is.na(new_expr[1:k]))){ # no non-NA value to the left
-          filled_expr[k] <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
-        }
-        else if (all(is.na(new_expr[k:length(new_expr)]))){ # no non-NA value to the right
-          filled_expr[k] <- new_expr[max(which(!is.na(new_expr[1:k])))]
-        }
-        else{ # average of nearest right/left non-NA values
-          filled_expr[k] = (new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1] + new_expr[max(which(!is.na(new_expr[1:k])))])/2 
-        }
-      }
-    }
-    filled_expr
+    new_expr
+    # filled_expr <- new_expr
+    # names(filled_expr) <- timepoints
+    # # fill in NA values with average of nearest non-NA data points
+    # for (k in 1:length(new_expr)){
+    #   if (is.na(new_expr[k])){
+    #     if (all(is.na(new_expr[1:k]))){ # no non-NA value to the left
+    #       filled_expr[k] <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
+    #     }
+    #     else if (all(is.na(new_expr[k:length(new_expr)]))){ # no non-NA value to the right
+    #       filled_expr[k] <- new_expr[max(which(!is.na(new_expr[1:k])))]
+    #     }
+    #     else{ # average of nearest right/left non-NA values
+    #       filled_expr[k] = (new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1] + new_expr[max(which(!is.na(new_expr[1:k])))])/2 
+    #     }
+    #   }
+    # }
+    # filled_expr
     }
   
   # average expression of metacluster is average of columns
   if (is.null(ncol(new_gene_expr_df))){ # only 1 cluster
-    mcl_avg_expr <- new_gene_expr_df
+    mcl_avg_expr <- new_gene_expr_df[!is.na(new_gene_expr_df)]
   }else{
-    mcl_avg_expr <- rowMeans(new_gene_expr_df)
+    mcl_avg_expr <- rowMeans(new_gene_expr_df, na.rm = TRUE)
   }
   
   mcl_avg_expr_df <- data.frame(pcw = strtoi(names(mcl_avg_expr)), expr = mcl_avg_expr)
@@ -957,6 +975,7 @@ names(mcl_gene_list) <- mcl_dirs
 for (i in 1:length(mcl_dirs)){
   mcl_gene_list[[mcl_dirs[i]]] <- names(mcl_time_modest_gene_counts[[mcl_dirs[i]]][which(mcl_time_modest_gene_counts[[mcl_dirs[i]]]>=3)])
 }
+
 ptm <- proc.time()
 all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %dopar% {
   if(length(mcl_gene_list[[i]])>0){
@@ -975,19 +994,20 @@ all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %do
       p_cnetplot <- cnetplot(enrich_result, showCategory = 5, layout = "kk", circular = FALSE,
          color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
          cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
-         title = paste("Enrichment Cnetplot -", mcl_dirs[[i]])) +
+         title = paste("Enrichment Cnetplot -", mcl_dirs[i])) +
               custom_theme_2() +
-              ggtitle(paste("Enrichment Cnetplot -", mcl_dirs[[i]]))
-      ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_cnetplot.png'), p_cnetplot, width = 15, height = 10, units = "in", bg = "white")
+              ggtitle(paste("Enrichment Cnetplot -", mcl_dirs[i]))
+      # ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_cnetplot.png'), p_cnetplot, width = 15, height = 10, units = "in", bg = "white")
       
       term_sim_matrix <- pairwise_termsim(enrich_result)
       p_emapplot <- emapplot(term_sim_matrix, showCategory = 15, layout = "kk", circular = FALSE,
          color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
          cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
-         title = paste("Enrichment emapplot -", mcl_dirs[[i]])) +
+         title = paste("Enrichment emapplot -", mcl_dirs[i])) +
               custom_theme_2() +
-              ggtitle(paste("Enrichment emapplot -", mcl_dirs[[i]]))
-      ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_emapplot.png'), p_emapplot, width = 15, height = 10, units = "in", bg = "white")
+              ggtitle(paste("Enrichment emapplot -", mcl_dirs[i]))
+      # ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_emapplot.png'), p_emapplot, width = 15, height = 10, units = "in", bg = "white")
+      ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_combined_plot.png'), grid.arrange(p_cnetplot, p_emapplot), width = 15, height = 10, units = "in", bg = "white")
       
     } else{
       saved_enrich$Metacluster <- character()
