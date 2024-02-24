@@ -14,8 +14,9 @@ output: html_document
 ```{r}
 
 #(0) load libraries
-library(readr)
-library(tidyverse)
+# library(readr)
+# library(tidyverse)
+# library(stringr)
 
 #(1) read in 720 epigenes with chromatinopathy annotations:
   epigenes<-read.csv(file="AN_curated_chromopathy_LB_mod.csv")
@@ -46,23 +47,116 @@ library(tidyverse)
                                                               "Extracellular.location"="No info available"))
   
   
-  
+  print(unique(PLOTall_eg$Main.location))
   
   
 #(5) plot ALL unique epigenes: collapse nucleus sub-compartments 
   #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
   #will collapse nucleus sub-compartments into "nucleus"
+  #ref https://www.r-bloggers.com/2022/07/how-to-replace-string-in-column-in-r/
+  
+  PLOTall_eg_nucleus<-PLOTall_eg
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Midbody;Nucleoplasm'] <- 'Midbody & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Vesicles'] <- 'Cytosol & Vesicles' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria'] <- 'Cytosol & Mitochondria' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli'] <- 'Cytosol & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Golgi apparatus'] <- 'Cytosol & Golgi apparatus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoplasm'] <- 'Mitochondria & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Vesicles'] <- 'Nucleus & Vesicles' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centriolar satellite;Nucleoplasm'] <- 'Centriolar satellite & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Actin filaments;Cytosol'] <- 'Actin filaments & Cytosol' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Vesicles'] <- 'Golgi apparatus & Vesicles' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nuclear bodies'] <- 'Cytosol & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Microtubules;Nucleoli fibrillar center'] <- 'Microtubules & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Endoplasmic reticulum;Nucleoplasm'] <- 'Endoplasmic reticulum & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Nucleoplasm'] <- 'Golgi apparatus & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Plasma membrane'] <- 'Cytosol & Plasma membrane' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centrosome;Nucleoplasm'] <- 'Centrosome & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Kinetochore;Nuclear bodies'] <- 'Kinetochore & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cell Junctions;Nucleoplasm'] <- 'Cell Junctions & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli fibrillar center'] <- 'Mitotic chromosome & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm;Plasma membrane'] <- 'Cytosol, Nucleus, & Plasma membrane' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane;Nucleoplasm'] <- 'Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoli'] <- 'Mitochondria & Nucleus'
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria;Nucleoplasm'] <- 'Cytosol, Mitochondria, & Nucleus' 
+  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+
   
   
+  print(unique(PLOTall_eg_nucleus$Main.location))
+
   
-  PLOTall_eg_nucleus<-
   
-  d
-    
-    
-    
-    
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear bodies;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Nucleoplasm', 'Cytosol & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli;Nucleoli rim', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Midbody;Nucleoplasm', 'Midbody & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Vesicles', 'Cytosol & Vesicles'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Mitochondria', 'Cytosol & Mitochondria'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear speckles;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Nucleoli', 'Cytosol & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Golgi apparatus', 'Cytosol & Golgi apparatus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Mitotic chromosome;Nucleoli rim', 'Mitotic chromosome & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli;Nucleoli rim;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Mitochondria;Nucleoplasm', 'Mitochondria & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli fibrillar center', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoplasm;Vesicles', 'Nucleus & Vesicles'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Centriolar satellite;Nucleoplasm', 'Centriolar satellite & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Actin filaments;Cytosol', 'Actin filaments & Cytosol'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Mitotic chromosome;Nucleoli;Nucleoli rim', 'Mitotic chromosome & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli rim;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear bodies;Nucleoli', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Golgi apparatus;Vesicles', 'Golgi apparatus & Vesicles'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Nuclear bodies', 'Cytosol & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Microtubules;Nucleoli fibrillar center', 'Microtubules & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Endoplasmic reticulum;Nucleoplasm', 'Endoplasmic reticulum & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli rim', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Golgi apparatus;Nucleoplasm', 'Golgi apparatus & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear bodies', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Plasma membrane', 'Cytosol & Plasma membrane'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli fibrillar center;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear speckles', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear membrane', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoplasm;Plasma membrane', 'Nucleus & Plasma membrane'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nucleoli', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Centrosome;Nucleoplasm', 'Centrosome & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Kinetochore;Nuclear bodies', 'Kinetochore & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cell Junctions;Nucleoplasm', 'Cell Junctions & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Mitotic chromosome;Nucleoli fibrillar center', 'Mitotic chromosome & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Nucleoplasm;Plasma membrane', 'Cytosol, Nucleus, & Plasma membrane'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Nuclear membrane;Nucleoplasm', 'Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Cytosol;Nucleoli;Nucleoplasm', 'Cytosol & Nucleus'))
+  # PLOTall_eg_nucleus<-PLOTall_eg_nucleus%>%mutate(across('Main.location', str_replace_all, 'Mitochondria;Nucleoli', 'Mitochondria & Nucleus'))
+
+
   
+
 #remove useless variables
   rm(url,zip_file)
 
