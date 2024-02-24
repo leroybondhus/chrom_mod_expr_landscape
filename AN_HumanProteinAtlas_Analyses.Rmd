@@ -57,7 +57,7 @@ library(tidyverse)
   
   PLOTall_eg_nucleus<-
   
-  
+  d
     
     
     
