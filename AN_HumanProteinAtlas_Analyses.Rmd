@@ -14,9 +14,8 @@ output: html_document
 ```{r}
 
 #(0) load libraries
-# library(readr)
-# library(tidyverse)
-# library(stringr)
+library(tidyverse)
+library(scales)
 
 #(1) read in 720 epigenes with chromatinopathy annotations:
   epigenes<-read.csv(file="AN_curated_chromopathy_LB_mod.csv")
@@ -110,7 +109,24 @@ output: html_document
   
 #(6) plot location of ALL unique epigenes: collapse nucleus sub-compartments 
   
+barplot_subcell<-PLOTall_eg_nucleus %>% 
+    count(Main.location) %>% 
+    mutate(prop = n/sum(n)) %>% 
+    ggplot(aes(x = Main.location, y = prop)) +
+    geom_col(fill = "#FF7F24") +
+    geom_text(aes(label = percent(prop)), vjust = -1) +
+    coord_cartesian(clip = "off") +
+    scale_y_continuous(labels = percent_format()) +
+    coord_flip()+
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
+          axis.title = element_blank(),
+          plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
 
+  
+ggsave(  filename="TESTplot.jpeg",
+  plot = last_plot())
+  
 
 #remove useless variables
   rm(url,zip_file)
