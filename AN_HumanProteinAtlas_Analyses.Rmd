@@ -9,6 +9,70 @@ output: html_document
 
 
 
+#Attempt1 - Plots of subcell distribution for all epigenes or just those that cause chromatinopathies.
+  #step1> pulling subcellular localization from HPA for all epigenes.
+```{r}
+
+#(0) load libraries
+library(readr)
+library(tidyverse)
+
+#(1) read in 720 epigenes with chromatinopathy annotations:
+  epigenes<-read.csv(file="AN_curated_chromopathy_LB_mod.csv")
+
+#(2) read in subcellular location data + rename ensemble column for overlap:
+  #ref: https://community.rstudio.com/t/using-readrs-read-tsv-to-read-a-zip-compressed-tsv-file-from-a-url/26332
+
+  url <- "https://www.proteinatlas.org/download/subcellular_location.tsv.zip"
+  zip_file <- tempfile(fileext = ".zip")
+  download.file(url, zip_file, mode = "wb")
+  
+  subcell <- read_tsv(zip_file)
+  subcell <- data.frame(subcell)
+  subcell <- subcell%>%dplyr::rename(ensembl_gene_id=Gene)
+
+#(3) combine epigene list with subcellular location annotations:
+  epigenes<- dplyr::left_join(epigenes,subcell, by="ensembl_gene_id")
+
+
+#(4) plot ALL unique epigenes: select columns needed only for visualization
+  PLOTall_eg<-epigenes%>%dplyr::select(ensembl_gene_id,
+                                             hgnc_symbol,
+                                             "Main.location",
+                                             "Additional.location",
+                                             "Extracellular.location")%>%unique()
+  PLOTall_eg<-PLOTall_eg%>%tidyr::replace_na(list("Main.location" = "No info available",
+                                                              "Additional.location" = "No info available",
+                                                              "Extracellular.location"="No info available"))
+  
+  
+  
+  
+  
+#(5) plot ALL unique epigenes: collapse nucleus sub-compartments 
+  #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
+  #will collapse nucleus sub-compartments into "nucleus"
+  
+  
+  
+  PLOTall_eg_nucleus<-
+  
+  
+    
+    
+    
+    
+  
+#remove useless variables
+  rm(url,zip_file)
+
+```
+
+
+
+
+
+#Attempt1 - pulling protein domains from HPA for all epigenes.
 ```{r}
 
 
