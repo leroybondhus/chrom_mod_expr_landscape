@@ -1,0 +1,610 @@
+---
+title: "expr_phen_integrative_analyses"
+author: "Leroy Bondhus"
+date: "2023-12-19"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+
+## phenotype IC for anatomic entity:  log10(# genes associated with phenotype in anatomic entity / total # genes associated with any disease) 
+## expression IC for anatomic entity: log10(# genes specific to anatomic entity / total # genes specific anywhere)
+
+## each uberon term will have an IC value associated for phenotype AND an IC value associated for expression
+
+## each gene will have a set of uberon terms associated with phenotype AND expression
+
+## then calculate concordance between phenotype and expression
+```
+
+
+```{r}
+onto <- ontos$uberon$ont
+hpo_uberon_gene_map <- onto_maps$HPO_UBERON_GENE$map
+hpo_uberon_gene_map <- hpo_uberon_gene_map[which(!hpo_uberon_gene_map$non_syndrome_flag),]
+hpo_uberon_gene_map$non_syndrome_flag <- NULL
+```
+
+```{r, get phenotype IC for anatomic entities}
+## phenotype IC for anatomic entity:  log10(# genes associated with phenotype in anatomic entity / total # genes associated with any disease)
+## phenotype subsumes to (down to descendants), phenotpy
+
+onto$phen_IC <- numeric(length=length(onto$id))
+onto$genes_w_phen_in_any <- vector("list",length(onto$id))
+# onto$genes_w_phen_in <- vector("list",length(onto$id))
+
+## OMIM : GENE <-> PHEN <-> UBERON
+omim_genes <- unique(hpo_uberon_gene_map$Ensembl_Gene_ID)
+for( i in 1:length(omim_genes)){
+  if(i %% 500 == 1){print(i)}
+  temp_uberon_ids <- hpo_uberon_gene_map$UBERON_ID[which(hpo_uberon_gene_map$Ensembl_Gene_ID==omim_genes[i])]
+  temp_uberon_ids <- unique(temp_uberon_ids[!is.na(temp_uberon_ids)])
+  ### add to ancestor terms for phen_in_any
+  temp_extended_ub_ids <- temp_uberon_ids
+  if(length(temp_uberon_ids)==0){next}
+  for(j in 1:length(temp_uberon_ids)){ 
+        temp_extended_ub_ids <- unique(c(temp_extended_ub_ids,
+                                         onto$ancestors[[which(onto$id==temp_uberon_ids[j])]]))
+  }
+  temp_extended_ub_ids <- temp_extended_ub_ids[!is.na(temp_extended_ub_ids)]
+  for(j in 1:length(temp_extended_ub_ids)){
+    onto$genes_w_phen_in_any[[which(onto$id==temp_extended_ub_ids[j])]] <- unique(c(
+      onto$genes_w_phen_in_any[[which(onto$id==temp_extended_ub_ids[j])]],
+      omim_genes[i])
+    ) 
+  }
+  ### add to descendant terms for phen_in include where subsumes to
+  ### FIX BEFORE IMPLEMENT - would need descendants to only be defined by is_a relation
+  # if(length(temp_uberon_ids)==0){next}
+  # for(j in 1:length(temp_uberon_ids)){
+  #   temp_descendants <- onto$descendants[[which(onto$id==temp_uberon_ids[j])]]
+  #   temp_descendants <- temp_descendants[!is.na(temp_descendants)]
+  #   temp_descendants <- unique(c(temp_uberon_ids[j],temp_descendants))
+  #   for(k in 1:length(temp_descendants)){
+  #   onto$genes_w_phen_in[[which(onto$id==temp_descendants[k])]] <-
+  #     unique(rbind(onto$genes_w_phen_in[[which(onto$id==temp_descendants[k])]],
+  #           data.frame(gene_w_phen=omim_genes[i] ,phen_subsumes_to=temp_uberon_ids[j])))
+  #   }
+  # }
+  
+}
+
+onto$phen_IC <- -log10( sapply(onto$genes_w_phen_in_any,length) / length(omim_genes) ) 
+```
+
+
+```{r, get expression IC for anatomic entities}
+## phenotype IC for anatomic entity:  log10(# genes associated with phenotype in anatomic entity / total # genes associated with any disease)
+## phenotype subsumes to (down to descendants), phenotpy
+
+onto$spec_expr_IC <- numeric(length=length(onto$id))
+onto$genes_w_spec_expr_in_any <- vector("list",length(onto$id))
+# onto$genes_w_spec_expr_in <- vector("list",length(onto$id))
+
+for(i in 1:length(spec_biosamples_list)){
+  if(i %% 500 == 1){print(i)}
+  if(nrow(spec_biosamples_list[[i]]$uberon_subtable)==0){next}
+  if(sum(spec_biosamples_list[[i]]$uberon_subtable$keep)==0){next}
+  which <- which(spec_biosamples_list[[i]]$uberon_subtable$keep)
+  temp_uberon_ids <- spec_biosamples_list[[i]]$uberon_subtable$id[which]
+  temp_uberon_ids <- unique(temp_uberon_ids[!is.na(temp_uberon_ids)])
+  ### add to ancestor terms for phen_in_any
+  temp_extended_ub_ids <- temp_uberon_ids
+  if(length(temp_uberon_ids)==0){next}
+  for(j in 1:length(temp_uberon_ids)){
+        temp_extended_ub_ids <- unique(c(temp_extended_ub_ids,
+                                         onto$ancestors[[which(onto$id==temp_uberon_ids[j])]]))
+  }
+  temp_extended_ub_ids <- temp_extended_ub_ids[!is.na(temp_extended_ub_ids)]
+  for(j in 1:length(temp_extended_ub_ids)){
+    onto$genes_w_spec_expr_in_any[[which(onto$id==temp_extended_ub_ids[j])]] <- unique(c(
+      onto$genes_w_spec_expr_in_any[[which(onto$id==temp_extended_ub_ids[j])]],
+      names(spec_biosamples_list)[i])
+    )
+  }
+  ### add to descendant terms for spec_expr_in include where subsumes to
+  ### FIX BEFORE IMPLEMENT - would need descendants to only be defined by is_a relation
+  # if(length(temp_uberon_ids)==0){next}
+  # for(j in 1:length(temp_uberon_ids)){
+  #   temp_descendants <- onto$descendants[[which(onto$id==temp_uberon_ids[j])]]
+  #   temp_descendants <- temp_descendants[!is.na(temp_descendants)]
+  #   temp_descendants <- unique(c(temp_uberon_ids[j],temp_descendants))
+  #   for(k in 1:length(temp_descendants)){
+  #   onto$genes_w_spec_expr_in[[which(onto$id==temp_descendants[k])]] <-
+  #     unique(rbind(onto$genes_w_spec_expr_in[[which(onto$id==temp_descendants[k])]],
+  #           data.frame(gene_w_spec_expr=names(spec_biosamples_list)[i],
+  #                      expr_subsumes_to=temp_uberon_ids[j])))
+  #   }
+  # }
+}
+
+onto$spec_expr_IC <- -log10( sapply(onto$genes_w_spec_expr_in_any,length) / length(spec_biosamples_list) ) 
+```
+
+```{r, add visibility score to onto}
+
+## if leaf node
+## visibility = 1 / (1+exp(1)^(num_cols - num_cols_midvis))
+## else
+## visibility = sum()
+
+add_visibility_score <- function(onto,descendant_relations=c(),
+                                 mid_vis_col_count=3,data_col_name="num_ehh_cols"){
+  onto$visibility_score <- rep(NA,length(onto$id))
+  avs_helper_func <- function(onto,id,visited_ids=c(),
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name){
+    which <- which(onto$id == id)
+    relation_table <- onto$relations[[which]]
+    
+    child_ids <- c(onto$children[[which]],
+                        relation_table$id[is.element(relation_table$relation,
+                                                     descendant_relations)])
+    child_ids <- unique(child_ids)
+    ## below line should not be needed if onto + transitive does not include loops
+    child_ids <- child_ids[!is.element(child_ids,visited_ids)]
+    if(length(child_ids)==0){
+      if(onto[[data_col_name]][which]==0){
+        onto$visibility_score[which] <- 0
+      } else{
+        onto$visibility_score[which] <- 1/(1+exp(-onto[[data_col_name]][which]+mid_vis_col_count))
+      }
+      
+      return(onto)
+    }
+    child_vis <- onto$visibility_score[match(child_ids,onto$id)]
+    for(i in 1:length(child_ids)){
+      if(is.na(child_vis[i])){
+        visited_ids <- unique(c(visited_ids,child_ids[i], id))
+        onto <- avs_helper_func(onto=onto,id=child_ids[i],visited_ids=visited_ids,
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name)
+        child_vis[i] <- onto$visibility_score[which(onto$id==child_ids[i])]
+      }
+    }
+    if(onto[[data_col_name]][which]==0){
+        onto$visibility_score[which] <- 0
+    } else{
+      onto$visibility_score[which] <- ((1/(1+exp(-onto[[data_col_name]][which]+mid_vis_col_count)))+
+      sum(child_vis)) / (length(child_vis)+1)
+    }
+    
+    return(onto)
+  }
+  for(i in 1:length(onto$id)){
+    if(i %% 100 == 0){print(i)}
+    if(!is.na(onto$visibility_score[i])){next}
+    onto <- avs_helper_func(onto=onto,id=onto$id[i],
+                              descendant_relations=descendant_relations,
+                              mid_vis_col_count=mid_vis_col_count,
+                              data_col_name=data_col_name)
+  }
+  return(onto)
+}
+onto <- add_visibility_score(onto,
+                             descendant_relations = c("has_part(SUPP_INV(part_of))"))
+
+```
+
+
+```{r, gene centric}
+temp_path_des_to_anc <- function(onto, desc, anc_branch, ascendant_relations, visited_set=c()){
+  visited_set <- unique(c(visited_set,desc))
+  parent_set <- onto$parents[[which(onto$id==desc)]]
+  relation_table <- onto$relations[[which(onto$id==desc)]]
+  parent_set <- unique(c(parent_set, 
+                         relation_table$id[is.element(relation_table$relation, ascendant_relations)]))
+  parent_set <- parent_set[is.element(parent_set, anc_branch)]
+  parent_set <- parent_set[!is.element(parent_set, visited_set)]
+  visited_set <- unique(c(visited_set,parent_set))
+  if(length(parent_set)==0){return(desc)}
+  parent_paths <- list()
+  for(parent in parent_set){
+    parent_paths[[parent]] <- temp_path_des_to_anc(onto=onto,
+                                       desc=parent,
+                                       anc_branch = anc_branch,
+                                       ascendant_relations = ascendant_relations,
+                                       visited_set=visited_set)
+    parent_paths[[parent]] <- paste(desc, parent_paths[[parent]],sep=",")
+  }
+  ## apply(merge(temp1,temp2),1,paste0,collapse=",")
+  return(unique(unlist(parent_paths)))
+}
+
+
+#..# define IC for phenotype and expression pIC and eIC
+onto$expr_phen_pminIC <- pmin(onto$phen_IC, onto$spec_expr_IC)
+## define phenotype anatomic concept set, PACS
+## define expression anatomic concept set, EACS
+## for each gene
+#### get subset of PACS associated with gene, aPACS
+#### get subset of EACS with specific expression of gene, sEACS
+###### for each aPAC get nearest observable EAC, noEAC
+###### for each aPAC get nearest sEAC, nsEAC
+###### get common ancestor of noEAC and nsEAC, eCA
+######## record: IC(eCA)/IC(noEAC) * IC(eCA)/IC(nsEAC): as measure of phen-expr similarity
+###### for each sEAC get nearest observable PAC, noPAC
+###### for each sEAC get nearest aPAC, naPAC
+###### get common ancestor of noPAC and naPAC, pCA 
+######## record: IC(pCA)/IC(noPAC) * IC(pCA)/IC(naPAC): as measure of phen-expr similarity.
+verbose_output <- TRUE
+gs <- gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers
+gs <- names(spec_biosamples)
+for(i in 1:length(gs)){
+  print(i)
+  pacs <- hpo_uberon_gene_map$UBERON_ID[is.element(hpo_uberon_gene_map$Ensembl_Gene_ID,
+                                                   gs[i])]
+  pacs <- unique(pacs[!is.na(pacs)])
+  eacs <- spec_biosamples_list[[gs[i]]]$uberon_subtable
+  eacs <- eacs$id[eacs$keep]
+  if(length(eacs)==0 | length(pacs)==0){next}
+  pacs_w_ancestors <- pacs
+  for(j in 1:length(pacs)){
+    pacs_w_ancestors <- c(pacs_w_ancestors, onto$ancestors[[which(onto$id==pacs[j])]])
+    pacs_w_ancestors <- unique(pacs_w_ancestors[!is.na(pacs_w_ancestors)])
+  }
+  eacs_w_ancestors <- eacs
+  for(j in 1:length(eacs)){
+    eacs_w_ancestors <- c(eacs_w_ancestors, onto$ancestors[[which(onto$id==eacs[j])]])
+    eacs_w_ancestors <- unique(eacs_w_ancestors[!is.na(eacs_w_ancestors)])
+  }
+  eacs_w_descendants <- eacs
+  for(j in 1:length(eacs)){
+    eacs_w_descendants <- c(eacs_w_descendants, onto$descendants[[which(onto$id==eacs[j])]])
+    eacs_w_descendants <- unique(eacs_w_descendants[!is.na(eacs_w_descendants)])
+  }
+  ### get intersect node set
+  intersect_set <- intersect(pacs_w_ancestors, eacs_w_ancestors)
+  
+  ### for each pac and eac, find nearest match in intersect node set, i.e. get LCA
+  if(verbose_output){
+    temp_pacs_df <- data.frame(phen_id=pacs,phen_name=onto$name[match(pacs,onto$id)],
+                               expr_ca_ic=NA,expr_ca_name=-1,
+                               expr_nsca_ic=NA,expr_nsca_name=-1,
+                               expr_noe_ic=NA,expr_noe_name=-1,
+                               score=NA, phen_subsumed_by_expr=NA,
+                               visibility=NA, penalty=NA,
+                               score_cat=NA,
+                               visibility_cat=NA,
+                               penalty_cat=NA)
+  }
+  for(j in 1:length(pacs)){
+    if(is.element(pacs[j],eacs_w_descendants)){
+      temp_pacs_df$phen_subsumed_by_expr[j] <- TRUE
+    } else {
+      temp_pacs_df$phen_subsumed_by_expr[j] <- FALSE
+    }
+  }
+  for(j in 1:length(pacs)){
+    ## get which are CA of pacs[j] and the intersect_set
+    pac_w_anc <- c(pacs[j], onto$ancestors[[which(onto$id==pacs[j])]])
+    which_ca <- which(is.element(onto$id, intersect( intersect_set, pac_w_anc  )))
+    if(length(which_ca)==0){next}
+    ## for each CA identify "nearest" desc with spec expre - eacs with min IC
+    which_n_eac_per_ca <- rep(NA, length(which_ca))
+    which_n_opac_per_ca <- rep(NA, length(which_ca))
+    for(k in 1:length(which_ca)){
+       which <- which(is.element(onto$id, intersect(c(onto$id[which_ca[k]],onto$descendants[[which_ca[k]]]),eacs)))
+       ### START CLUDGE : test for whether which is length 0 . Case should not occur.. but e.g. "transverse colon" does not have any descendants ?
+       if(length(which)==0){next}
+       ### END CLUDGE
+       ## minimize penalty by choosing onto concept "closest" to CA that has specific expression
+       which_n_eac_per_ca[k] <- which[which.min(onto$expr_phen_pminIC[which])]
+       #if(length(unique(which)) > 1){stop(print("interesting case - double check behavior here"))}
+       which <- which(is.element(onto$id, intersect(c(onto$id[which_ca[k]],onto$descendants[[which_ca[k]]]),pac_w_anc))
+                      & onto$num_ehh_cols > 0)
+       ## maximize penalty by choosing  onto concept "furthest" from CA that lies between CA and phen which has sufficient expr data available
+       which_n_opac_per_ca[k] <- which[which.max(onto$expr_phen_pminIC[which])]
+    }
+    which_sub <- which.max((onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_eac_per_ca])
+                           * (onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_opac_per_ca]))
+    which <- which_ca[which_sub]
+    if(verbose_output){
+      temp_pacs_df$expr_ca_ic[j] <- onto$expr_phen_pminIC[which]
+      temp_pacs_df$expr_ca_name[j] <- onto$name[which]
+      temp_pacs_df$expr_nsca_ic[j] <- onto$expr_phen_pminIC[which_n_eac_per_ca[which_sub]]
+      temp_pacs_df$expr_nsca_name[j] <- onto$name[which_n_eac_per_ca[which_sub]]
+      temp_pacs_df$expr_noe_ic[j] <- onto$expr_phen_pminIC[which_n_opac_per_ca[which_sub]]
+      temp_pacs_df$expr_noe_name[j] <- onto$name[which_n_opac_per_ca[which_sub]]
+      temp_pacs_df$score[j] <- max((onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_eac_per_ca])
+                                   * (onto$expr_phen_pminIC[which_ca] / onto$expr_phen_pminIC[which_n_opac_per_ca]))
+      
+      ## CA: onto$name[which]
+      ## phen node: onto$name[which_n_opac_per_ca[which_sub]]
+      ## expr node: onto$name[which_n_eac_per_ca[which_sub]]
+      
+      ## for each pair of expr and phen in temp_pacs_df - get path and calc penalty
+      ## phen to ca (onto$id[which])
+      onto$descendants[[which]] ## get paths from pacs[j] to CI  onto$id[[which]] includes nodes from all paths - may be > 1..
+      temp_paths <- temp_path_des_to_anc(onto=onto, desc=pacs[j], ascendant_relations = "part_of",
+                                         anc_branch = c(onto$id[which],onto$descendants[[which]]))
+      ## calculate penalty of each path - select max penalty - since this represents most visible path. Else maybe use average.. ?
+      max_penalty <- -1
+      for(path in temp_paths){
+        path <- str_split_1(path,",")
+        indices <- match(path,onto$id)
+        temp <- sum(onto$visibility_score[indices] * onto$expr_phen_pminIC[indices] / onto$expr_phen_pminIC[which(onto$id==pacs[j])]) /
+          sum(onto$expr_phen_pminIC[indices] / onto$expr_phen_pminIC[which(onto$id==pacs[j])])
+        max_penalty <- max(max_penalty, temp)
+      }
+      temp_pacs_df$visibility[j] <- max_penalty
+      max_penalty <- (1- temp_pacs_df$score[j]) * max_penalty
+      temp_pacs_df$penalty[j] <- max_penalty
+      
+    }
+    
+  }
+  temp_pacs_df$score_cat <- "high"
+  temp_pacs_df$score_cat[which(temp_pacs_df$score < 0.5)] <- "moderate"
+  temp_pacs_df$score_cat[which(temp_pacs_df$score < 0.1)] <- "low"
+  temp_pacs_df$visibility_cat <- "high"
+  temp_pacs_df$visibility_cat[which(temp_pacs_df$visibility < 0.5)] <- "moderate"
+  temp_pacs_df$visibility_cat[which(temp_pacs_df$visibility < 0.1)] <- "low" 
+  temp_pacs_df$penalty_cat <- "high"
+  temp_pacs_df$penalty_cat[which(temp_pacs_df$penalty < 0.5)] <- "moderate"
+  temp_pacs_df$penalty_cat[which(temp_pacs_df$penalty < 0.1)] <- "low"
+  
+  spec_biosamples[[gs[i]]]$uberon_phen_expr_intersect <- temp_pacs_df
+  
+  ### for each pac and eac record IC of nearest observable node to above node.
+  
+  
+  
+}
+
+
+for(i in 1:length(spec_biosamples)){
+  if(is.null(spec_biosamples[[i]]$uberon_phen_expr_intersect)){next}
+  which <- which(spec_biosamples[[i]]$uberon_phen_expr_intersect$phen_subsumed_by_expr)
+  spec_biosamples[[i]]$uberon_phen_expr_intersect$score[which] <- 1
+  spec_biosamples[[i]]$mean_ub_phen_expr_intersect <- mean(spec_biosamples[[i]]$uberon_phen_expr_intersect$score, na.rm=T)
+  spec_biosamples[[i]]$uberon_phen_expr_intersect$penalty[which] <- 0
+  spec_biosamples[[i]]$mean_ub_phen_expr_penalty <- mean(spec_biosamples[[i]]$uberon_phen_expr_intersect$penalty, na.rm=T)
+}
+
+
+mean_score <- unlist(sapply(spec_biosamples, function(x){if(!is.null(x$mean_ub_phen_expr_intersect)){return(x$mean_ub_phen_expr_intersect)}}))
+mean_penalty <- unlist(sapply(spec_biosamples, function(x){if(!is.null(x$mean_ub_phen_expr_penalty)){return(x$mean_ub_phen_expr_penalty)}}))
+png(filename = paste0(dirs$figures,"score_v_penalty.png"))
+plot(mean_score,mean_penalty)
+dev.off()
+```
+
+
+```{r}
+# dirs$phen_expr_intersect <- paste0(dirs$figures,"phen_expr_int/")
+# if(!dir.exists(dirs$phen_expr_intersect)){dir.create(dirs$phen_expr_intersect)}
+# for(i in 1:length(spec_biosamples)){
+#   spec_biosamples[[i]]$colnames
+#   spec_biosamples[[i]]$uberon_subtable[which(spec_biosamples[[i]]$uberon_subtable$keep),]
+#   spec_biosamples[[i]]$uberon_phen_expr_intersect[order(-spec_biosamples[[i]]$uberon_phen_expr_intersect$score),
+#                                                   c("phen_name","expr_noe_name","expr_ca_name","score","visibility","penalty",
+#                                                     "score_cat","visibility_cat","penalty_cat")]
+#   spec_biosamples[[i]]$mean_ub_phen_expr_intersect
+#   spec_biosamples[[i]]$mean_ub_phen_expr_penalty
+# }
+
+```
+
+```{r}
+sink(file=paste0(dirs$results,"scores_and_penalties.txt"))
+
+#for(i in 1:length(spec_biosamples)){
+for(i in names(sort(mean_score,decreasing=T))){
+  #if(!is.na(global_taus[names(spec_biosamples)[i]]) & global_taus[names(spec_biosamples)[i]] < 0.6){next}
+  
+  if(!is.null(spec_biosamples[[i]]$uberon_phen_expr_intersect)){
+    print(paste0(i,":",#names(spec_biosamples)[i],":",
+                  gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id == i)])) #names(spec_biosamples)[i])] ))
+    cat("\n")  
+    print("specific to (raw colnames):")
+    print(data.frame("raw_colnames"=spec_biosamples[[i]]$colnames),right = F)
+    cat("\n")
+    print("specific to (anatomic entities):")
+    print(spec_biosamples[[i]]$uberon_subtable[which(spec_biosamples[[i]]$uberon_subtable$keep),])
+    cat("\n")
+    print("phenotype expression overlap ordered by score:")
+    spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_ca_name <- str_trunc(spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_ca_name,23)
+    spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_nsca_name <- str_trunc(spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_nsca_name,23)
+    spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_noe_name <- str_trunc(spec_biosamples[[i]]$uberon_phen_expr_intersect$expr_noe_name,23)
+    spec_biosamples[[i]]$uberon_phen_expr_intersect$phen_name <- str_trunc(spec_biosamples[[i]]$uberon_phen_expr_intersect$phen_name,23)
+    print( spec_biosamples[[i]]$uberon_phen_expr_intersect[order(-spec_biosamples[[i]]$uberon_phen_expr_intersect$score),
+                                                    c("phen_name","expr_noe_name","expr_ca_name","expr_nsca_name","score","visibility","penalty",
+                                                      "score_cat","visibility_cat","penalty_cat")])
+    cat("\n")
+    print(paste0("mean score:",spec_biosamples[[i]]$mean_ub_phen_expr_intersect))
+    cat("\n")
+    print(paste0("mean penalty:",spec_biosamples[[i]]$mean_ub_phen_expr_penalty))
+    cat("\n\n\n\n")
+  }
+}
+sink()
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, assess coverage of uberon ontology terms in HPO}
+onto$num_associated_hpo_terms <- numeric(length = length(onto$id))
+for(i in 1:length(onto$id)){
+  if(i %% 500 == 1){print(i)}
+  associated_hpos <- onto_maps$HPO_UBERON$map$HPO_ID[which(is.element(onto_maps$HPO_UBERON$map$UBERON_ID,
+                                                                     c(onto$id[i],onto$descendants[[i]]) ))]
+  if(length(associated_hpos) ==0){next}
+  associated_hpos <- associated_hpos[!is.na(associated_hpos)]
+  expanded_hpos <- unique(associated_hpos)
+  for(j in 1:length(associated_hpos)){
+    which <- which(ontos$hpo$ont$id==associated_hpos[j])
+    if(length(which)==0){print(paste0(associated_hpos[j],": not in loaded ontology"));stop}
+    expanded_hpos <- unique(expanded_hpos,
+                            ontos$hpo$ont$descendants[[which]])
+  }
+  if(i %% 500 == 1){
+    print("uberon name:")
+    print(onto$name[i])
+    print("associated hpo names:")
+    print(ontos$hpo$ont$name[which(is.element(ontos$hpo$ont$id, expanded_hpos))][1:10])
+  }
+  onto$num_associated_hpo_terms[i] <- length(expanded_hpos)
+}
+
+```
+
+
+
+```{r}
+onto$num_ehh_cols <- sapply(onto$ehh,length) 
+onto$expr_IC <- numeric(length=length(onto$id))
+
+for(i in 1:length(spec_biosamples)){
+  print(i)
+  gene_id <- names(spec_biosamples)[i] 
+  ## expr
+  which <- spec_biosamples[[i]]$uberon_subtable$keep
+  if(is.null(which)){
+    spec_biosamples[[i]]$no_spec <- TRUE
+    next
+  }
+  expr_specific_to <- spec_biosamples[[i]]$uberon_subtable$id[which]
+  expr_specific_to_extended <- expr_specific_to
+  for(j in 1:length(expr_specific_to)){
+    which <- which(onto$id==expr_specific_to[j])
+    if(length(which)==0){next}
+    expr_specific_to_extended <- unique(c(expr_specific_to_extended,
+                                   onto$ancestors[[which]]))
+  }
+  
+  ## phen
+  which <- which(onto_maps$HPO_UBERON_GENE$map$Ensembl_Gene_ID==gene_id)
+  if(length(which)==0){
+    spec_biosamples[[i]]$no_phen <- TRUE
+    next
+  }
+  phen_specific_to <- onto_maps$HPO_UBERON_GENE$map$UBERON_ID[which]
+  phen_specific_to_extended <- phen_specific_to
+  for(j in 1:length(phen_specific_to)){
+    which <- which(onto$id==phen_specific_to[j])
+    if(length(which)==0){next}
+    phen_specific_to_extended <- unique(c(phen_specific_to_extended,
+                                   onto$ancestors[[which]]))
+  }
+  
+  which <- which(is.element(onto$id,intersect(expr_specific_to_extended,phen_specific_to_extended)))
+  df_int <- data.frame(id=onto$id[which], name=onto$name[which], phen_ic=onto$phen_IC[which],
+                       num_cols=onto$num_ehh_cols[which], num_phens=onto$num_associated_hpo_terms[which])
+  which <- which(is.element(onto$id,setdiff(phen_specific_to_extended, expr_specific_to_extended)))
+  df_phen  <- data.frame(id=onto$id[which],name=onto$name[which], phen_ic=onto$phen_IC[which],
+                       num_cols=onto$num_ehh_cols[which], num_phens=onto$num_associated_hpo_terms[which])
+  which <- which(is.element(onto$id,setdiff(expr_specific_to_extended,phen_specific_to_extended)))
+  df_expr <- data.frame(id=onto$id[which],name=onto$name[which], phen_ic=onto$phen_IC[which],
+                       num_cols=onto$num_ehh_cols[which], num_phens=onto$num_associated_hpo_terms[which])
+  
+  
+  ### look at code for getting spec_biosamples$*$uberon_subtable$keep column -> want something similar 
+  ### for deciding what to report for overlap between phen and expr. 
+  # 
+  # df_int_reduced <- df_int[0,]
+  # while(TRUE){
+  #   which <- which.max(df_int$phen_ic)
+  #   df_int_reduced <- rbind(df_int_reduced ,df_int[which,])
+  #   temp_id <- df_int$id[which]
+  #   temp_ids <- c(temp_id, unlist(onto$ancestors[which(is.element(onto$id,temp_id))]))
+  #   which <- which(is.element(df_int$id, temp_ids))
+  #   df_int <- df_int[-which,]
+  #   if(nrow(df_int)==0){break}
+  # };rm(df_int)
+
+  
+  df_int$child_in_set <- F 
+  for(j in 1:nrow(df_int)){
+    temp_descendants <- onto$descendants[[which(onto$id==df_int$id[j])]]
+    df_int$child_in_set[j] <- any(is.element(df_int$id, temp_descendants)) 
+  }
+  
+  ## strip all parent terms from df_expr and df_phen
+  if(nrow(df_expr) > 0){
+    df_expr$child_in_set <- F 
+    for(j in 1:nrow(df_expr)){
+      temp_descendants <- onto$descendants[[which(onto$id==df_expr$id[j])]]
+      df_expr$child_in_set[j] <- any(is.element(df_expr$id, temp_descendants)) 
+    }
+  }
+  if(nrow(df_phen) > 0){
+    df_phen$child_in_set <- F
+    for(j in 1:nrow(df_phen)){
+      temp_descendants <- onto$descendants[[which(onto$id==df_phen$id[j])]]
+      df_phen$child_in_set[j] <- any(is.element(df_phen$id, temp_descendants))
+    }
+  }
+  spec_biosamples[[i]]$phen_expr_intersect <- df_int[which(!df_int$child_in_set),]
+  if(nrow(df_phen) >0 ){
+    spec_biosamples[[i]]$phen <- df_phen[which(!df_phen$child_in_set),]
+  } else {spec_biosamples[[i]]$phen <- df_phen}
+  if(nrow(df_expr) >0 ){
+    spec_biosamples[[i]]$expr <- df_expr[which(!df_expr$child_in_set),]
+  } else {spec_biosamples[[i]]$expr <- df_expr}
+}
+
+# sink(file=paste0(dirs$results,"spec_biosamples_integrative.txt"))
+# for(i in 1:length(spec_biosamples)){
+#   print(paste0(i,":",names(spec_biosamples)[i]))
+#   print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
+#   print("number of columns specific:")
+#   print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
+#   print(spec_biosamples[[i]]$uberon_subtable);print("");print("")
+#   print("intersect")
+#   if(!is.null(spec_biosamples[[i]]$phen_expr_intersect)){
+#     print(spec_biosamples[[i]]$phen_expr_intersect);print("");print("")
+#   }
+#   print("phen")
+#   if(!is.null(spec_biosamples[[i]]$phen)){
+#     print(spec_biosamples[[i]]$phen);print("");print("")
+#   }
+#   print("expr")
+#   if(!is.null(spec_biosamples[[i]]$expr)){
+#     print(spec_biosamples[[i]]$expr);print("");print("")
+#   }
+# }
+# sink()
+## EXPR: GENE <-> UBERON
+
+## coldata ## expr data
+## for each UBERON id number of associated columns in expr data to give coverage sense. 
+## also to label underrepresented tissues/cells/contexts
+
+
+```
+
+```{r}
+### for each gene: (phenotype-> anatomy) + (expr->anatomy)  
+## phenotype -> anatomy : via OMIM
+## expr -> anatomy : via spec_biosamples
+
+
+## if no phen - next
+## e.g. Gene A:: P:E concordance == intersect(expr anatomy, phen anatomy) / union(expr anatomy, phen anatomy)
+### expr anatomy - in spec_biosamples from heatmap code. extend spec_biosamples with phenotype info? 
+
+```
+
+
+

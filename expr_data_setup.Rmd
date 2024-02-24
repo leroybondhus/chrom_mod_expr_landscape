@@ -5,18 +5,20 @@ date: "2023-08-20"
 output: html_document
 ---
 
+### NOTE: Previous issue for accessing gtex data due to url change - info on correct format for url access to resource on google cloud found at https://cloud.google.com/storage/docs/access-public-data#api-link 
+
 ```{r, load libraries}
-req_packages <- list(
-  standard = c("dendextend","factoextra","cowplot"),
-  biocmanager = c("Gviz","biomaRt")
-)
-for(std_package in req_packages$standard ){
-  if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
-};rm(std_package)
-for(bioc_package in req_packages$biocmanager ){
-  if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
-};rm(bioc_package)
-rm(req_packages)
+# req_packages <- list(
+#   standard = c("dendextend","factoextra","cowplot"),
+#   biocmanager = c("Gviz","biomaRt")
+# )
+# for(std_package in req_packages$standard ){
+#   if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
+# };rm(std_package)
+# for(bioc_package in req_packages$biocmanager ){
+#   if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
+# };rm(bioc_package)
+# rm(req_packages)
 
 ```
 
@@ -25,12 +27,13 @@ rm(req_packages)
 if(!exists("dataset_list")){dataset_list <- list()}
 registerDoParallel(detectCores()-2)
 files$temp_log <- paste0(dirs$temp_data,"temp.log")
-library(jsonlite)
-library(httr)
-library(dendextend)
-library(factoextra)
-library(cowplot)
+# library(jsonlite)
+# library(httr)
+# library(dendextend)
+# library(factoextra)
+# library(cowplot)
 ```
+
 ```{r}
 ### look into this as supplement/alt to encode
 ## https://stemangiola.github.io/CuratedAtlasQueryR/
@@ -150,6 +153,36 @@ rm(data_list, query_result, query_table, temp_data, temp_df,
    data_list_concat, temp_missing_rownames, search_query, temp_rownames)
 
 
+temp <- tempfile()
+temp_url <- "https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz"
+temp <- tempfile()
+download.file(temp_url,temp)
+
+dataset_list$GTEX <- list()
+dataset_list$GTEX$median_mat <- read.table( temp, skip=2, header = TRUE, sep = "\t")
+dataset_list$GTEX$median_mat_rowinfo <-  data.frame(Name=dataset_list$GTEX$median_mat$Name,
+                                                    Description=dataset_list$GTEX$median_mat$Description)
+rownames(dataset_list$GTEX$median_mat) <- dataset_list$GTEX$median_mat_rowinfo$Name
+dataset_list$GTEX$median_mat <- as.matrix(dataset_list$GTEX$median_mat[,3:ncol(dataset_list$GTEX$median_mat)])
+unlink(temp); rm(temp)
+
+
+temp <- tempfile() 
+temp_url <- "https://storage.googleapis.com/adult-gtex/annotations/v8/metadata-files/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"
+download.file(temp_url,temp)
+temp <- read.csv( temp, skip=0, header = TRUE, sep = "\t")
+temp <- unique(data.frame(colname=temp$SMTSD,uberon_id=temp$SMUBRID))
+temp$sim_colname <- tolower(str_remove_all(temp$colname, "[ \\.\\-\\(\\)]"))  
+dataset_list$GTEX$median_mat_colinfo <- temp[match(tolower(str_remove_all(colnames(dataset_list$GTEX$median_mat),
+                                                                          "[ \\.\\-(\\)]")),
+                                                   temp$sim_colname,),]
+dataset_list$GTEX$median_mat_colinfo$colname <- colnames(dataset_list$GTEX$median_mat) 
+which_keep <- grep("EFO_",dataset_list$GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$GTEX$median_mat_colinfo <- dataset_list$GTEX$median_mat_colinfo[which_keep,] 
+dataset_list$GTEX$median_mat <- dataset_list$GTEX$median_mat[,which_keep]
+which <- grep("UBERON:",dataset_list$GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$GTEX$median_mat_colinfo$uberon_id[which] <- paste0("UBERON:",dataset_list$GTEX$median_mat_colinfo$uberon_id[which])
+
 ### merge common biosample types (e.g. get median expression for all)
 print(Sys.time())
 save.image("./post_full_mat.Rdata") ## next aggregate common samples into median expr values
@@ -190,7 +223,7 @@ mat_cleaned <- log10(mat_cleaned+1)
 median_normalize <- TRUE
 if(median_normalize){
   for(i in 1:ncol(mat_cleaned)){
-    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > 0)])
+    mat_cleaned[,i] <- mat_cleaned[,i] / median(mat_cleaned[,i][which(mat_cleaned[,i] > log10(1+1))])
   }
 }
 colnames(mat_cleaned) <- make.unique(
@@ -283,7 +316,7 @@ coldata$age_group <- convert_range_to_ordered_factor(coldata$age_group)
 coldata$min_age_est <- NULL
 coldata$max_age_est <- NULL
 coldata$onto_w_age <-
-  paste0(coldata$biosample_ontology, coldata$age_group)
+  paste0(coldata$biosample_ontology, coldata$age_group, coldata$assay_term_name)
 
 temp_coldata <- unique(coldata)
 temp_mat <- matrix(nrow = nrow(mat),ncol=nrow(temp_coldata),dimnames = list(rownames(mat),NULL)) 
@@ -292,8 +325,73 @@ for(i in 1:nrow(temp_coldata)){
   temp_mat[,i] <- rowMeans(mat[,which_col,drop=F])
 }
 
+
 dataset_list$ENCODE_HH$agg_med_norm__mat <- temp_mat
 dataset_list$ENCODE_HH$agg_med_norm__coldata <- temp_coldata
+```
+
+```{r, get merge gtex encode dataset}
+temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat
+temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+temp_gtex_coldata <- dataset_list$GTEX$median_mat_colinfo
+temp_encode_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
+
+temp_gtex_mat <- dataset_list$GTEX$median_mat
+temp_encode_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat 
+
+rownames(temp_gtex_mat) <- str_remove(rownames(temp_gtex_mat), "\\.[0-9]+")
+temp_rownames <- intersect(rownames(temp_encode_mat),rownames(temp_gtex_mat))
+
+temp_gtex_mat <- temp_gtex_mat[match(temp_rownames,rownames(temp_gtex_mat)),]
+temp_encode_mat <- temp_encode_mat[match(temp_rownames,rownames(temp_encode_mat)),]
+
+temp_gtex_coldata$onto_id <- temp_gtex_coldata$uberon_id
+temp_encode_coldata$onto_id <- str_extract(temp_encode_coldata$biosample_ontology,
+                                           "_CL_.*|_UBERON_.*")
+temp_encode_coldata$onto_id <- str_extract(temp_encode_coldata$onto_id,
+                                           "CL_[0-9]+|UBERON_[0-9]+")
+temp_encode_coldata$onto_id <- str_replace(temp_encode_coldata$onto_id,"_",":")
+
+temp_gtex_coldata$age_group <- ""
+temp_gtex_coldata$assay <- "polyA plus RNA-seq"
+
+temp_encode_coldata$colname <- paste0(temp_encode_coldata$biosample_ontology.term_name, "..",
+                                      temp_encode_coldata$age_group,"..",
+                                      temp_encode_coldata$assay)
+temp_encode_coldata$assay <- temp_encode_coldata$assay_term_name
+colnames(temp_encode_mat) <- temp_encode_coldata$colname
+
+temp_encode_coldata <- temp_encode_coldata[,c("colname","onto_id","age_group","assay")]
+temp_gtex_coldata <- temp_gtex_coldata[,c("colname","onto_id","age_group","assay")]
+
+temp_coldata <- rbind(temp_gtex_coldata, temp_encode_coldata)
+
+## perform same set of normalization on gtex as on encode before binding
+
+### normalize : re-calculate TPM, log10+1 transform, median normalize
+for(i in 1:ncol(temp_gtex_mat)){
+  temp_gtex_mat[,i] <- (temp_gtex_mat[,i]*1e6 / sum(temp_gtex_mat[,i]))
+  ## set all very low counts to zero to avoid variable read depth issues
+  temp_gtex_mat[,i] [which(temp_gtex_mat[,i]  < 1)] <- 0
+  temp_gtex_mat[,i] <- (temp_gtex_mat[,i]*1e6 / sum(temp_gtex_mat[,i]))
+}
+temp_gtex_mat <- log10(temp_gtex_mat+1)
+median_normalize <- TRUE
+if(median_normalize){
+  for(i in 1:ncol(temp_gtex_mat)){
+    temp_gtex_mat[,i] <- temp_gtex_mat[,i] / median(temp_gtex_mat[,i][which(temp_gtex_mat[,i] > log10(1+1))])
+  }
+}  
+
+temp_mat <- cbind(temp_gtex_mat,temp_encode_mat)
+colnames(temp_mat) <- c(colnames(temp_gtex_mat),colnames(temp_encode_mat))
+all(colnames(temp_mat)==temp_coldata$colname)
+dataset_list$ENCODE_GTEX_COMB <- list(mat=temp_mat,
+                                      coldata=temp_coldata)
+which_rm <- grep("mole|layer of hippocamp",dataset_list$ENCODE_GTEX_COMB$coldata$colname)
+dataset_list$ENCODE_GTEX_COMB$coldata <- dataset_list$ENCODE_GTEX_COMB$coldata[-which_rm,]  
+dataset_list$ENCODE_GTEX_COMB$mat <- dataset_list$ENCODE_GTEX_COMB$mat[,-which_rm]
 ```
 
 
@@ -323,8 +421,10 @@ ontos$uberon$ont$relations[[which]] <- unique(rbind(ontos$uberon$ont$relations[[
 ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "develops_from","devolops_into(SUPP_INV(develops_from))")
 
 
-temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"UBERON.[0-9]*")
-temp_uberon_ids <- str_replace(temp_uberon_ids,"_",":")
+# temp_uberon_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"UBERON.[0-9]*")
+# temp_uberon_ids <- str_replace(temp_uberon_ids,"_",":")
+temp_uberon_ids <- str_extract(dataset_list$ENCODE_GTEX_COMB$coldata$onto_id,"UBERON:[0-9]*")
+
 
 
 ontos$uberon$ont$ehh <- vector("list", length(ontos$uberon$ont$id))
@@ -336,9 +436,9 @@ for(i in 1:length(temp_uberon_ids)){
 }
 
 
-temp_cl_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"CL.[0-9]*")
-temp_cl_ids <- str_replace(temp_cl_ids,"_",":")
-
+# temp_cl_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"CL.[0-9]*")
+# temp_cl_ids <- str_replace(temp_cl_ids,"_",":")
+temp_cl_ids <- str_extract(dataset_list$ENCODE_GTEX_COMB$coldata$onto_id,"CL:[0-9]*")
 
 ontos$cl$ont$ehh <- vector("list", length(ontos$cl$ont$id))
 for(i in 1:length(temp_cl_ids)){
@@ -367,8 +467,11 @@ get_onto_paired_concepts <- function(id, onto, inter_onto_relations=c("is_a","pa
   return(temp_ext_rels)
 }
 
-temp_cl_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"CL_.[0-9]*")
-temp_cl_ids <- str_replace(temp_cl_ids,"_",":")
+# temp_cl_ids <- str_extract(dataset_list$ENCODE_HH$agg_med_norm__coldata$biosample_ontology,"CL_.[0-9]*")
+# temp_cl_ids <- str_replace(temp_cl_ids,"_",":")
+temp_cl_ids <- str_extract(dataset_list$ENCODE_GTEX_COMB$coldata$onto_id,"CL:[0-9]*")
+
+
 temp_cl_paired_uberon_ids <- rep(NA, length(temp_cl_ids))
 temp_list <- list()
 
@@ -422,7 +525,7 @@ names(temp_list) <- ontos$cl$ont$name[match(temp_cl_ids,ontos$cl$ont$id)]
 for(i in 1:length(temp_list)){temp_list[[i]]$name <- ontos$uberon$ont$name[match(temp_list[[i]]$id, ontos$uberon$ont$id)]}
 
 ###
-save.image("./setup_w_expr_dat.RData")
+save.image()
 ```
 
 
@@ -559,505 +662,3 @@ save.image("./setup_w_expr_dat_and_funcs.RData")
 
 
 
-
-
-
-
-
-
-
-
-
-
-<!-- ```{r} -->
-
-<!-- temp_df <- get_desc_summary_table(id=onto$id[grep("^mesoderm-derived",onto$name)], -->
-<!--                                   onto=onto, transitive_relations = c("has_part(SUPP_INV(part_of))")) -->
-
-<!-- ##### what ontological concept has greatest divergence -->
-<!-- ##### within concept low variance, between concept high variance -->
-<!-- ### for kat6a -->
-<!-- ### for kat6 -->
-<!-- ### for kat -->
-<!-- ### for chrom  -->
-
-<!-- temp_genes <- gene_sets$genes_all$ensembl_gene_id[grep("KAT6A|KAT6B",gene_sets$genes_all$external_gene_name)] -->
-<!-- temp_gene_summary_df <- matrix(nrow = length(onto$id), ncol=length(temp_genes), -->
-<!--                                dimnames = list(onto$id, temp_genes)) -->
-<!-- temp_list <- list(means=temp_gene_summary_df, -->
-<!--                   sds=temp_gene_summary_df, -->
-<!--                   log2fc=temp_gene_summary_df) -->
-
-<!-- for(i in 1:length(onto$id)){ -->
-<!--   if(i %% 500 == 0){print(i)} -->
-<!--   if(is.null(onto$ehh_summary_stats$mean_internal[[i]])){next} -->
-<!--   temp_list$means[i,temp_genes] <- onto$ehh_summary_stats$mean_internal[[i]][temp_genes] -->
-<!--   temp_list$sds[i,temp_genes] <- onto$ehh_summary_stats$sd_internal[[i]][temp_genes] -->
-<!--   temp_list$log2fc[i,temp_genes] <- log2(onto$ehh_summary_stats$mean_internal[[i]][temp_genes] /  -->
-<!--                                  onto$ehh_summary_stats$mean_external[[i]][temp_genes]) -->
-<!-- } -->
-
-<!-- ##### classify genes by ubiquitous v specific -->
-<!-- ``` -->
-
-
-
-<!-- ```{r} -->
-
-
-<!-- # specificity_func <- specificity_measures$funcs[[measure]] -->
-<!-- # dot_sim <- similarity_func(exp_mat[,which]) -->
-<!-- # sim_tree <- cluster_func(dot_sim) -->
-<!-- # weights <- get_weights(sim_tree, colnames(exp_mat)[which]) -->
-<!-- # if(f_or_w == "flat"){weights[] <- 1} -->
-<!-- # balanced <- specificity_func(exp_mat[,which], weights) -->
-
-
-
-<!-- ### sandox - determine reasonable summary analysis pipeline -->
-
-<!-- onto_name <- "mesoderm-derived structure" -->
-<!-- onto_id <- onto$id[which(onto$name == onto_name)] -->
-<!-- ehh <- onto$ehh[[which(onto$id==onto_id)]] -->
-
-<!-- mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh] -->
-<!-- coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh,] -->
-<!-- colnames(mat) <- make.unique(paste0(coldata$biosample_ontology.term_name,":",coldata$age_group)) -->
-<!-- ### perform similarity reweighting  -->
-
-<!-- dot_sim <- similarity_func(mat) -->
-<!-- rownames(dot_sim) <- colnames(dot_sim) <- colnames(mat)  -->
-
-<!-- sim_tree <- cluster_func(dot_sim) -->
-<!-- weights <- get_weights(sim_tree, colnames(mat)) -->
-<!-- #### .... what we want here rn is also just a weighted mean and stdev for the ontology term (?) -->
-<!-- #### .... this branches off here from what specificty was about.. can also measure specificity but.. -->
-<!-- #### .... not goal rn...... -->
-<!-- # balanced <- calc_weighted_zscore_matrix(mat_cleaned, weights) -->
-
-<!-- weighted_means <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
-<!-- weighted_sds <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
-
-
-<!-- res.pca <- prcomp(t(mat)) -->
-<!-- fviz_eig(res.pca) -->
-<!-- fviz_pca_ind(res.pca, repel = TRUE) -->
-<!-- ``` -->
-
-
-<!-- ```{r} -->
-<!-- onto <- ontos$uberon$ont -->
-<!-- ### PCA -->
-<!-- ### HEATMAP w CLUSTERING  -->
-<!-- ### SPECIFICITY -->
-
-<!-- ###process### ALL BIOSAMPLE -->
-<!-- ###process### ALL MESODERM -->
-<!-- ###process### ALL HEART -->
-<!-- ##standby## iterate over set of dataset/subsets -> ALL_GENE v CHROM_GENE -->
-<!-- ##standby## iterate over set of dataset/subsets -> ALL_GENE v EACH(CHROM_GENE_SUBSET) -->
-<!-- ### HEART -->
-<!-- ### HEART LATERALITY_GENE -->
-<!-- ### HEART CHROM_GENE -->
-
-
-<!-- onto_terms <- c("anatomical entity","mesoderm-derived structure","heart") -->
-<!-- #gene_domain_names <- c("all","all_chrom_modifiers")  -->
-<!-- #gene_set_names <- c("all","all_chrom_modifiers","EACH(chrom_subset)","laterality","CHD") -->
-
-<!-- gss <- gene_sets$human_chromatin_modifiers$gene_subsets -->
-<!-- gss$all <- gene_sets$genes_all$ensembl_gene_id -->
-<!-- gene_domain_names <- c("all","all_chrom_modifiers")  -->
-<!-- gene_set_names <- sort(names(gss)) -->
-
-
-<!-- ehh_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat -->
-<!-- rownames(ehh_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat) -->
-<!-- ehh_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata -->
-
-
-
-<!-- dirs$scratch_figures <- paste0(dirs$figures,"scratch/") -->
-<!-- if(!dir.exists(dirs$scratch_figures)){dir.create(dirs$scratch_figures)} -->
-
-<!-- for(onto_term_index in 1:length(onto_terms)){ -->
-<!--   for(gene_set_name_index in c(1,2,7)){ #length(gene_set_names)){ -->
-<!--     base_filename_part <- paste0(gene_set_names[gene_set_name_index],"__", -->
-<!--                        str_remove(onto$id[[which(onto$name==onto_terms[onto_term_index])]], ":")) -->
-
-<!--     temp_cols <- onto$ehh[[which(onto$name==onto_terms[onto_term_index])]] -->
-<!--     temp_rows <- which(is.element(rownames(ehh_mat),gss[[gene_set_names[gene_set_name_index]]])) -->
-<!--     temp_mat <- ehh_mat[temp_rows,temp_cols] -->
-<!--     temp_coldata <- ehh_coldata[temp_cols,] -->
-
-<!--     colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group)) -->
-<!--     ### perform similarity reweighting  -->
-
-<!--     dot_sim <- similarity_func(temp_mat) -->
-<!--     rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)  -->
-<!--     sim_tree <- cluster_func(dot_sim) -->
-<!--     weights <- get_weights(sim_tree, colnames(temp_mat)) -->
-
-<!--     weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
-<!--     weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
-
-
-<!--     res.pca <- prcomp(t(temp_mat)) -->
-<!--     fviz_eig(res.pca) -->
-<!--     fviz_pca_ind(res.pca,axes = c(1,2),repel = TRUE, labelsize=3)   -->
-<!--     filename <- paste0(dirs$scratch_figures,"pc12__",base_filename_part, ".png" ) -->
-<!--     ggsave(filename, bg = 'white') -->
-<!--     fviz_pca_ind(res.pca,axes = c(2,3),repel = TRUE, labelsize=3) -->
-<!--     filename <- paste0(dirs$scratch_figures,"pc23__",base_filename_part, ".png" ) -->
-<!--     ggsave(filename, bg = 'white') -->
-<!--     fviz_pca_ind(res.pca,axes = c(3,4),repel = TRUE, labelsize=3) -->
-<!--     filename <- paste0(dirs$scratch_figures,"pc34__",base_filename_part, ".png" ) -->
-<!--     ggsave(filename, bg = 'white') -->
-
-<!--     filename <- paste0(dirs$scratch_figures,"heatmap__",base_filename_part, ".png" ) -->
-<!--     png(filename = filename, width=10,height=8,res=300,units = "in") -->
-<!--     heatmap(t(temp_mat),scale="none") -->
-<!--     dev.off() -->
-<!--     ### PCA -->
-<!--     ### HEATMAP w CLUSTERING  -->
-<!--     ### SPECIFICITY -->
-
-<!--   } -->
-<!-- } -->
-
-
-<!-- length(onto$ehh[[which(onto$name==onto_terms[1])]]) -->
-<!-- length(onto$ehh[[which(onto$name==onto_terms[2])]]) -->
-<!-- length(onto$ehh[[which(onto$name==onto_terms[3])]]) -->
-
-
-
-
-
-
-<!-- ###### ALL BIOSAMPLE (ENCODE) -->
-<!-- ###### ALL BRAIN (ENCODE) -->
-<!-- ##### DEVELOPMENTAL TRAJECTORY (BRAINSPAN) w SUPP COMPARE ENCODE w BRAINSPAN -->
-<!-- ### BRAIN -->
-<!-- ### SYNDROME ASSOCIATED w w/o CHROM -->
-<!-- ### NEURODEV ASSOCIATED w w/o CHROM -->
-<!-- ### AUTISM ASSOCIATED w w/o CHROM -->
-
-
-
-<!-- ######### HOW TO COMPARE VAR ALL v VAR CHROM ??  -->
-
-<!-- ``` -->
-
-
-<!-- <!-- ```{r} --> -->
-<!-- <!-- onto <- ontos$uberon$ont --> -->
-<!-- <!-- ## TO DO :: Compare to permutations ::   --> -->
-<!-- <!-- onto_name <- "mesoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_1 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- onto_name <- "endoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_2 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- onto_name <- "ectoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_3 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- ### perform similarity reweighting  --> -->
-
-
-
-<!-- <!-- temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_1] --> -->
-<!-- <!-- temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_1,]  --> -->
-<!-- <!-- colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group)) --> -->
-<!-- <!-- rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat) --> -->
-
-<!-- <!-- dot_sim <- similarity_func(temp_mat) --> -->
-<!-- <!-- sim_tree <- cluster_func(dot_sim) --> -->
-<!-- <!-- weights <- get_weights(sim_tree, colnames(temp_mat)) --> -->
-<!-- <!-- weighted_means_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) --> -->
-<!-- <!-- weighted_sds_1 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) --> -->
-
-
-<!-- <!-- df1 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name, --> -->
-<!-- <!--                  weights = weights) --> -->
-
-<!-- <!-- ggplot(df1, aes(x=biosample))+ --> -->
-<!-- <!--   geom_bar()+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__meso_biosample_count.png")) --> -->
-
-<!-- <!-- ggplot(df1, aes(x=biosample, y=weights))+ --> -->
-<!-- <!--   geom_boxplot()+ --> -->
-<!-- <!--   geom_point(aes(color=biosample),show.legend = F)+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__meso_weights.png")) --> -->
-
-<!-- <!-- aggregate(df1$weights, by=list(df1$biosample), FUN=sum) --> -->
-
-<!-- <!-- temp_df <- aggregate(df1$weights, by=list(df1$biosample), FUN=sum)  --> -->
-<!-- <!-- colnames(temp_df) <- c("biosample", "sum_of_weights") --> -->
-<!-- <!-- ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+ --> -->
-<!-- <!--   geom_bar(stat="identity")+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__meso_biosample_sum_of_weights.png")) --> -->
-
-<!-- <!-- filename <- paste0(dirs$figures,"RD__meso_biosample_sim.png") --> -->
-<!-- <!-- png(filename = filename, width=10,height=8,res=300,units = "in") --> -->
-<!-- <!-- heatmap(dot_sim) --> -->
-<!-- <!-- dev.off() --> -->
-
-
-<!-- <!-- temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_2] --> -->
-<!-- <!-- temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_2,]  --> -->
-<!-- <!-- colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group)) --> -->
-<!-- <!-- rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat) --> -->
-
-<!-- <!-- dot_sim <- similarity_func(temp_mat) --> -->
-<!-- <!-- sim_tree <- cluster_func(dot_sim) --> -->
-<!-- <!-- weights <- get_weights(sim_tree, colnames(temp_mat)) --> -->
-<!-- <!-- weighted_means_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) --> -->
-<!-- <!-- weighted_sds_2 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) --> -->
-
-<!-- <!-- df2 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name, --> -->
-<!-- <!--                  weights = weights) --> -->
-
-<!-- <!-- ggplot(df2, aes(x=biosample))+ --> -->
-<!-- <!--   geom_bar()+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__endo_biosample_count.png")) --> -->
-
-<!-- <!-- ggplot(df2, aes(x=biosample, y=weights))+ --> -->
-<!-- <!--   geom_boxplot()+ --> -->
-<!-- <!--   geom_point(aes(color=biosample),show.legend = F) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__endo_weights.png")) --> -->
-
-<!-- <!-- aggregate(df2$weights, by=list(df2$biosample), FUN=sum) --> -->
-
-<!-- <!-- temp_df <- aggregate(df2$weights, by=list(df2$biosample), FUN=sum)  --> -->
-<!-- <!-- colnames(temp_df) <- c("biosample", "sum_of_weights") --> -->
-<!-- <!-- ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+ --> -->
-<!-- <!--   geom_bar(stat="identity")+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__endo_biosample_sum_of_weights.png")) --> -->
-
-
-<!-- <!-- filename <- paste0(dirs$figures,"RD__endo_biosample_sim.png") --> -->
-<!-- <!-- png(filename = filename, width=10,height=8,res=300,units = "in") --> -->
-<!-- <!-- heatmap(dot_sim) --> -->
-<!-- <!-- dev.off() --> -->
-
-<!-- <!-- temp_mat <- dataset_list$ENCODE_HH$agg_med_norm__mat[,ehh_3] --> -->
-<!-- <!-- temp_coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata[ehh_3,]  --> -->
-<!-- <!-- colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,":",temp_coldata$age_group)) --> -->
-<!-- <!-- rownames(temp_mat) <- rownames(dataset_list$ENCODE_HH$median_norm_mat) --> -->
-
-<!-- <!-- dot_sim <- similarity_func(temp_mat) --> -->
-<!-- <!-- sim_tree <- cluster_func(dot_sim) --> -->
-<!-- <!-- weights <- get_weights(sim_tree, colnames(temp_mat)) --> -->
-<!-- <!-- weighted_means_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) --> -->
-<!-- <!-- weighted_sds_3 <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) --> -->
-
-
-<!-- <!-- df3 <- data.frame(biosample = temp_coldata$biosample_ontology.term_name, --> -->
-<!-- <!--                  weights = weights) --> -->
-
-<!-- <!-- ggplot(df3, aes(x=biosample))+ --> -->
-<!-- <!--   geom_bar()+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__ecto_biosample_count.png")) --> -->
-
-<!-- <!-- ggplot(df3, aes(x=biosample, y=weights))+ --> -->
-<!-- <!--   geom_boxplot()+ --> -->
-<!-- <!--   geom_point(aes(color=biosample),show.legend = F) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__ecto_weights.png")) --> -->
-
-<!-- <!-- aggregate(df3$weights, by=list(df3$biosample), FUN=sum) --> -->
-
-<!-- <!-- temp_df <- aggregate(df3$weights, by=list(df3$biosample), FUN=sum)  --> -->
-<!-- <!-- colnames(temp_df) <- c("biosample", "sum_of_weights") --> -->
-<!-- <!-- ggplot(temp_df, aes(x=biosample, y=sum_of_weights))+ --> -->
-<!-- <!--   geom_bar(stat="identity")+ --> -->
-<!-- <!--   theme(axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust=1)) --> -->
-<!-- <!-- ggsave(filename = paste0(dirs$figures,"RD__ecto_biosample_sum_of_weights.png")) --> -->
-
-
-<!-- <!-- filename <- paste0(dirs$figures,"RD__ecto_biosample_sim.png") --> -->
-<!-- <!-- png(filename = filename, width=10,height=8,res=300,units = "in") --> -->
-<!-- <!-- heatmap(dot_sim) --> -->
-<!-- <!-- dev.off() --> -->
-
-
-<!-- <!-- save.image("./post_wtd_onto_test.RData") --> -->
-<!-- <!-- ``` --> -->
-
-<!-- <!-- ```{r} --> -->
-
-<!-- <!-- onto_name <- "mesoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_1 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- onto_name <- "endoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_2 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- onto_name <- "ectoderm-derived structure" --> -->
-<!-- <!-- onto_id <- onto$id[which(onto$name == onto_name)] --> -->
-<!-- <!-- ehh_3 <- onto$ehh[[which(onto$id==onto_id)]] --> -->
-<!-- <!-- ### perform similarity reweighting --> -->
-
-
-<!-- <!-- barplot(table(dataset_list$ENCODE_HH$coldata$biosample_ontology.term_name[ehh_1])) --> -->
-
-
-<!-- <!-- ehh_2 --> -->
-<!-- <!-- ehh_3 --> -->
-<!-- <!-- ``` --> -->
-
-
-<!-- <!-- ```{r} --> -->
-<!-- <!-- plot(weighted_means_1, weighted_means_2) --> -->
-<!-- <!-- plot(weighted_means_1, weighted_means_3) --> -->
-<!-- <!-- plot(weighted_means_2, weighted_means_3) --> -->
-
-<!-- <!-- df <- data.frame(meso=weighted_means_1,endo=weighted_means_2,ecto=weighted_means_3, --> -->
-<!-- <!--                  meso_v=weighted_sds_1,endo_v=weighted_sds_2,ecto_v=weighted_sds_3) --> -->
-
-
-<!-- <!-- ggplot(df, aes(x=meso, y=endo))+ --> -->
-<!-- <!--   ggtitle("(ROUGH) Encode: tissues: meso-derived v endo-derived")+ --> -->
-<!-- <!--   geom_point()+ --> -->
-<!-- <!--   geom_abline(slope=1,intercept=0,color="red")+ --> -->
-<!-- <!--   ylim(0,3)+xlim(0,3)+ --> -->
-<!-- <!--   theme(text = element_text(size=16)) --> -->
-<!-- <!-- filename <- paste0(dirs$figures, "RD__meso_v_endo.png") --> -->
-<!-- <!-- ggsave(filename=filename, height = 6, width = 6, units="in" ) --> -->
-
-
-<!-- <!-- ggplot(df, aes(x=meso, y=ecto))+ --> -->
-<!-- <!--   ggtitle("(ROUGH) Encode: tissues: meso-derived v ecto-derived")+ --> -->
-<!-- <!--   geom_point()+ --> -->
-<!-- <!--   geom_abline(slope=1,intercept=0,color="red")+ --> -->
-<!-- <!--   ylim(0,3)+xlim(0,3)+ --> -->
-<!-- <!--   theme(text = element_text(size=16)) --> -->
-<!-- <!-- filename <- paste0(dirs$figures, "RD__meso_v_ecto.png") --> -->
-<!-- <!-- ggsave(filename=filename, height = 6, width = 6, units="in" ) --> -->
-
-
-<!-- <!-- ggplot(df, aes(x=endo, y=ecto))+ --> -->
-<!-- <!--   ggtitle("(ROUGH) Encode: tissues: endo-derived v ecto-derived")+ --> -->
-<!-- <!--   geom_point()+ --> -->
-<!-- <!--   geom_abline(slope=1,intercept=0,color="red")+ --> -->
-<!-- <!--   ylim(0,3)+xlim(0,3)+ --> -->
-<!-- <!--   theme(text = element_text(size=16)) --> -->
-<!-- <!-- filename <- paste0(dirs$figures, "RD__endo_v_ecto.png") --> -->
-<!-- <!-- ggsave(filename=filename, height = 6, width = 6, units="in" ) --> -->
-
-
-
-<!-- <!-- ggl <- list() --> -->
-<!-- <!-- ggl[["endo_ecto_meso"]] <- ggplot(df, aes(x=inheritance, fill=prob, y=prop))+ --> -->
-<!-- <!--   geom_col(stat="identity", position=position_identity(), width = 0.99,)+ --> -->
-<!-- <!--   scale_fill_manual(values=c("lightblue1","lightblue2","lightblue3","lightblue4","grey30","grey20"))+ --> -->
-<!-- <!--   theme_classic()+ --> -->
-<!-- <!--   theme(strip.text.y = element_text(angle = 0))+ --> -->
-<!-- <!--   facet_grid(chrom_subset_name ~ .) --> -->
-
-
-<!-- <!-- ``` --> -->
-
-
-
-<!-- <!-- ### CHD ANALYSES --> -->
-
-<!-- <!-- ```{r} --> -->
-
-
-<!-- <!-- ``` --> -->
-
-
-<!-- <!-- ```{r, muscle example r.e. ontologically organized analysis} --> -->
-
-<!-- <!-- onto <- ontos$uberon$ont --> -->
-<!-- <!-- mat <- dataset_list$ENCODE_HH$agg_med_norm__mat --> -->
-<!-- <!-- coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata --> -->
-
-<!-- <!-- #### ubiquitous, specific --> -->
-<!-- <!-- #### all, mesoderm-derived, heart --> -->
-
-<!-- <!-- temp_stat_df_model <- data.frame( --> -->
-<!-- <!--   mean_internal = numeric(length=num_features), --> -->
-<!-- <!--   sd_internal = numeric(length=num_features), --> -->
-<!-- <!--   tau_internal = numeric(length=num_features), --> -->
-<!-- <!--   mean_external = numeric(length=num_features), --> -->
-<!-- <!--   sd_external = numeric(length=num_features), --> -->
-<!-- <!--   tau_external = numeric(length=num_features) --> -->
-<!-- <!-- ) --> -->
-<!-- <!-- rownames(temp_stat_df_model) <- rownames(mat) --> -->
-
-<!-- <!-- ## assumes p2 can contain p1 but not reverse --> -->
-<!-- <!-- contrast_pairs <- list(list(name="left v right", --> -->
-<!-- <!--                             p1="left cardiac chamber", --> -->
-<!-- <!--                             p2="right cardiac chamber"), --> -->
-<!-- <!--                        list(name="ventricle v atria", --> -->
-<!-- <!--                             p1="cardiac ventricle", --> -->
-<!-- <!--                             p2="cardiac atrium"), --> -->
-<!-- <!--                        list(name="heart vasc v vasc", --> -->
-<!-- <!--                             p1="heart blood vessel", --> -->
-<!-- <!--                             p2="blood vessel"), --> -->
-<!-- <!--                        list(name="great vessel v vasc", --> -->
-<!-- <!--                             p1="great vessel of heart", --> -->
-<!-- <!--                             p2="blood vasculature")) --> -->
-<!-- <!--                        # list(name="striated muscle v all", --> -->
-<!-- <!--                        #      p1="striated muscle tissue", --> -->
-<!-- <!--                        #      p2="anatomical entity"), --> -->
-<!-- <!--                        # list(name="cardiac muscle v all", --> -->
-<!-- <!--                        #      p1="cardiac muscle tissue", --> -->
-<!-- <!--                        #      p2="anatomical entity"), --> -->
-<!-- <!--                        # list(name="skeletal muscle v all", --> -->
-<!-- <!--                        #      p1="skeletal muscle tissue", --> -->
-<!-- <!--                        #      p2="anatomical entity"), --> -->
-<!-- <!--                        # list(name="smooth muscle v all", --> -->
-<!-- <!--                        #      p1="smooth muscle tissue", --> -->
-<!-- <!--                        #      p2="anatomical entity")) --> -->
-
-<!-- <!-- for(i in 1:length(contrast_pairs)){ --> -->
-<!-- <!--   temp_pair <- contrast_pairs[[i]] --> -->
-<!-- <!--   print(temp_pair$name) --> -->
-
-<!-- <!--   colset_list <- list( --> -->
-<!-- <!--     ehh1 = onto$ehh[[which(onto$name==temp_pair$p1) ]], --> -->
-<!-- <!--     ehh2 = setdiff(onto$ehh[[which(onto$name==temp_pair$p2)]] --> -->
-<!-- <!--                    ,onto$ehh[[which(onto$name==temp_pair$p1)]]) --> -->
-<!-- <!--   ) --> -->
-<!-- <!--   temp_pair$summary_stats <- temp_stat_df_model --> -->
-<!-- <!--   for(j in 1:length(colset_list)){ --> -->
-<!-- <!--     ehh <- colset_list[[j]] --> -->
-<!-- <!--     temp_mat <- mat[,ehh,drop=F] --> -->
-<!-- <!--     temp_coldata <- coldata[ehh,,drop=F] --> -->
-<!-- <!--     colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name, --> -->
-<!-- <!--                                              ":",temp_coldata$age_group)) --> -->
-<!-- <!--     dot_sim <- similarity_func(temp_mat) --> -->
-<!-- <!--     rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)  --> -->
-<!-- <!--     sim_tree <- cluster_func(dot_sim) --> -->
-<!-- <!--     weights <- get_weights(sim_tree, colnames(temp_mat)) --> -->
-<!-- <!--     if(names(colset_list)[j]=="ehh1"){ --> -->
-<!-- <!--       temp_pair$summary_stats$mean_internal <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) --> -->
-<!-- <!--       temp_pair$summary_stats$sd_internal <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) --> -->
-<!-- <!--       temp_pair$summary_stats$tau_internal <- calc_weighted_tau(temp_mat,weights) --> -->
-<!-- <!--     }else{ --> -->
-<!-- <!--       temp_pair$summary_stats$mean_external <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) --> -->
-<!-- <!--       temp_pair$summary_stats$sd_external <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) --> -->
-<!-- <!--       temp_pair$summary_stats$tau_external <- calc_weighted_tau(temp_mat,weights) --> -->
-<!-- <!--     } --> -->
-<!-- <!--   } --> -->
-<!-- <!--   contrast_pairs[[i]] <- temp_pair --> -->
-
-<!-- <!-- } --> -->
-
-<!-- <!-- for(i in 1:length(contrast_pairs)){ --> -->
-<!-- <!--   contrast_pairs[[i]]$summary_stats$tau_delta <- contrast_pairs[[i]]$summary_stats$tau_external -  --> -->
-<!-- <!--     contrast_pairs[[i]]$summary_stats$tau_internal --> -->
-<!-- <!--   contrast_pairs[[i]]$summary_stats$mean_delta <- contrast_pairs[[i]]$summary_stats$mean_external -  --> -->
-<!-- <!--     contrast_pairs[[i]]$summary_stats$mean_internal --> -->
-<!-- <!-- } --> -->
-
-<!-- <!-- save.image("post_contrast_heart.RData")  --> -->
-<!-- <!-- ``` --> -->

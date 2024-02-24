@@ -46,7 +46,8 @@ rm(OMIM_genemap2_URL)
 ```{r, load libraries}
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
-               "ggiraph","ggraph","igraph","collapsibleTree","webshot"),
+               "ggiraph","ggraph","igraph","collapsibleTree","webshot",
+               "dendextend","factoextra","cowplot","httr","jsonlite", "circlize"),
   biocmanager = c("Gviz","biomaRt","ComplexHeatmap")
 )
 for(std_package in req_packages$standard ){
@@ -385,6 +386,53 @@ add_descendants <- function(onto, descendant_relations=c(), descend_through_chil
   return(onto)
 }
 
+add_ancestors <- function(onto, ascendant_relations=c(), ascend_through_parents=TRUE){
+  onto$ancestors <- vector("list",length=length(onto$id))
+  add_ancestors_helper <- function(id, onto, ascendant_relations, ascend_through_parents,visited_ids=c()){
+    which <- which(onto$id==id)
+    if(length(which)==0){stop(paste("id", id, "does not exist in ontology"))}
+    if(length(which)>1){stop(paste("id", id, "ambiguous in ontology"))}
+    visited_ids <- c(visited_ids, id)
+    relation_df <- onto$relations[[which]]
+    all_transitive_ids <- relation_df$id[which(is.element(relation_df$relation, ascendant_relations))]
+    if(ascend_through_parents){
+      all_transitive_ids <- unique(c(all_transitive_ids,onto$parents[[which]]))
+    }
+    if(length(all_transitive_ids) > 0){
+      onto$ancestors[[which]] <- unique(c(onto$ancestors[[which]],all_transitive_ids))
+    }
+    transitive_ids <- all_transitive_ids[!is.element(all_transitive_ids, visited_ids)]
+    if(length(transitive_ids) == 0){
+      if(length(onto$ancestors[[which]]==0)){
+        onto$ancestors[[which]] <- NA 
+      }
+      return(onto)
+    }
+    transitive_ids_unassigned <- onto$id[which( sapply(onto$ancestors,length) == 0 & is.element(onto$id, transitive_ids))]
+    for(tid in transitive_ids_unassigned){
+     # print(tid)
+      visited_ids <- c(visited_ids, tid)
+      onto <- add_ancestors_helper(tid, onto, ascendant_relations, ascend_through_parents, visited_ids)
+    }
+    for(tid in all_transitive_ids){
+      onto$ancestors[[which]] <- unique(c(onto$ancestors[[which]],
+                                            onto$ancestors[[which(onto$id == tid)]]))
+    }
+    return(onto)
+  }
+  
+  for(i in 1:length(onto$id)){
+    if(i %% 1000 == 0){print(i)}
+    if(length(onto$ancestors[[i]]) > 0){next}
+    onto <- add_ancestors_helper(onto$id[i], onto,
+                              ascendant_relations=ascendant_relations,
+                              ascend_through_parents=ascend_through_parents )
+  }
+  return(onto)
+}
+
+
+
 ### cycle in is_a, part_of graph ? i.e. not a DAG?   
 add_annotation <- function(id, onto, annotation_name,annotation_value,
                            transitive_relations=c("is_a","part_of"),
@@ -547,6 +595,8 @@ ontos$hpo$ont <- add_children_from_parents(ontos$hpo$ont)
 ontos$hpo$ont <- add_depth(ontos$hpo$ont)
 ontos$hpo$ont <- add_height(ontos$hpo$ont)
 ontos$hpo$ont <- add_descendants(ontos$hpo$ont)
+ontos$hpo$ont <- add_ancestors(ontos$hpo$ont)
+
 
 ## set up uberon ontology ###
 ontos$uberon <- list()
@@ -632,6 +682,7 @@ close(con);rm(con, line, term_num, num_terms,
 ##### remove: UBERON:0001380 part_of UBERON:0001377  ## quadriceps femoris has_part vastus medialis ## preserve is_a relation
 ##### remove: UBERON:0014847 part_of UBERON:0001377  ## quadriceps femoris has_part vastus intermedius ## preserve is_a relation
 ##### add: UBERON:0018254 part_of UBERON:0002204 ## skeletal musculature part_of musculoskeletal system
+##### add: UBERON: is_a UBERON: ## heart is_a muscle organ
 
 which <- which(ontos$uberon$ont$id=="UBERON:0003983")
 which_keep <- which(!(grepl("UBERON:000718[12]",ontos$uberon$ont$relations[[which]]$id) &
@@ -648,7 +699,16 @@ ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")
   ontos$uberon$ont$relations[[which(ontos$uberon$ont$name=="skeletal musculature")]],
   data.frame(relation="part_of",id=ontos$uberon$ont$id[which(ontos$uberon$ont$name=="musculoskeletal system")])
 ))
-rm(which, which_keep, id)
+
+which_child <- which(ontos$uberon$ont$name=="heart")
+which_parent <- which(ontos$uberon$ont$name=="muscle organ")
+ontos$uberon$ont$children[[which_parent]] <- c(ontos$uberon$ont$children[[which_parent]],
+                                               ontos$uberon$ont$id[[which_child]])  
+ontos$uberon$ont$parents[[which_child]] <- c(ontos$uberon$ont$parents[[which_child]],
+                                               ontos$uberon$ont$id[[which_parent]])
+
+
+rm(which, which_keep, id, which_parent, which_child)
 #################
 
 
@@ -659,9 +719,12 @@ ontos$uberon$ont <- add_inverse_relation(ontos$uberon$ont, "part_of",
 #                                          inverse_relation_name = "part_of(SUPP_INV(has_part))")
 ontos$uberon$ont <- add_depth(ontos$uberon$ont, ascendent_relations = c("part_of","part_of(SUPP_INV(has_part))"))
 ontos$uberon$ont <- add_height(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
-ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
+#ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))","has_part"))
+## NOTE: "has_part some" relation causes issue with e.g. 
+ontos$uberon$ont <- add_descendants(ontos$uberon$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
 
-
+#ontos$uberon$ont <- add_ancestors(ontos$uberon$ont, ascendant_relations = c("part_of","part_of(SUPP_INV(has_part))" ))
+ontos$uberon$ont <- add_ancestors(ontos$uberon$ont, ascendant_relations = c("part_of" ))
 
 
 
@@ -890,15 +953,32 @@ options(timeout=300)
 gene_sets <- list()
 ### these pulls are fairly time intensive -> consider saving to data in short term and load if exists
 gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
-                                          "start_position","end_position"),
+                                          "start_position","end_position","gene_biotype"),
                  mart = ensembl, useCache = F)
 
-## alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
+# alternatively download from: http://geneontology.org/gene-associations/goa_human.gaf.gz
 # temp <- tempfile()
-# download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz")) 
-# gene_sets$genes_all_go <- read.table( temp, skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
-
-
+# download.file("http://geneontology.org/gene-associations/goa_human.gaf.gz", paste0(dirs$temp_data,"goa_human.gaf.gz"))
+# gene_sets$genes_all_go <- read.table( paste0(dirs$temp_data,"goa_human.gaf.gz"), skip=0, header = FALSE, sep = "\t",comment.char = "!",fill = T)
+# gene_sets$paralogs <- NULL
+# for(chr in c(as.character(1:22),"X","Y","MT" )){
+#   print(chr)
+#   temp <- getBM(attributes = c("ensembl_gene_id","external_gene_name",
+#                                         "hsapiens_paralog_ensembl_gene",
+#                                         "hsapiens_paralog_associated_gene_name",
+#                                         "hsapiens_paralog_perc_id",
+#                                         "hsapiens_paralog_perc_id_r1",
+#                                         "hsapiens_paralog_subtype"),
+#                               filters= c("chromosome_name","biotype"),
+#                               values=list(chr,"protein_coding"),
+#                               mart=ensembl,useCache = F)
+#   if(is.null(gene_sets$paralogs)){
+#     gene_sets$paralogs <- temp
+#   } else{
+#     gene_sets$paralogs <- rbind(gene_sets$paralogs, temp)
+#   }
+# 
+# }
 for(chr in c(as.character(1:22),"X","Y","MT" )){
   print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
@@ -929,22 +1009,40 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
 gene_sets$human_chromatin_modifiers <- list()
-gene_sets$human_chromatin_modifiers$go_terms = c("histone acetyltransferase activity",
-                                        "histone deacetylase activity",
-                                        "histone methyltransferase activity",
-                                        "histone demethylase activity",
-                                        "histone ubiquitin ligase activity",
-                                        "histone deubiquitinase activity",
-                                        "histone kinase activity",
-                                        "histone phosphatase activity",
-                                      ##  "chromatin remodeling", too broad
-                                      ##  "chromatin organization", too broad
-                                        "nucleosome organization",
-                                        "chromatin looping",
-                                        "heterochromatin organization",
-                                        "DNA-methyltransferase activity",
-                                        "DNA demethylase activity",
-                                        "structural constituent of chromatin"
+gene_sets$human_chromatin_modifiers$go_terms = c(
+  "histone acetyltransferase activity",
+  "histone deacetylase activity",
+  "histone methyltransferase activity",
+  "histone demethylase activity",
+  "histone ubiquitin ligase activity",
+  "histone deubiquitinase activity",
+  "histone kinase activity",
+  "histone phosphatase activity",
+  "DNA-methyltransferase activity",
+  "DNA demethylase activity",
+  # 
+  "chromatin looping",
+   "nucleosome organization",
+   "heterochromatin organization"
+  # 
+  # "histone modification",
+  # "histone acetylation",
+  # "histone deacetylation",
+  # "histone methylation",
+  # "histone demethylation",
+  # "histone deubiquitination",
+  # "histone ubiquitination"
+  # 
+  # "DNA methylation",
+  # "DNA demethylation"
+ 
+  # "chromatin remodeling", #too broad (?)
+  # "chromatin organization", #too broad (?)
+  #  
+  # "PcG protein complex",
+  # "SAGA-type complex",
+  # "Sin3-type complex"
+  # "structural constituent of chromatin"
                                       )
 
 
@@ -968,12 +1066,23 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$go_terms)){
 
 gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- unique(unlist(gene_sets$human_chromatin_modifiers$gene_subsets))
 
-gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
-  gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-  gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
+# gene_sets$human_chromatin_modifiers$gene_subsets$non_histones <- setdiff(
+#   gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+#   gene_sets$human_chromatin_modifiers$gene_subsets$`structural constituent of chromatin`)
 
 gene_sets$human_chromatin_modifiers$AN_curated_set <- read.csv("./AN_curated_chromopathy_LB_mod.csv")
-gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id 
+
+gene_sets$human_chromatin_modifiers$x__gene_subsets <- gene_sets$human_chromatin_modifiers$gene_subsets
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+  gene_sets$human_chromatin_modifiers$gene_subsets[[i]] <-intersect(gene_sets$human_chromatin_modifiers$gene_subsets[[i]],
+                                                                    gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id) 
+}
+gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <-
+  unique(gene_sets$human_chromatin_modifiers$AN_curated_set$ensembl_gene_id) 
+
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){print(paste0(names(gene_sets$human_chromatin_modifiers$gene_subsets)[i],"::", length(gene_sets$human_chromatin_modifiers$x__gene_subsets[[i]]) - length(gene_sets$human_chromatin_modifiers$gene_subsets[[i]])) )}
+print("")
+for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){print(paste0(names(gene_sets$human_chromatin_modifiers$gene_subsets)[i],"::", length(gene_sets$human_chromatin_modifiers$gene_subsets[[i]])) )}
 ## human
 ## mouse
 ## zebrafish
@@ -982,7 +1091,46 @@ gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers <- gene_set
 ## chromatin modifier
 rm(temp,temp2, chr,descendants,i,term_id, which)
 
+### Add control gene sets
+gene_sets$human_chromatin_modifiers$gene_subsets$control_set__non_chrom_mod <-
+  setdiff(  gene_sets$genes_all$ensembl_gene_id[which(gene_sets$genes_all$gene_biotype=="protein_coding")] ,
+  gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+
+save.image()
 ```
+
+# ```{r, download taxonomy info}
+# files$taxonomy <- paste0(dirs$temp_data,"taxmp.zip")
+# download.file("https://ftp.ncbi.nih.gov/pub/taxonomy/taxdmp.zip",files$taxonomy)
+# dirs$taxonomy <- paste0(dirs$temp_data,"taxonomy/")
+# dir.create(dirs$taxonomy)
+# system(paste0("unzip -o ", files$taxonomy," -d ",dirs$taxonomy))
+# 
+# taxonomy <- list()
+# taxonomy$names <- read.csv(paste0(dirs$taxonomy,"names.dmp"), sep="\t", header = F)
+# taxonomy$names <- taxonomy$names[,which(!apply(taxonomy$names,2, function(x){all(x=="|")}))]
+# colnames(taxonomy$names)[1:4] <- c("tax_id","name_txt","unique name", "name class")
+# taxonomy$nodes <- read.csv(paste0(dirs$taxonomy,"nodes.dmp"), sep="\t", header = F)
+# taxonomy$nodes <- taxonomy$nodes[,which(!apply(taxonomy$nodes,2, function(x){all(x=="|")}))]
+# colnames(taxonomy$nodes)[1:2] <- c("tax_id","parent tax_id")
+# 
+# h_sapiens_lineage <- data.frame(id=character(),name=character(), height=integer())
+# next_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="Homo sapiens")]
+# root_id <- taxonomy$names$tax_id[which(taxonomy$names$name_txt=="root")]
+# height <- 1
+# while(next_id != root_id){
+#   temp_name <- taxonomy$names$name_txt[which(taxonomy$names$tax_id==next_id)]
+#   if(length(temp_name)==0){temp_name <- NA}
+#   temp_df <- data.frame(id=next_id, name=temp_name, height=height)
+#   h_sapiens_lineage <- rbind(h_sapiens_lineage,temp_df)
+#   next_id <- taxonomy$nodes$`parent tax_id`[which(taxonomy$nodes$tax_id==next_id)]
+#   height=height+1
+# }
+# h_sapiens_lineage$depth <- max(h_sapiens_lineage$height) - h_sapiens_lineage$height
+# taxonomy$human_lineage <- h_sapiens_lineage
+# taxonomy$names <- taxonomy$nodes <- NULL
+# ```
+
 
 ```{r, custom ggplot themes}
 barcode_theme <- theme_classic()+

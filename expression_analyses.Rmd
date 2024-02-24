@@ -3,6 +3,8 @@ title: "expression_analyses"
 author: "Leroy Bondhus"
 date: "2023-10-24"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 
@@ -969,19 +971,26 @@ dend1 <- cluster_within_group(temp_mat[temp_rownames_in_order,
                                        temp_colnames_in_order] ,
                               factor(temp_sytemnames_in_order, levels = unique(temp_sytemnames_in_order)))
 
+png(filename=paste0(dirs$figures,"heatmap_test_order_by_system.png"), height = 30,width=24,res = 280,unit="in")
 Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = F, cluster_rows = F) #dend1)
+dev.off()
 
+png(filename=paste0(dirs$figures,"heatmap_test_order_by_system_cluster_in_system.png"), height = 30,width=24,res = 280,unit="in")
 Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = F, cluster_rows = dend1)
+dev.off()
 
+png(filename=paste0(dirs$figures,"heatmap_test_order_by_system_cluster_in_system_and_genes.png"), height = 30,width=24,res = 280,unit="in")
 Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = T, cluster_rows = dend1)
+dev.off()
 
-
-save.image()
+png(filename=paste0(dirs$figures,"heatmap_test_order_in_system_and_genes.png"), height = 30,width=24,res = 280,unit="in")
+Heatmap(t(temp_mat[temp_rownames_in_order, temp_colnames_in_order]), cluster_columns = T, cluster_rows = T)
+dev.off()
 
 #### for each specific gene
 ##### find onto concept(s) that match greatest number of tissues with specific expression for that gene - add to temp_col_order w info r.e. onto concept used
 
-spec_genes <- names(global_taus)[which(global_taus > 0.5)]
+spec_genes <- names(global_taus)[which(global_taus > 0.7)]
 spec_genes <- spec_genes[which(is.element(spec_genes, gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
 
 spec_biosamples <- list()
@@ -1011,6 +1020,20 @@ for(g in spec_genes){
   #                            temp_df$num_colids > 3) ,]
   spec_biosamples[[g]]$uberon_subtable <- temp_df
 }
+
+
+
+sink(file=paste0(dirs$results,"spec_biosamples.txt"))
+for(i in 1:length(spec_biosamples)){
+  print(paste0(i,":",names(spec_biosamples)[i]))
+  print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
+  print("number of columns specific:")
+  print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
+  print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
+sink()
+ 
+
+ 
 weight_zscores[spec_genes,]
 ```
 
