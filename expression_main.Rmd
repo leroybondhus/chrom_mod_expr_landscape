@@ -1,47 +1,27 @@
 ---
-title: "expression_heatmap"
+title: "expression_main"
 author: "Leroy Bondhus"
-date: "2023-11-25"
+date: "2024-02-25"
 output: html_document
-editor_options: 
-  chunk_output_type: console
 ---
 
+```{r}
 
+```
 
 ```{r, chrom modifier specificity}
-##### MOVE CHUNK TO A SETUP FILE? ## 
 onto <- ontos$uberon$ont
-#mat <- dataset_list$ENCODE_HH$agg_med_norm__mat ### Specify chrom modifier gene set to look at
 mat <- dataset_list$ENCODE_GTEX_COMB$mat
 coldata <- dataset_list$ENCODE_GTEX_COMB$coldata
-
-
-### want to perform clustering and reweighting using all genes
-#coldata <- dataset_list$ENCODE_HH$agg_med_norm__coldata
-#colnames(mat) <- make.unique(paste0(coldata$biosample_ontology.term_name,
-#                                    ":",coldata$age_group))
-
-
 
 num_features <- nrow(mat)
 
 which_cols <- onto$ehh[[which(onto$name=="anatomical entity")]]
-# which_cols <- setdiff(which_cols,
-#                       sample(onto$ehh[[which(onto$name=="immune system")]],
-#                              floor(0.9*length(onto$ehh[[which(onto$name=="immune system")]])) ) 
-#                       )
-# which_cols <- which( as.numeric(str_extract(coldata$age_group, "^[0-9]+")) >= 300 |
-#                        is.na(str_extract(coldata$age_group, "^[0-9]+")))
 
 temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] )
 temp_mat <- mat[,temp_which_cols,drop=F]
 temp_coldata <- coldata[temp_which_cols,,drop=F]
 
-
-
-# colnames(temp_mat) <- make.unique(paste0(temp_coldata$biosample_ontology.term_name,
-#                                                ":",temp_coldata$age_group))
 dot_sim <- similarity_func(temp_mat)
 rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
 sim_tree <- cluster_func(dot_sim)
@@ -50,39 +30,30 @@ weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(
 weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
 weighted_zscores <- calc_weighted_zscore_matrix(temp_mat,weights)
 weighted_tau <- calc_weighted_tau(temp_mat,weights)
-### for ms in major_systems
-### which genes with tau_global > 0.5, have z_global > 1 stdev mean_global i.e. specific to particular system
-### which genes with tau_global and NOT above condition have > 2 stdev mean_global i.e. specifc to particular biosample
-### stdev sensative to small changes in genes with very low variance - want more magnitude of change to select on e.g. log(fc)  
-### NOTE: log(x)-log(y) == log(x/y)
 
 biosample_gene_sets <- list()
-cutoff_sys2global_z = 1
-cutoff_sys2global_abs_delta_log10 = log10(1.5) ## i.e. at least a 50% diff in expression
-cutoff_point2global_z = qnorm(0.9)
-cutoff_point2global_abs_delta_log10 = log10(2) ## i.e. at least 2x diff
-cutoff_min_expr = log10(2.5) ## log10(5 TPM) ~ doesn't account for median normalization but if factor close to 1 for most this is ok 
 
 global_means <-weighted_means
 global_sds <- weighted_zscores
 global_taus <- weighted_tau
 names(global_taus) <- names(global_means) <- names(global_sds) <- rownames(temp_mat)
 
-
-
-
-
 #### for each specific gene
 ##### find onto concept(s) that match greatest number of tissues with specific expression for that gene - add to temp_col_order w info r.e. onto concept used
 
-#spec_genes <- names(global_taus)[which(global_taus > 0.7)]
-#spec_genes <- spec_genes[which(is.element(spec_genes, gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
-#spec_genes <- names(global_taus)
-spec_genes <- intersect(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,rownames(temp_mat)) # A
-#spec_genes <- intersect(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,names(global_taus)[global_taus > 0.4]) # B
+gene_sets$ubiq <-names(global_taus)[which(global_taus < 0.4)]
+gene_sets$ubiq_chrom <-names(global_taus)[which(global_taus < 0.4 & is.element(names(global_taus), 
+                    gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
+gene_sets$human_chromatin_modifiers$gene_subsets$ubiq <- gene_sets$ubiq_chrom
 
-#spec_biosamples <- list()
-#for(g in spec_genes){
+gene_sets$human_chromatin_modifiers$gene_subsets$non_ubiq <- setdiff(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+                                                                     gene_sets$human_chromatin_modifiers$gene_subsets$ubiq)
+
+
+#spec_genes <- intersect(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,rownames(temp_mat)) 
+spec_genes <- rownames(temp_mat) 
+#spec_genes <- setdiff(rownames(temp_mat),gene_sets$ubiq)
+
 write("",files$temp_log)
 spec_gene_blocks <- split(spec_genes, ceiling(seq_along(spec_genes) / (length(spec_genes) /getDoParWorkers() )))
 spec_biosamples_list <- foreach(spec_gene_block=spec_gene_blocks) %dopar% {
@@ -126,21 +97,7 @@ spec_biosamples_list <- foreach(spec_gene_block=spec_gene_blocks) %dopar% {
   }
   spec_biosamples
 }
-
-View(spec_biosamples_list)
-
-
-#save.image()
-
-# sink(file=paste0(dirs$results,"spec_biosamples_allgenes.txt"))
-# for(i in 1:length(spec_biosamples)){
-#   print(paste0(i,":",names(spec_biosamples)[i]))
-#   print(gene_sets$genes_all$external_gene_name[which(gene_sets$genes_all$ensembl_gene_id==names(spec_biosamples)[i])])
-#   print("number of columns specific:")
-#   print(length(spec_biosamples[[i]]$colids_spec));print(spec_biosamples[[i]]$colnames) 
-#   print(spec_biosamples[[i]]$uberon_subtable);print("");print("")}
-# sink()
-
+#View(spec_biosamples_list)
 
 write("",files$temp_log)
 ### Criteria : if ancestor col stats == descendant col stats, keep descendant cut ancestor.
@@ -222,11 +179,17 @@ spec_biosamples_list <- foreach(spec_biosamples=spec_biosamples_list) %dopar% {
 temp <- list()
 for(i in 1:length(spec_biosamples_list)){
   temp <- c(temp, spec_biosamples_list[[i]])
-}
+
+  }
 spec_biosamples_list <- temp
 rm(temp)
 
-spec_biosamples <- spec_biosamples_list[gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers]
+biosamples_list <- spec_biosamples_list
+spec_biosamples_list <- spec_biosamples_list[which(!is.element(names(spec_biosamples_list),gene_sets$ubiq))]
+
+
+spec_biosamples <- spec_biosamples_list[which(is.element(names(spec_biosamples_list),
+                                                         gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
 
 sink(file=paste0(dirs$results,"spec_biosamples_subset_concepts_allgenes.txt"))
 for(i in 1:length(spec_biosamples)){
@@ -270,7 +233,6 @@ top_onto_concepts$subsumed_by = ""
 top_onto_concepts$w_descendant_spec_gene_count <- 0
 top_onto_concepts$num_cols <- 0
 for(i in 1:nrow(top_onto_concepts)){
-  top_onto_concepts$id[i]
   temp_desc <- onto$descendants[[which(onto$id==top_onto_concepts$id[i]) ]]
   temp_desc <- temp_desc[!is.na(temp_desc)]
   which <- which(is.element(top_onto_concepts$id, temp_desc))
@@ -359,7 +321,8 @@ result_df <- result_df[which(result_df$id != "root"),]
 
 
 ### manual cleanup of result df NOT GENERAL
-result_df <- result_df[-c(85:92,93:96,112:117,130:135,146:165,183:232,244:245,253:254,256:257,277:340,350:434),]
+#result_df <- result_df[-c(85:92,93:96,112:117,130:135,146:165,183:232,244:245,253:254,256:257,277:340,350:434),] # no tau cut
+
 # rownames(result_df) <- 1:nrow(result_df)
 
 
@@ -565,19 +528,6 @@ Heatmap(temp_mat2[genes_in_order$gene_name,cols_in_order$column_id ],
         column_names_max_height = unit(6,"in") )
 dev.off()
 
-# 
-# 
-# 
-# png(filename=paste0(dirs$figures,"heatmap_ontologic_ordering_wo_redundancy.png"),
-#     height = 24, width=24, res = 280,unit="in")
-# Heatmap(temp_mat2[unique(genes_in_order$gene_name),unique(cols_in_order$column_id) ],
-#         cluster_rows = F,
-#         cluster_columns = F,
-#         col=col_fun,
-#         column_names_max_height = unit(6,"in"))
-# dev.off()
-
-
 ### deviation from mean
 
 temp_mat3 <- weighted_zscores
@@ -603,8 +553,6 @@ Heatmap(temp_mat4,
         column_names_gp = gpar(fontsize = 8),
         column_names_max_height = unit(6,"in") )
 dev.off()
-
-
 
 
 temp_df <- data.frame(name=c("immune system", "nervous system", "intestine", "musculature"),
@@ -644,16 +592,32 @@ for(i in 1:nrow(temp_df)){
 ```
 
 
-
 ```{r}
-gene_sets$ubiq <-names(global_taus)[which(global_taus < 0.4)]
-gene_sets$ubiq_chrom <-names(global_taus)[which(global_taus < 0.4 & is.element(names(global_taus), 
-                    gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))]
-gene_sets$human_chromatin_modifiers$gene_subsets$ubiq <- gene_sets$ubiq_chrom
+gene_sets$spec_onto_all <- list("immune system"=c(),
+                                "nervous system"=c(),
+                                "intestine"=c(),
+                                "musculature"=c())
+temp_descs <- gene_sets$spec_onto_all
+for(i in 1:length(temp_descs)){
+  which <- which(ontos$uberon$ont$name==names(temp_descs)[i])
+  temp_descs[[i]] <- c(ontos$uberon$ont$id[which],ontos$uberon$ont$descendants[[which]]) 
+}
+for(i in 1:length(spec_biosamples_list)){
+  if(nrow(spec_biosamples_list[[i]]$uberon_subtable)==0){next}
+  temp_ids <- spec_biosamples_list[[i]]$uberon_subtable$id[which(spec_biosamples_list[[i]]$uberon_subtable$keep)]
+  if(length(temp_ids)==0){next}
+  for(j in 1:length(gene_sets$spec_onto_all)){
+    temp_name <- names(gene_sets$spec_onto_all)[j]
+    if(any(is.element(temp_ids, temp_descs[[temp_name]]))){
+      gene_sets$spec_onto_all[[j]] <- c(gene_sets$spec_onto_all[[j]], names(spec_biosamples_list)[i])
+    }
+  }
+}
 
-gene_sets$human_chromatin_modifiers$gene_subsets$non_ubiq <- setdiff(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-                                                                     gene_sets$human_chromatin_modifiers$gene_subsets$ubiq)
 ```
+
+
+
 
 
 
@@ -767,6 +731,27 @@ print(dotplot(ego, showCategory = n))
 ego <- enrichplot::pairwise_termsim(ego)
 ego_list[["ubiq"]] <- ego
 
+
+for(i in 1:length(gene_sets$spec_onto_all)){
+   ego <- enrichGO(gene = gene_sets$spec_onto_all[[i]], 
+                  universe = rownames(temp_mat),
+                  keyType = "ENSEMBL",
+                  OrgDb = org.Hs.eg.db, 
+                  ont = "BP", 
+                  pAdjustMethod = "BH",
+                  pvalueCutoff = 0.5,
+                  qvalueCutoff = 0.5,
+                  readable = TRUE,
+                  pool=TRUE)
+  n=20
+  print(dotplot(ego, showCategory = n))
+  ego <- enrichplot::pairwise_termsim(ego)
+  # print(emapplot(ego, showCategory = n))
+  # print(goplot(ego, showCategory = n)) ## note needed to nest goplot in print function for this to write to file.. not sure why
+  ego_list[[paste0(names(gene_sets$spec_onto_all)[i]," ALL")]] <- ego
+}
+
+
 for(i in 1:length(ego_list)){
   filename <- paste0(dirs$figures,"spec_go__dotplot_", str_remove_all(names(ego_list)[i]," "),".png")
   png(filename=filename)
@@ -806,20 +791,26 @@ df <-  data.frame(ensembl_gene_id = character(),
                   omim_id = character(),
                   major_systems_affected = character(),
                   complexity  = numeric(),
-                  chrom_subset_name = character())
-
+                  chrom_subset_name = character(),
+                  num_genes=numeric(),
+                  num_genes_w_syndrome=numeric(),
+                  num_gene_syndromes=numeric())
+temp_list <- gene_sets$spec_onto_all
+names(temp_list) <- paste0(names(temp_list)," ALL")
 temp_list <- c(gene_sets$spec_onto,
+               temp_list,
                list(ubiq_chrom=gene_sets$ubiq_chrom,
                     chrom=gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-                    all=unique(gene_sets$genes_all$ensembl_gene_id) ))
+                    all=rownames(temp_mat) ))
 for(i in 1:length(temp_list)){
+  print(i)
   chrom_subset <- temp_list[[i]]
   chrom_subset_name <- names(temp_list)[i]
   
   temp_map <- onto_maps$HPO_UBERON_GENE$map
   temp_map <- temp_map[is.element(temp_map$Ensembl_Gene_ID, chrom_subset),]
   temp_map <- temp_map[!temp_map$non_syndrome_flag,]
-  
+  temp <- nrow(unique(temp_map[,c("OMIM_ID","Ensembl_Gene_ID")]))
   for(temp_omim_id in unique(temp_map$OMIM_ID) ){
     temp_submap <- temp_map[which(temp_map$OMIM_ID==temp_omim_id),] 
     major_systems_affected <- character()
@@ -836,11 +827,80 @@ for(i in 1:length(temp_list)){
                      data.frame(omim_id = temp_omim_id,
                                 major_systems_affected = strsplit(major_systems_affected,",")[[1]],
                                 complexity = length(strsplit(major_systems_affected,",")[[1]]),
-                                chrom_subset_name = chrom_subset_name))
-    temp_df <- unique(temp_df)
+                                chrom_subset_name = chrom_subset_name,
+                                num_genes = length(unique(chrom_subset)),
+                                num_genes_w_syndrome = length(unique(temp_map$Ensembl_Gene_ID)),
+                                num_gene_syndromes = temp))
+    temp_df <- unique(temp_df) 
     df <- rbind(df, temp_df)
   }
 }
+df$complexity_gene <- -1
+for(i in 1:length(unique(df$ensembl_gene_id))){
+  temp_gene <- unique(df$ensembl_gene_id)[i]
+  which <- which(df$ensembl_gene_id==temp_gene)
+  df$complexity_gene[which] <- length(unique(df$major_systems_affected[which]))
+}
+
+
+
+for(i in 1:length(temp_onto_names)){
+  ### Next add pLI plot here
+  temp_df <- unique(df[grep(temp_onto_names[i],df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
+  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
+  
+  temp_df_2 <- unique(temp_df[,c("chrom_subset_name","num_genes","num_genes_w_syndrome","num_gene_syndromes","is_chrom_set")])
+  temp_df_2$is_inverse <- FALSE 
+  temp_df_3 <- temp_df_2
+  temp_df_3$num_genes_w_syndrome <- temp_df_2$num_genes - temp_df_2$num_genes_w_syndrome
+  temp_df_3$is_inverse <- TRUE
+  temp_df_2 <- rbind(temp_df_2, temp_df_3)
+  
+  ggplot(temp_df_2, aes(x=chrom_subset_name,y=num_genes_w_syndrome/num_genes,label=num_genes_w_syndrome,fill=paste0(!is_inverse,chrom_subset_name )))+
+    geom_bar(stat = "identity", position="stack")+
+    geom_text(size=3, position=position_stack(vjust = 0.5))+
+    theme_bw(base_size = 8)+
+    scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
+    theme(plot.title = element_text(size=5),
+          axis.text.x = element_text(angle=90))
+  filename <- paste0(dirs$figures,"syndrome_gene_count_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
+  ggsave(filename = filename,width = 4,height=4)
+  
+  temp_test <- t.test(temp_df$complexity[temp_df$is_chrom_set],temp_df$complexity[!temp_df$is_chrom_set],
+                           alternative = "greater")
+  temp_df$chrom_subset_name <- paste0(temp_df$chrom_subset_name, "\nn=",temp_df$num_gene_syndromes)
+  ggplot(temp_df, aes(x=chrom_subset_name,y=complexity,color=is_chrom_set))+
+    ggtitle(paste0("Syndrome complexity: \ngenes with ",temp_onto_names[i], " specific expression\np=",format(signif(temp_test$p.value,2),scientific=T) ))+
+    geom_boxplot()+
+    stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
+    scale_y_continuous(breaks=0:max(temp_df$complexity))+
+    theme_bw(base_size = 8)+
+    theme(plot.title = element_text(size=5),
+          axis.text.x = element_text(angle=90))
+  filename <- paste0(dirs$figures,"syndrome_complexity_genes_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
+  ggsave(filename = filename,width = 3,height=4) #,units = "in",res=250)
+  
+  
+  temp_df <- unique(df[grep(temp_onto_names[i],df$chrom_subset_name),
+                       !is.element(colnames(df),c("omim_id","complexity","major_systems_affected") )])
+  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
+  temp_df$chrom_subset_name <- paste0(temp_df$chrom_subset_name, "\nn=",temp_df$num_genes_w_syndrome)
+  temp_test <- t.test(temp_df$complexity_gene[temp_df$is_chrom_set],temp_df$complexity_gene[!temp_df$is_chrom_set],
+                           alternative = "greater")
+  ggplot(temp_df, aes(x=chrom_subset_name,y=complexity_gene,color=is_chrom_set))+
+    ggtitle(paste0("Gene complexity: \ngenes with ",temp_onto_names[i], " specific expression\np=",format(signif(temp_test$p.value,2),scientific=T) ))+
+    geom_boxplot()+
+    stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
+    scale_y_continuous(breaks=0:max(temp_df$complexity_gene))+
+    theme_bw(base_size = 8)+
+    theme(plot.title = element_text(size=5),
+          axis.text.x = element_text(angle=90))
+  filename <- paste0(dirs$figures,"gene_complexity_genes_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
+  ggsave(filename = filename,width = 3,height=4) 
+}
+
+
+
 
 temp_map <- onto_maps$HPO_UBERON_GENE$map
 temp_map <- temp_map[!temp_map$non_syndrome_flag,]
@@ -858,6 +918,7 @@ or_df$or_ub <- or_df$or_lb  <- or_df$or <- or_df$pval <- NA
 or_df <- merge(or_df, data.frame(contrast_w=c("all","chrom")))
 for(i in 1:nrow(or_df)){
   if(or_df$chrom_subset_name[i]=="all"){next}
+  if(grepl("ALL", or_df$chrom_subset_name[i]) & or_df$contrast_w[i] != "all"){next}
   which <- which(or_df$major_systems_affected == or_df$major_systems_affected[i] &
                    or_df$chrom_subset_name == or_df$contrast_w[i])[1]
   temp_or <- fisher.test(matrix(c(
@@ -878,10 +939,13 @@ for(i in 1:nrow(or_df)){
 
 ggplot(or_df[!is.element(or_df$chrom_subset_name,c("all","chrom")),], aes(y=major_systems_affected,x=log2(or),color=contrast_w,group=contrast_w))+
   geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
-  geom_point(size=3,position=position_dodge(width=0.7))+
+  geom_point(size=1.5,position=position_dodge(width=0.7))+
   geom_vline(xintercept = 0)+
+  scale_x_continuous(breaks = -5:5)+
   #theme(axis.text.x = element_text(angle = 90))+
   facet_grid(chrom_subset_name ~ contrast_w)
+filename <- paste0(dirs$figures,"or_full.png")
+ggsave(filename,width=8,height=12)
 
 ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complexity))+
   geom_bar()+
@@ -889,6 +953,13 @@ ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complex
   theme(strip.text.y = element_text(angle = 0))
 filename <- paste0(dirs$figures, "complexity_by_spec_group.png")
 ggsave(filename=filename)
+
+ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=chrom_subset_name,y=complexity))+
+  geom_boxplot()+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=0.01, alpha=0.04)+
+  stat_summary(fun.y=mean, geom="point", shape=23, size=4)+
+  #facet_grid(chrom_subset_name ~ . , scale="free_y")+
+  theme(strip.text.y = element_text(angle = 0))
 
 
 
@@ -907,6 +978,22 @@ ggplot(df, aes(x=system_name, fill=system_name))+
         axis.text.x =  element_text(angle=45,hjust=0.95))
 filename <- paste0(dirs$figures, "systems_affected_by_spec_group.png")
 ggsave(filename=filename)
+
+
+
+temp <- aggregate(ensembl_gene_id ~ major_systems_affected + chrom_subset_name + num_genes + num_genes_w_syndrome ,
+                  data=df,FUN=function(x){length(unique(x))})
+colnames(temp)[which(colnames(temp)=="ensembl_gene_id")] <- "num_genes_w_sys_affected"
+
+ggplot(temp, aes(x=chrom_subset_name, y=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name))+
+  geom_col()+
+  #scale_fill_grey()+
+  facet_grid(major_systems_affected ~ . )+
+  theme_bw()+
+  theme(strip.text.y = element_text(angle = 0),
+        axis.text.x =  element_text(angle=45,hjust=0.95))
+
+
 
 ###  make upset plot here ##
 
