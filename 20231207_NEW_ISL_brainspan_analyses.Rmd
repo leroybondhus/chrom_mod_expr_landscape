@@ -24,10 +24,10 @@ library(enrichplot) #plot enrichment results
 library(ggnewscale)
 library(DOSE) # for GO visualization - need enrichplot
 library(gridExtra) # for multiple plots in one page
-library(wCorr)
+# library(wCorr) # don't need
 
 # BiocManager::install("DOSE") # for GO visualization
-install.packages("wCorr")
+# install.packages("wCorr") # don't need
 ```
 
 
