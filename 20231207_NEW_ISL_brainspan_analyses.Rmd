@@ -38,7 +38,8 @@ dirs <- list(data="./data/",
              # tables = "./results/tables/",
              # figures = "./results/figures/",
              temp_data ="./temp_data/",
-             OMIM_data = "./data/omim_ra/")
+             OMIM_data = "./data/omim_ra/",
+             results_embryo = "./results_embryo/")
              # figure_cluster_analysis = "./results/figures/cluster_analysis/",
              # table_cluster_analysis = "./results/tables/cluster_analysis/"
 for(dir in dirs){
@@ -48,8 +49,8 @@ for(dir in dirs){
 
 
 ```{r, cluster analysis directory setup}
-cutoff_dirs <- list(high_cutoff = "./results/high_res_cutoff_0.2/",
-             modest_cutoff = "./results/modest_res_cutoff_0.4/")
+cutoff_dirs <- list(high_cutoff = paste0(dirs$results_embryo, "high_res_cutoff_0.2/"),
+             modest_cutoff = paste0(dirs$results_embryo, "/modest_res_cutoff_0.4/"))
 for(dir in cutoff_dirs){
   if(!dir.exists(dir)){dir.create(dir)}
 };rm(dir)
@@ -335,9 +336,7 @@ corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_tim
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
 # get list of brainpsan structure names in alphabetical order
 
-## IS THIS WARNING OKAY? Warning: scheduled cores 2, 4, 9 did not deliver results, all values of the jobs will be affected
-
-cutoffs = list(modest_cutoff = 0.4,high_cutoff = 0.2)
+cutoffs <- list(modest_cutoff = 0.4,high_cutoff = 0.2)
 
 ptm <- proc.time()
 structure_names <- names(which(table(sorted_cols$structure_name)>=5))
@@ -348,24 +347,28 @@ for (dir in structure_dirs){
   if(!dir.exists(paste0(cutoff_dirs$modest_cutoff,analysis_dirs$cluster_analysis, dir))){dir.create(paste0(cutoff_dirs$modest_cutoff, analysis_dirs$cluster_analysis, dir))}
 };rm(dir)
 
-cutoff_gene_lists = list()
+cutoff_gene_lists <- list()
 
 for (a in 1:length(cutoffs)){
-  cutoff = cutoffs[a]
-  cutoff_name =  names(cutoffs)[a]
-  cutoff_dir = cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
+  cutoff <- cutoffs[a]
+  cutoff_name <-  names(cutoffs)[a]
+  cutoff_dir <- cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
   cutoff_gene_lists[[cutoff_name]] <- foreach(k = 1:length(structure_names), .errorhandling = 'pass') %dopar% {
     # STEP 1: select the structure of interest
-    struct_name = structure_names[k]
-    struct_index = grep(struct_name, sorted_cols$structure_name, fixed = T)
-    struct = str_replace_all(struct_name, "[ /]", "_") 
+    struct_name <- structure_names[k]
+    struct_index <- grep(struct_name, sorted_cols$structure_name, fixed = T)
+    embryo_struct_index <- struct_index[which(sorted_cols$age[struct_index] <= 40)]
+    struct <- str_replace_all(struct_name, "[ /]", "_") 
     
       # STEP 2: subset gene expression matrix for one brain region and filter (cutoff = 0.5) for genes with a significant difference in expression level
-      struct_matrix <- normal_expr[,struct_index]
+      struct_matrix <- normal_expr[,embryo_struct_index] # CHANGE DEPENDING ON EMBRYO OR ALL TIME
       row.names(struct_matrix) <- rows_meta$ensembl_gene_id
       sub_matrix <- struct_matrix[which(apply(struct_matrix, 1, max)-apply(struct_matrix, 1, min)>0.5),]
       
-      # mean (normalized to [0-1])  expression per time point for each gene (need dataframe format to access row names when creating gene lists) - normalize to max expression instead (divide by max)
+      # embryo_sub_matrix <- sub_matrix[,embryo_struct_index]
+      
+      # mean (normalized to [0-1])  expression per time point for each gene - normalize to max expression instead (divide by max) - MODIFY DEPENDING ON CLUSTERING OVER DEV TIME/ALL TIME
+      # normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
       normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
       all_genes_significant <- row.names(normalized_expr_matrix)
       
@@ -379,7 +382,7 @@ for (a in 1:length(cutoffs)){
         
         
         # STEP 3: create matrix of correlation btwn pairs of chromatin modifier genes & cluster
-        pcw <- sorted_cols$age[struct_index]
+        pcw <- sorted_cols$age[embryo_struct_index]
         pcw_range <- c(pcw[1], pcw[length(pcw)])
         window_size <- 10
         pcw_weights <- vector("numeric", length = length(pcw))
@@ -434,7 +437,7 @@ for (a in 1:length(cutoffs)){
         
         hcl_counts <- as.data.frame(table(myhcl))
         hcl_df <- melt(hcl_mean_expr)
-        hcl_df$pcw <- sorted_cols$age[struct_index]
+        hcl_df$pcw <- sorted_cols$age[embryo_struct_index]
         colnames(hcl_df)[1] = "expr"
         colnames(hcl_df)[2] = "cluster"
         hcl_df$freq <- hcl_counts$Freq[match(hcl_df$cluster, hcl_counts$myhcl)]
@@ -444,7 +447,7 @@ for (a in 1:length(cutoffs)){
         # STEP 6: facet plots for mean cluster expression over time for each cutoff
         
         ### ONLY DEVELOPMENTAL TIME - plot over non-log time
-        gg_dev_time <- ggplot(subset(select_hcl_df, pcw < 40), aes(x = pcw, y = expr)) +
+        gg_dev_time <- ggplot(subset(select_hcl_df, pcw <= 40), aes(x = pcw, y = expr)) +
           geom_point() + geom_line() +
           facet_wrap(~group_name) +
           theme(legend.position = "none", strip.text = element_text(size = 8)) +
@@ -454,26 +457,22 @@ for (a in 1:length(cutoffs)){
         ggsave(paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_cluster_expression_over_developmental_time(cutoff=", cutoff,").png"), plot = gg_dev_time, width = 10, height = 8)        
         # OVERLAY LOWER ALPHA EXPR FOR EACH GENE
         
-        gg_all_time <- ggplot(select_hcl_df, aes(x = log10(pcw), y = expr)) +
-              geom_point() + geom_line() +
-              facet_wrap(~group_name) +
-        theme(legend.position = "none", strip.text = element_text(size = 8)) +
-              ggtitle(paste0(struct, " gene expression over log time for each cluster (cutoff = ", cutoff,")")) +
-              labs(x = "log10(pcw)", y = "normalized expr") +
-             geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
-        
-        ggsave(paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_cluster_expression_over_time(cutoff=", cutoff,").png"), plot = gg_all_time, width = 10, height = 8)
+        # gg_all_time <- ggplot(select_hcl_df, aes(x = log10(pcw), y = expr)) +
+        #       geom_point() + geom_line() +
+        #       facet_wrap(~group_name) +
+        # theme(legend.position = "none", strip.text = element_text(size = 8)) +
+        #       ggtitle(paste0(struct, " gene expression over log time for each cluster (cutoff = ", cutoff,")")) +
+        #       labs(x = "log10(pcw)", y = "normalized expr") +
+        #      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+        # 
+        # ggsave(paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_cluster_expression_over_time(cutoff=", cutoff,").png"), plot = gg_all_time, width = 10, height = 8)
         
         # create subdirectories in each structure results folder for plots for each cluster (num clusters varies across diff cutoffs and diff structures)
         cluster_names <- paste0("cluster", 1:n_clusters)
-        # modest_cluster_names <- paste0("cluster", 1:n_clusters_modest)
-        # high_cluster_names <- paste0("cluster", unique(subcluster_names))
        
         # STEP 7: get gene lists for coexpression for cluster cutoff
         # create vector to store cluster assignments for each gene
-        struct_cluster_assignment <- vector("character", nrow(sub_matrix)) 
-        # struct_modest_cluster_assignment <- vector("character", nrow(sub_matrix)) 
-        # struct_high_cluster_assignment <- vector("character", nrow(sub_matrix)) 
+        struct_cluster_assignment <- vector("character", nrow(embryo_sub_matrix)) 
   
         for (i in 1:nrow(sub_matrix)){ # loop through all the genes
           corr_vec <- vector("numeric", n_clusters) # vector to store correlation values for each structure
@@ -613,9 +612,8 @@ for (z in 1:length(cutoffs)){
   
   unique_pairs <- names(cutoff_gene_list)[grep(names(cutoffs)[z], names(cutoff_gene_list))]
   
-  # split(1:100, ceiling(seq_along(1:100)/20))
-  
   unique_pairs <- str_split(unique_pairs, "\\.") # split name into list
+  
   parallel_blocks <- split(1:length(unique_pairs), ceiling(seq_along(1:length(unique_pairs))/getDoParWorkers()))
   
   # unique_pairs <- strsplit(gsub("[.]([^.]+[.])", "+\\1", unique_pairs),"\\+")
@@ -738,12 +736,13 @@ save(cutoffs_iagc_time_sim_mat, file = "./cutoffs_iagc_time_sim_mat.RData")
 
 
 ```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
+ptm <- proc.time()
 for (z in 1:length(cutoffs)){
   cutoff = cutoffs[z]
   cutoff_name = names(cutoffs)[z]
   cutoff_dir = cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
 
-  ptm <- proc.time()
+
   
   hc_meta <- hclust(as.dist(1-(cutoffs_iagc_time_sim_mat[[cutoff_name]]+1)/2), "ave")
   
@@ -884,13 +883,15 @@ for (z in 1:length(cutoffs)){
                 geom_point() + geom_line() +
                 ggtitle(paste0(mcl_dirs[n],' average log expression over time')) + 
                 labs(x = "log10(pcw)", y = "average expr") + 
-               geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+               geom_vline(xintercept = log10(40), color = "red") 
+    # + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
     
     mcl_expr <- ggplot(mcl_avg_expr_df, aes(x = pcw, y = expr)) +
                 geom_point() + geom_line() +
                 ggtitle(paste0(mcl_dirs[n],' average expression over time')) + 
                 labs(x = "pcw", y = "average expr") + 
-               geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
+               geom_vline(xintercept = 40, color = "red") 
+    # + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
           
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_expression_over_time.png'), plot = mcl_expr, width = 10, height = 8)
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_log_expression_over_time.png'), plot = log_mcl_expr, width = 10, height = 8)
@@ -898,36 +899,36 @@ for (z in 1:length(cutoffs)){
     mcl_avg_expr_df # object to save
   }
   
-  all_mcl_log_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
-              geom_point() + geom_line() +
-              facet_wrap(~metacluster) +
-        theme(legend.position = "none") +
-              ggtitle('metacluster average log expression over time') +
-              labs(x = "log10(pcw)", y = "normalized expr") +
-             geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
-  
-  ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_log_expression_over_time.png'), plot = all_mcl_log_expr_plot, width = 10, height = 8)
+  # all_mcl_log_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
+  #             geom_point() + geom_line() +
+  #             facet_wrap(~metacluster) +
+  #       theme(legend.position = "none") +
+  #             ggtitle('metacluster average log expression over time') +
+  #             labs(x = "log10(pcw)", y = "normalized expr") +
+  #            geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+  # 
+  # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_log_expression_over_time.png'), plot = all_mcl_log_expr_plot, width = 10, height = 8)
   
   # all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = pcw, y = expr)) +
   #             geom_point() + geom_line() +
   #             facet_wrap(~metacluster) +
   #       theme(legend.position = "none") +
-  #             ggtitle('metacluster average expression over time') + 
-  #             labs(x = "pcw", y = "normalized expr") + 
+  #             ggtitle('metacluster average expression over time') +
+  #             labs(x = "pcw", y = "normalized expr") +
   #            geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
-  
+
   # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_expression_over_time.png'), plot = all_mcl_expr_plot, width = 10, height = 8)
   
   # plot only developmental time
-  # develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
-  #             geom_point() + geom_line() +
-  #             facet_wrap(~metacluster) +
-  #       theme(legend.position = "none") +
-  #             ggtitle('metacluster average log expression over developmental time') + 
-  #             labs(x = "log10(pcw)", y = "normalized expr") + 
-  #            geom_vline(xintercept = log10(40), color = "red")
-  # 
-  # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_expression_over_log_developmental_time.png'), plot = develop_mcl_log_expr_plot, width = 10, height = 8)
+  develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
+              geom_point() + geom_line() +
+              facet_wrap(~metacluster) +
+        theme(legend.position = "none") +
+              ggtitle('metacluster average log expression over developmental time') +
+              labs(x = "log10(pcw)", y = "normalized expr") +
+             geom_vline(xintercept = log10(40), color = "red")
+
+  ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_expression_over_log_developmental_time.png'), plot = develop_mcl_log_expr_plot, width = 10, height = 8)
   
   develop_mcl_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = pcw, y = expr)) +
               geom_point() + geom_line() +
@@ -959,9 +960,28 @@ for (z in 1:length(cutoffs)){
   ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_all_metaclusters_gene_tissue_freq_hist.png'), plot = mcl_hist, width = 10, height = 8) 
   # summary of gene count - genes in each cluster, genes in each metacluster
   
-  proc.time() - ptm
   
-  # run GO analysis on genes belonging to at least 3-5 tissues
+  # extract chromatin modifier information
+  chrom_mod_mcl_counts <- vector("list", length(mcl_dirs))
+  names(chrom_mod_mcl_counts) <- mcl_dirs
+  for (i in 1:length(mcl_gene_counts)){
+    matched_modifiers <- match(chromatin_modifiers, names(mcl_gene_counts[[i]]))
+    # remove NA values
+    matched_modifiers <- matched_modifiers[!is.na(matched_modifiers)]
+    
+    chrom_mod_mcl_counts[[i]] <- mcl_gene_counts[[i]][matched_modifiers]
+  }
+  
+  chrom_mod_counts_df <- as.data.frame(unlist(chrom_mod_mcl_counts), col.names = 'count')
+  colnames(chrom_mod_counts_df) <- "tissue_freq"
+  chrom_mod_counts_df$metacluster <- sapply(str_split(rownames(chrom_mod_counts_df), '\\.'),"[[",1)
+  chrom_mod_counts_df$gene_id <- sapply(str_split(rownames(chrom_mod_counts_df), '\\.'),"[[",2)
+  rownames(chrom_mod_counts_df) <- NULL
+  
+  write.csv(chrom_mod_counts_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_chrom_mod_tissue_freq_df.csv'))
+  
+  
+  # run GO analysis on genes belonging to at least 3 tissues
   mcl_gene_list <- vector("list", length(mcl_dirs))
   names(mcl_gene_list) <- mcl_dirs
   for (i in 1:length(mcl_dirs)){
@@ -1009,12 +1029,14 @@ for (z in 1:length(cutoffs)){
     }
     saved_enrich
   }
-  proc.time() - ptm
+  
               
   
   write.csv(all_mcl_GO_results, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_all_mcl_GO_results.csv"))
-  
 }
+
+proc.time() - ptm
+
 ```
 
 
