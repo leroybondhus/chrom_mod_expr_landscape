@@ -660,114 +660,6 @@ for(i in 1:length(gene_sets$spec_onto)){
   gene_sets$spec_onto[[i]]  <- unique(temp_onto_gene_map$gene_id[is.element(temp_onto_gene_map$onto_id, temp_onto_ids)])
 }
 
-
-## GO analysis
-## add gseaplots for immune system, muscle dev, nervous dev, gut dev 
-go_terms_to_test <- c("digestive system development", "digestive system process",
-                      "muscle structure development","muscle system process",
-                      "heart development","heart process",
-                      "immune system development","immune system process",
-                      "nervous system development", "nervous system process")
-
-## get data.frame of genes with each annotation or a descendant of each term
-## use the gene_sets$genes_all_go
-sink(file=paste0(dirs$results,"select_go_terms_for_spec_groups.txt"))
-for(i in 1:length(go_terms_to_test)){
-  which <- which(ontos$go$ont$name==go_terms_to_test[i])
-  temp_ids <- c(ontos$go$ont$id[which], ontos$go$ont$descendants[[which]])
-  temp_ids <- temp_ids[!is.na(temp_ids)]
-  temp <- gene_sets$genes_all_go[is.element(gene_sets$genes_all_go$go_id, temp_ids),]
-  print(go_terms_to_test[i])
-  print(paste0("num genes ", sum(is.element(unique(temp$ensembl_gene_id),gene_sets$genes_all$ensembl_gene_id )),
-        " of ", length(gene_sets$genes_all$ensembl_gene_id)))
-  print(paste0("num chrom mods ", sum(is.element(unique(temp$ensembl_gene_id),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers )),
-        " of ", length(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)))
-  ### look at mean expression in immune,nervous,intestine, musculature... test enrichement 
-  
-  for(j in 1:length(gene_sets$spec_onto)){
-    print(paste0("    num ",names(gene_sets$spec_onto)[j]," spec chrom mods w term:"))
-    print(paste0("    ",sum(is.element(unique(temp$ensembl_gene_id),gene_sets$spec_onto[[j]] ))," of ",length(gene_sets$spec_onto[[j]]) ))
-  }  
-  
-}
-sink()
-
-
-## use : https://github.com/YuLab-SMU/clusterProfiler/issues/363
-## Alternative ## https://bioconductor.org/packages/devel/bioc/vignettes/fgsea/inst/doc/fgsea-tutorial.html
-ego_list <- list()
-for(i in 1:length(gene_sets$spec_onto)){
-   ego <- enrichGO(gene = gene_sets$spec_onto[[i]], 
-                  universe = gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-                  keyType = "ENSEMBL",
-                  OrgDb = org.Hs.eg.db, 
-                  ont = "BP", 
-                  pAdjustMethod = "BH",
-                  pvalueCutoff = 0.5,
-                  qvalueCutoff = 0.5,
-                  readable = TRUE,
-                  pool=TRUE)
-  n=20
-  print(dotplot(ego, showCategory = n))
-  ego <- enrichplot::pairwise_termsim(ego)
-  # print(emapplot(ego, showCategory = n))
-  # print(goplot(ego, showCategory = n)) ## note needed to nest goplot in print function for this to write to file.. not sure why
-  ego_list[[names(gene_sets$spec_onto)[i]]] <- ego
-}
-
-
-ego <- enrichGO(gene = gene_sets$human_chromatin_modifiers$gene_subsets$ubiq, 
-                universe = gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
-                keyType = "ENSEMBL",
-                OrgDb = org.Hs.eg.db, 
-                ont = "BP", 
-                pAdjustMethod = "BH",
-                pvalueCutoff = 0.50,
-                qvalueCutoff = 0.50,
-                readable = TRUE,
-                pool=TRUE)
-n=20
-print(dotplot(ego, showCategory = n))
-ego <- enrichplot::pairwise_termsim(ego)
-ego_list[["ubiq"]] <- ego
-
-
-for(i in 1:length(gene_sets$spec_onto_all)){
-   ego <- enrichGO(gene = gene_sets$spec_onto_all[[i]], 
-                  universe = rownames(temp_mat),
-                  keyType = "ENSEMBL",
-                  OrgDb = org.Hs.eg.db, 
-                  ont = "BP", 
-                  pAdjustMethod = "BH",
-                  pvalueCutoff = 0.5,
-                  qvalueCutoff = 0.5,
-                  readable = TRUE,
-                  pool=TRUE)
-  n=20
-  print(dotplot(ego, showCategory = n))
-  ego <- enrichplot::pairwise_termsim(ego)
-  # print(emapplot(ego, showCategory = n))
-  # print(goplot(ego, showCategory = n)) ## note needed to nest goplot in print function for this to write to file.. not sure why
-  ego_list[[paste0(names(gene_sets$spec_onto_all)[i]," ALL")]] <- ego
-}
-
-
-for(i in 1:length(ego_list)){
-  filename <- paste0(dirs$figures,"spec_go__dotplot_", str_remove_all(names(ego_list)[i]," "),".png")
-  png(filename=filename)
-  print(dotplot(ego_list[[i]], showCategory = n))
-  dev.off()
-  
-  filename <- paste0(dirs$figures,"spec_go__emapplot_", str_remove_all(names(ego_list)[i]," "),".png")
-  png(filename=filename)
-  print(emapplot(ego_list[[i]], showCategory = n))
-  dev.off()
-}
-
-
-
-
-
 phen_onto <- ontos$hpo$ont
 which <- which(phen_onto$name=="Phenotypic abnormality")
 major_systems <- phen_onto$name[is.element(phen_onto$id,phen_onto$children[[which]])] 
@@ -785,8 +677,6 @@ for(i in 1:length(major_systems$descendent_ids)){
   major_systems$descendent_ids[[i]] <- phen_onto$descendants[[which(phen_onto$name== major_systems$system_name[i] )]]
 }
 
-
-
 df <-  data.frame(ensembl_gene_id = character(),
                   omim_id = character(),
                   major_systems_affected = character(),
@@ -795,13 +685,17 @@ df <-  data.frame(ensembl_gene_id = character(),
                   num_genes=numeric(),
                   num_genes_w_syndrome=numeric(),
                   num_gene_syndromes=numeric())
+
 temp_list <- gene_sets$spec_onto_all
 names(temp_list) <- paste0(names(temp_list)," ALL")
 temp_list <- c(gene_sets$spec_onto,
                temp_list,
                list(ubiq_chrom=gene_sets$ubiq_chrom,
                     chrom=gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+                    all_ubiq=gene_sets$ubiq,
                     all=rownames(temp_mat) ))
+temp_list$nonubiq_chrom <- setdiff(temp_list$chrom, temp_list$ubiq_chrom)
+temp_list$all_nonubiq <- setdiff(temp_list$all, gene_sets$ubiq)
 for(i in 1:length(temp_list)){
   print(i)
   chrom_subset <- temp_list[[i]]
@@ -822,7 +716,7 @@ for(i in 1:length(temp_list)){
         }
       }
     }
-    if(length(major_systems_affected)==0){next}
+    if(length(major_systems_affected)==0){major_systems_affected <- ","}
     temp_df <- merge(data.frame(ensembl_gene_id = unique(temp_submap$Ensembl_Gene_ID)),
                      data.frame(omim_id = temp_omim_id,
                                 major_systems_affected = strsplit(major_systems_affected,",")[[1]],
@@ -840,6 +734,51 @@ for(i in 1:length(unique(df$ensembl_gene_id))){
   temp_gene <- unique(df$ensembl_gene_id)[i]
   which <- which(df$ensembl_gene_id==temp_gene)
   df$complexity_gene[which] <- length(unique(df$major_systems_affected[which]))
+}
+
+for(i in 1:length(temp_onto_names)){
+  temp_system <- temp_onto_names[[i]]
+  temp_df <- unique(df[grep(temp_onto_names[i],df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
+  temp_df <- unique(temp_df[,c("ensembl_gene_id","chrom_subset_name")])
+  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
+  temp_df$is_syndr_associated <- TRUE
+  
+  ## genes spec to temp_onto_names[[i]] but w no syndrome associated
+  which <- grep(paste0("^",temp_system,"$"),names(temp_list))
+  temp <- temp_list[[which]][which(!is.element(temp_list[[which]], temp_df$ensembl_gene_id))]
+  temp_df <- rbind(temp_df, data.frame(ensembl_gene_id=temp, chrom_subset_name=names(temp_list)[which],
+                                       is_chrom_set=TRUE, is_syndr_associated=F))
+  
+  which <- grep(paste0("^",temp_system," ALL$"),names(temp_list))
+  temp <- temp_list[[which]][which(!is.element(temp_list[[which]], temp_df$ensembl_gene_id))]
+  temp_df <- rbind(temp_df, data.frame(ensembl_gene_id=temp, chrom_subset_name=names(temp_list)[which],
+                                       is_chrom_set=FALSE, is_syndr_associated=F))
+  
+  temp_df <- cbind(temp_df,
+      gene_sets$lof_metrics[match(temp_df$ensembl_gene_id,gene_sets$lof_metrics$gene_id),c("pLI","pRec","pNull")])
+  temp_df <- temp_df[complete.cases(temp_df),]
+  temp_df$pLI_p_pRec <- temp_df$pLI + temp_df$pRec
+  temp_df$pLI_gt_p9 <- temp_df$pLI > 0.9 
+  for(j in 1:length(c("pLI","pRec","pLI_p_pRec"))){
+    temp_colname <- c("pLI","pRec","pLI_p_pRec")[j]
+    temp_df$pLR_gt_p9 <- temp_df[temp_colname] > 0.9
+    temp_df_1 <- aggregate(ensembl_gene_id ~  is_syndr_associated + pLR_gt_p9 + is_chrom_set + chrom_subset_name,
+                         data=temp_df, FUN=length)
+    colnames(temp_df_1)[which(colnames(temp_df_1)=="ensembl_gene_id")] <- "count"
+    temp_df_1 <- merge(temp_df_1, setNames(aggregate(count ~ chrom_subset_name, data=temp_df_1, FUN=sum),c("chrom_subset_name","total")))
+    ggplot(temp_df_1, aes(x=chrom_subset_name,y=count / total,
+                          label=count, fill=paste0(pLR_gt_p9,chrom_subset_name )))+
+      geom_bar(position="fill",stat="identity")+
+      geom_text(size=3, position=position_fill(vjust = 0.5))+
+      theme_bw(base_size = 8)+
+      scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
+      theme(plot.title = element_text(size=5),
+            axis.text.x = element_text(angle=90))+
+      facet_grid(paste0("is syndrome associated ", is_syndr_associated) ~ .)
+    
+    filename <- paste0(dirs$figures,temp_colname,"_synd_nosynd_chrom_nochrom_",str_remove_all(temp_onto_names[i]," "),".png")
+    ggsave(filename = filename,width = 4,height=4)
+  }
 }
 
 
@@ -897,6 +836,8 @@ for(i in 1:length(temp_onto_names)){
           axis.text.x = element_text(angle=90))
   filename <- paste0(dirs$figures,"gene_complexity_genes_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
   ggsave(filename = filename,width = 3,height=4) 
+
+  
 }
 
 
@@ -915,29 +856,80 @@ for(i in 1:length(unique(or_df$chrom_subset_name))){
                                                             temp_list[[temp_subset_name]])]))
 }
 or_df$or_ub <- or_df$or_lb  <- or_df$or <- or_df$pval <- NA
-or_df <- merge(or_df, data.frame(contrast_w=c("all","chrom")))
+or_df_w_contrasts <- merge(or_df, data.frame(contrast_w=c("all","all_nonubiq","all_ubiq","chrom","nonubiq_chrom", "ubiq_chrom")))
+for(i in 1:length(temp_onto_names)){
+  or_df_w_contrasts <- rbind(or_df_w_contrasts, 
+                             cbind(or_df[is.element(or_df$chrom_subset_name, temp_onto_names[i]),],
+                                   data.frame(contrast_w=paste0(temp_onto_names[i], " ALL") )))
+}
+or_df <- or_df_w_contrasts
+####
+temp_map_sub <- unique(temp_map[,c("OMIM_ID","Ensembl_Gene_ID")])
+####
+
 for(i in 1:nrow(or_df)){
-  if(or_df$chrom_subset_name[i]=="all"){next}
-  if(grepl("ALL", or_df$chrom_subset_name[i]) & or_df$contrast_w[i] != "all"){next}
-  which <- which(or_df$major_systems_affected == or_df$major_systems_affected[i] &
-                   or_df$chrom_subset_name == or_df$contrast_w[i])[1]
+  ###
+  # temp_list[[or_df$contrast_w[i]]] ## all genes in contrast set 
+  # temp_list[[or_df$chrom_subset_name[i]]] ## all genes in chrom subset
+  temp_gene_ids <- unique(df$ensembl_gene_id[which(df$major_systems_affected==or_df$major_systems_affected[i])])
   temp_or <- fisher.test(matrix(c(
-    or_df$count[i],
-    or_df$num_genes_associated_w_disorder[i]-or_df$count[i],
-    or_df$count[which]-or_df$count[i],
-    or_df$num_genes_associated_w_disorder[which]-
-      or_df$num_genes_associated_w_disorder[i]-
-      (or_df$count[which]-
-      or_df$count[i])
+    
+    length(intersect(intersect(temp_list[[or_df$chrom_subset_name[i]]],temp_gene_ids ),
+                   temp_map_sub$Ensembl_Gene_ID )), ##
+    length(intersect(setdiff(temp_list[[or_df$chrom_subset_name[i]]],temp_gene_ids ),
+                   temp_map_sub$Ensembl_Gene_ID )),
+    length(intersect(setdiff(intersect(temp_list[[or_df$contrast_w[i]]], temp_gene_ids),
+                   temp_list[[or_df$chrom_subset_name[i]]]),temp_map_sub$Ensembl_Gene_ID )) ,
+    length(intersect(setdiff(setdiff(temp_list[[or_df$contrast_w[i]]], temp_gene_ids),
+                   temp_list[[or_df$chrom_subset_name[i]]]),temp_map_sub$Ensembl_Gene_ID ))
   ),nrow=2))
+  
   or_df$pval[i] <- temp_or$p.value
   or_df$or[i] <- temp_or$estimate
   or_df$or_lb[i] <- temp_or$conf.int[1]
   or_df$or_ub[i] <- temp_or$conf.int[2]
+  
+  ###
 }
 
+for(i in 1:length(temp_onto_names)){
+  ggplot(or_df[temp_onto_names[i]==or_df$chrom_subset_name &
+                 !grepl("all_|_chrom",or_df$contrast_w) &
+                 complete.cases(or_df) &  
+                 or_df$major_systems_affected != "" 
+               ,], aes(y=major_systems_affected,x=log2(or),color=contrast_w))+
+    ggtitle(temp_onto_names[i])+
+    geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
+    geom_point(size=1.5,position=position_dodge(width=0.7))+
+    geom_vline(xintercept = 0)+
+    scale_x_continuous(breaks = -5:5) +
+    theme_bw(base_size = 8)+
+    theme(plot.title = element_text(size=5))
+    #theme(axis.text.x = element_text(angle = 90))+
+    #facet_grid(contrast_w ~ .)
+  filename <- paste0(dirs$figures,"or_",temp_onto_names[i],".png")
+  ggsave(filename,width=5,height=4)
+}
+ggplot(or_df[grepl("ubiq_chrom|^chrom$", or_df$chrom_subset_name) &
+               grepl("^all$",or_df$contrast_w) &
+               complete.cases(or_df) &  
+               or_df$major_systems_affected != "" 
+             ,], aes(y=major_systems_affected,x=log2(or),color=chrom_subset_name))+
+  ggtitle(paste0("ubiq_chrom contrasted with all"))+
+  geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
+  geom_point(size=1.5,position=position_dodge(width=0.7))+
+  geom_vline(xintercept = 0)+
+  scale_x_continuous(breaks = -5:5) +
+  theme_bw(base_size = 8)+
+  theme(plot.title = element_text(size=5))
+  #theme(axis.text.x = element_text(angle = 90))+
+  #facet_grid(contrast_w ~ .)
+filename <- paste0(dirs$figures,"or_ubiq_chrom.png")
+ggsave(filename,width=5,height=4)
 
-ggplot(or_df[!is.element(or_df$chrom_subset_name,c("all","chrom")),], aes(y=major_systems_affected,x=log2(or),color=contrast_w,group=contrast_w))+
+ggplot(or_df[!is.element(or_df$chrom_subset_name,c("all","chrom")) & 
+               complete.cases(or_df) & 
+               or_df$major_systems_affected != "",], aes(y=major_systems_affected,x=log2(or),color=contrast_w,group=contrast_w))+
   geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
   geom_point(size=1.5,position=position_dodge(width=0.7))+
   geom_vline(xintercept = 0)+
@@ -945,7 +937,11 @@ ggplot(or_df[!is.element(or_df$chrom_subset_name,c("all","chrom")),], aes(y=majo
   #theme(axis.text.x = element_text(angle = 90))+
   facet_grid(chrom_subset_name ~ contrast_w)
 filename <- paste0(dirs$figures,"or_full.png")
-ggsave(filename,width=8,height=12)
+ggsave(filename,width=8,height=14)
+
+
+
+
 
 ggplot(unique(df[,c("omim_id","complexity","chrom_subset_name")]), aes(x=complexity))+
   geom_bar()+
@@ -992,6 +988,42 @@ ggplot(temp, aes(x=chrom_subset_name, y=num_genes_w_sys_affected/num_genes_w_syn
   theme_bw()+
   theme(strip.text.y = element_text(angle = 0),
         axis.text.x =  element_text(angle=45,hjust=0.95))
+
+for(i in 1:length(temp_onto_names)){
+  ggplot(temp[which((temp$chrom_subset_name==temp_onto_names[i] | 
+                      grepl("^all$|^chrom$",temp$chrom_subset_name)) & 
+                      temp$major_systems_affected != ""),],
+         aes(y=major_systems_affected, x=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name,
+             label=num_genes_w_sys_affected))+
+    ggtitle(temp_onto_names[i])+
+    geom_col(position="dodge",color="grey10")+
+    geom_vline(xintercept = 1)+
+    geom_text(size=2, hjust=1.5, position=position_dodge(0.9))+
+    scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+    theme_bw(base_size = 8)+
+    theme(plot.title = element_text(size=5),
+          strip.text.y = element_text(angle = 0),
+          axis.text =  element_text(size=5))
+  filename <- paste0(dirs$figures,"sysphen_prop_",temp_onto_names[i],".png")
+  ggsave(filename,width=5,height=4)
+}
+
+ggplot(temp[which((grepl("ubiq_chrom|nonubiq_chrom",temp$chrom_subset_name) | 
+                    grepl("^all$",temp$chrom_subset_name)) & 
+                    temp$major_systems_affected != ""),],
+       aes(y=major_systems_affected, x=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name,
+           label=num_genes_w_sys_affected))+
+  ggtitle(temp_onto_names[i])+
+  geom_col(position="dodge",color="grey10")+
+  geom_vline(xintercept = 1)+
+  geom_text(size=2, hjust=1.5, position=position_dodge(0.9))+
+  scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  theme_bw(base_size = 8)+
+  theme(plot.title = element_text(size=5),
+        strip.text.y = element_text(angle = 0),
+        axis.text =  element_text(size=5))
+filename <- paste0(dirs$figures,"sysphen_prop_ubiq_chrom.png")
+ggsave(filename,width=5,height=4)
 
 
 
@@ -1042,7 +1074,113 @@ for(i in 1:length(plot_list)){
 
 ```
 
+```{r}
+# ## GO analysis
+# ## add gseaplots for immune system, muscle dev, nervous dev, gut dev 
+# go_terms_to_test <- c("digestive system development", "digestive system process",
+#                       "muscle structure development","muscle system process",
+#                       "heart development","heart process",
+#                       "immune system development","immune system process",
+#                       "nervous system development", "nervous system process")
+# 
+# ## get data.frame of genes with each annotation or a descendant of each term
+# ## use the gene_sets$genes_all_go
+# sink(file=paste0(dirs$results,"select_go_terms_for_spec_groups.txt"))
+# for(i in 1:length(go_terms_to_test)){
+#   which <- which(ontos$go$ont$name==go_terms_to_test[i])
+#   temp_ids <- c(ontos$go$ont$id[which], ontos$go$ont$descendants[[which]])
+#   temp_ids <- temp_ids[!is.na(temp_ids)]
+#   temp <- gene_sets$genes_all_go[is.element(gene_sets$genes_all_go$go_id, temp_ids),]
+#   print(go_terms_to_test[i])
+#   print(paste0("num genes ", sum(is.element(unique(temp$ensembl_gene_id),gene_sets$genes_all$ensembl_gene_id )),
+#         " of ", length(gene_sets$genes_all$ensembl_gene_id)))
+#   print(paste0("num chrom mods ", sum(is.element(unique(temp$ensembl_gene_id),gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers )),
+#         " of ", length(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)))
+#   ### look at mean expression in immune,nervous,intestine, musculature... test enrichement 
+#   
+#   for(j in 1:length(gene_sets$spec_onto)){
+#     print(paste0("    num ",names(gene_sets$spec_onto)[j]," spec chrom mods w term:"))
+#     print(paste0("    ",sum(is.element(unique(temp$ensembl_gene_id),gene_sets$spec_onto[[j]] ))," of ",length(gene_sets$spec_onto[[j]]) ))
+#   }  
+#   
+# }
+# sink()
+# 
+# 
+# ## use : https://github.com/YuLab-SMU/clusterProfiler/issues/363
+# ## Alternative ## https://bioconductor.org/packages/devel/bioc/vignettes/fgsea/inst/doc/fgsea-tutorial.html
+# ego_list <- list()
+# for(i in 1:length(gene_sets$spec_onto)){
+#    ego <- enrichGO(gene = gene_sets$spec_onto[[i]], 
+#                   universe = gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+#                   keyType = "ENSEMBL",
+#                   OrgDb = org.Hs.eg.db, 
+#                   ont = "BP", 
+#                   pAdjustMethod = "BH",
+#                   pvalueCutoff = 0.5,
+#                   qvalueCutoff = 0.5,
+#                   readable = TRUE,
+#                   pool=TRUE)
+#   n=20
+#   print(dotplot(ego, showCategory = n))
+#   ego <- enrichplot::pairwise_termsim(ego)
+#   # print(emapplot(ego, showCategory = n))
+#   # print(goplot(ego, showCategory = n)) ## note needed to nest goplot in print function for this to write to file.. not sure why
+#   ego_list[[names(gene_sets$spec_onto)[i]]] <- ego
+# }
+# 
+# 
+# ego <- enrichGO(gene = gene_sets$human_chromatin_modifiers$gene_subsets$ubiq, 
+#                 universe = gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+#                 keyType = "ENSEMBL",
+#                 OrgDb = org.Hs.eg.db, 
+#                 ont = "BP", 
+#                 pAdjustMethod = "BH",
+#                 pvalueCutoff = 0.50,
+#                 qvalueCutoff = 0.50,
+#                 readable = TRUE,
+#                 pool=TRUE)
+# n=20
+# print(dotplot(ego, showCategory = n))
+# ego <- enrichplot::pairwise_termsim(ego)
+# ego_list[["ubiq"]] <- ego
+# 
+# 
+# for(i in 1:length(gene_sets$spec_onto_all)){
+#    ego <- enrichGO(gene = gene_sets$spec_onto_all[[i]], 
+#                   universe = rownames(temp_mat),
+#                   keyType = "ENSEMBL",
+#                   OrgDb = org.Hs.eg.db, 
+#                   ont = "BP", 
+#                   pAdjustMethod = "BH",
+#                   pvalueCutoff = 0.5,
+#                   qvalueCutoff = 0.5,
+#                   readable = TRUE,
+#                   pool=TRUE)
+#   n=20
+#   print(dotplot(ego, showCategory = n))
+#   ego <- enrichplot::pairwise_termsim(ego)
+#   # print(emapplot(ego, showCategory = n))
+#   # print(goplot(ego, showCategory = n)) ## note needed to nest goplot in print function for this to write to file.. not sure why
+#   ego_list[[paste0(names(gene_sets$spec_onto_all)[i]," ALL")]] <- ego
+# }
+# 
+# 
+# for(i in 1:length(ego_list)){
+#   filename <- paste0(dirs$figures,"spec_go__dotplot_", str_remove_all(names(ego_list)[i]," "),".png")
+#   png(filename=filename)
+#   print(dotplot(ego_list[[i]], showCategory = n))
+#   dev.off()
+#   
+#   filename <- paste0(dirs$figures,"spec_go__emapplot_", str_remove_all(names(ego_list)[i]," "),".png")
+#   png(filename=filename)
+#   print(emapplot(ego_list[[i]], showCategory = n))
+#   dev.off()
+# }
+# 
 
+
+```
 
 ```{r, test hpo enrichments}
 ## for each HPO, test enrichment of chrom modifiers in set

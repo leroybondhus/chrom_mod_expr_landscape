@@ -52,7 +52,7 @@ search_query <- paste0("https://www.encodeproject.org/search/",
                        "&format=json&limit=all")
 #"https://www.encodeproject.org/search/?type=Experiment&related_series.@type=ReferenceEpigenome&status=released&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&assay_title=polyA+plus+RNA-seq&frame=object&format=json&limit=all"
 query_result <- GET(search_query)
-query_result <- content(query_result , "text", encoding = "UTF-8")
+query_result <- httr::content(query_result , "text", encoding = "UTF-8")
 query_result <- fromJSON(query_result, flatten = T)
 query_table <- query_result$`@graph`[!unlist(lapply(query_result$`@graph`, is.list))]
 
@@ -68,7 +68,7 @@ data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% { 
                           query_table$accession[i],
                           "/?frame=embedded&format=json")
   target <- GET(target)
-  target_result <- content(target, "text", encoding = "UTF-8")
+  target_result <- httr::content(target, "text", encoding = "UTF-8")
   target_result <- fromJSON(target_result, flatten = TRUE)
   temp_gene_anno <-  unique(target_result$files$genome_annotation)
   temp_gene_anno <- temp_gene_anno[grep("ENSEMBL", temp_gene_anno,invert = T)]
@@ -110,6 +110,7 @@ data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% { 
   temp_list
 }
 
+data_list_backup <- data_list
 data_list <- data_list[which(sapply(data_list, function(x){!all(names(x)==c("message","call"))}))]
 
 temp_data_list_qc <- data.frame(tpm_nrow=numeric(length=length(data_list)),
@@ -654,6 +655,14 @@ cluster_func <- function(sim_mat){add_weights(add_dist_to_parent(as.dendrogram(h
 ```
 
 ```{r}
+
+rm(coldata, data_list_backup, mat, mat_cleaned, temp,
+   temp_coldata, temp_data_list_qc, temp_df, temp_encode_coldata,
+   temp_encode_mat, temp_gtex_coldata, temp_gtex_mat, temp_list,
+   temp_mat, temp_time_ests)
+rm(i, j, bioc_package, max_val, median_normalize, min_val,
+   temp_cl_ids, temp_cl_paired_uberon_ids, temp_id, temp_rownames,
+   temp_uberon_ids, temp_url, which_col, which_keep, which_max, which_min, which_rm)
 save.image("./setup_w_expr_dat_and_funcs.RData")
 ```
 
