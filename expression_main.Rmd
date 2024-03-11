@@ -773,10 +773,10 @@ for(i in 1:length(temp_onto_names)){
   temp_df <- temp_df[complete.cases(temp_df),]
   
   temp_df$pgt_p9 <- "low confidence"
-  temp_df$pgt_p9[which(temp_df$pLI + temp_df$pRec > 0.9)] <- "pLI+pRec gt 0.9"
-  temp_df$pgt_p9[which(temp_df$pLI > 0.9)] <- "pLI gt 0.9"
-  temp_df$pgt_p9[which(temp_df$pRec > 0.9)] <- "pRec gt 0.9"
-  temp_df$pgt_p9[which(temp_df$pNull > 0.9)] <- "pNull gt 0.9"
+  temp_df$pgt_p9[which(temp_df$pLI + temp_df$pRec > 0.9)] <- "pLI+pRec"
+  temp_df$pgt_p9[which(temp_df$pLI > 0.9)] <- "pLI"
+  temp_df$pgt_p9[which(temp_df$pRec > 0.9)] <- "pRec"
+  temp_df$pgt_p9[which(temp_df$pNull > 0.9)] <- "pNull"
   
   
   
@@ -786,21 +786,19 @@ for(i in 1:length(temp_onto_names)){
   temp_df_1 <- merge( temp_df_1, setNames(aggregate(count ~  chrom_subset_name,
                       data=temp_df_1, FUN=function(x){sum(x)}),c("chrom_subset_name","sum")))
   
-  ggplot(temp_df_1, aes(fill=paste(chrom_subset_name, is_syndr_associated), x=chrom_subset_name, y=count/sum,
+  gg1 <- ggplot(temp_df_1, aes(fill=paste(chrom_subset_name, is_syndr_associated), x=chrom_subset_name, y=count/sum,
                         label=count))+
     geom_col(position="stack")+
     theme_bw(base_size = 8)+
     geom_text(size=1.8, position = position_stack(0.5))+
     scale_y_continuous(breaks = seq(0,1,by=0.1)) +
-    scale_fill_manual(values=c("honeydew2","#00BFC4","thistle1","#C77CFF"))+# "plum","grey50")))+
+    scale_fill_manual(values=c("paleturquoise","#00BFC4","thistle","#C77CFF"))+# "plum","grey50")))+
+    theme_bw()+
     theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90)) 
-  filename <- paste0(dirs$figures,"syn_",temp_onto_names[i],".png")
-  ggsave( filename,
-          #gridExtra::grid.arrange(gg1,gg2,gg3, ncol=3, widths=c(1,2.5,2.5)),,
-          width=4,height=4)
-  
-  
+          axis.text.x = element_text(angle=90),
+          axis.title = element_blank(),
+          legend.position = "none"
+          ) 
   
   
   temp_df_1 <- aggregate(ensembl_gene_id ~  dom_rec + 
@@ -818,122 +816,61 @@ for(i in 1:length(temp_onto_names)){
   temp$dom_rec <- "dom"; temp_df_2 <- rbind(temp_df_2,temp)
   temp$dom_rec <- "rec"; temp_df_2 <- rbind(temp_df_2,temp)
   temp_df_2 <- temp_df_2[is.element(temp_df_2$dom_rec, c("dom","rec") ),]
+  temp_df_2$dom_rec <- factor(temp_df_2$dom_rec,levels=c("dom","rec"))
   #position_dodge2(width = 0.9, preserve = "single")
-  ggplot(temp_df_2, aes(fill=paste(chrom_subset_name, both), x=chrom_subset_name, y=count/sum,
+  gg2 <- ggplot(temp_df_2, aes(fill=paste(chrom_subset_name, both), x=chrom_subset_name, y=count/sum,
                         label=count))+
     geom_col(position="stack")+
     theme_bw(base_size = 8)+
     geom_text(size=1.8, position = position_stack(0.5))+
     scale_y_continuous(breaks = seq(0,1,by=0.1)) +
-    scale_fill_manual(values=rev(c("lightblue3","#00BFC4","plum","#C77CFF")))+# "plum","grey50")))+
+    scale_fill_manual(values=c("#00BFC4","lightblue3","#C77CFF","plum"))+# "plum","grey50")))+
     theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90)) +
+          axis.text.x = element_text(angle=90),
+          legend.position = "none") +
     facet_grid(. ~ dom_rec)
-  filename <- paste0(dirs$figures,"rec_dom",temp_onto_names[i],".png")
+  
+  
+  temp_df_1 <- aggregate(ensembl_gene_id ~  pgt_p9 + 
+                           is_syndr_associated + chrom_subset_name,
+                         data=temp_df, FUN=length)
+  colnames(temp_df_1)[which(colnames(temp_df_1)=="ensembl_gene_id")] <- "count"
+  
+  temp_df_2 <- temp_df_1[which(!temp_df_1$is_syndr_associated),]
+  #temp_df_2$dom_rec <- factor(temp_df_2$dom_rec, levels=rev(c("dom","rec","dom,rec",""))) 
+  temp_df_2 <- merge( temp_df_2, setNames(aggregate(count ~  chrom_subset_name,
+                      data=temp_df_2, FUN=function(x){sum(x)}),c("chrom_subset_name","sum")))
+  temp_df_2$both <- F
+  temp_df_2$both[grepl("pLI\\+pRec",temp_df_2$pgt_p9)] <- T 
+  temp <- temp_df_2[temp_df_2$both,]
+  temp$pgt_p9 <- "pLI"; temp_df_2 <- rbind(temp_df_2,temp)
+  temp$pgt_p9 <- "pRec"; temp_df_2 <- rbind(temp_df_2,temp)
+  temp_df_2 <- temp_df_2[is.element(temp_df_2$pgt_p9, c("pLI","pRec","pNull","low confidence") ),]
+  temp_df_2$pgt_p9 <- factor(temp_df_2$pgt_p9, levels=c("pLI","pRec","pNull","low confidence"))
+  temp_df_2$pgt_p9_w_blabel <- factor(paste(temp_df_2$chrom_subset_name, temp_df_2$both))
+  temp_df_2$pgt_p9_w_blabel <- factor(temp_df_2$pgt_p9_w_blabel, levels=rev(levels(temp_df_2$pgt_p9_w_blabel)))
+  gg3 <- ggplot(temp_df_2, aes(fill=pgt_p9_w_blabel, x=chrom_subset_name, y=count/sum,
+                        label=count))+
+    geom_col(position="stack")+
+    theme_bw(base_size = 8)+
+    geom_text(size=1.8, position = position_stack(0.5))+
+    scale_y_continuous(breaks = seq(0,1,by=0.1)) +
+    scale_fill_manual(values=rev(c("paleturquoise","lightcyan1","thistle","thistle1")))+# "plum","grey50")))+
+    theme(plot.title = element_text(size=5),
+          axis.text.x = element_text(angle=90),
+          axis.title.x = element_blank(),
+          legend.position = "none") +
+    facet_grid(. ~ pgt_p9)
+
+  
+  
+  filename <- paste0(dirs$figures,"sysinhert_pp9",temp_onto_names[i],".png")
   ggsave( filename,
-          #gridExtra::grid.arrange(gg1,gg2,gg3, ncol=3, widths=c(1,2.5,2.5)),
-          width=4,height=4)
-
-  ggplot(temp_df[which(temp_df$is_syndr_associated),], aes(fill=dom_rec,x=""))+
-    geom_bar(aes(y=..count../sum(..count..)))+
-    theme_bw(base_size = 8)+
-    scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
-    theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90)) +
-    facet_grid(. ~ ., scale="free_y")
-  ggplggplot(temp_df, aes(fill=dom_rec,x=is_syndr_associated))+
-    geom_bar()+
-    theme_bw(base_size = 8)+
-    scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
-    theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90)) +
-    facet_grid(chrom_subset_name ~ .)
-
-    filename <- paste0(dirs$figures,"synd_pgt_p9",str_remove_all(temp_onto_names[i]," "),".png")
-    ggsave(filename = filename,width = 4,height=4)
-  
-  # temp_df$pLI_p_pRec <- temp_df$pLI + temp_df$pRec
-  # temp_df$pLI_gt_p9 <- temp_df$pLI > 0.9 
-  # for(j in 1:length(c("pLI","pRec","pLI_p_pRec"))){
-  #   temp_colname <- c("pLI","pRec","pLI_p_pRec")[j]
-  #   temp_df$pLR_gt_p9 <- temp_df[temp_colname] > 0.9
-  #   temp_df_1 <- aggregate(ensembl_gene_id ~  is_syndr_associated + pLR_gt_p9 + is_chrom_set + chrom_subset_name,
-  #                        data=temp_df, FUN=length)
-  #   colnames(temp_df_1)[which(colnames(temp_df_1)=="ensembl_gene_id")] <- "count"
-  #   temp_df_1 <- merge(temp_df_1, setNames(aggregate(count ~ chrom_subset_name, data=temp_df_1, FUN=sum),c("chrom_subset_name","total")))
-  #   ggplot(temp_df_1, aes(x=chrom_subset_name,y=count / total,
-  #                         label=count, fill=paste0(pLR_gt_p9,chrom_subset_name )))+
-  #     geom_bar(position="fill",stat="identity")+
-  #     geom_text(size=3, position=position_fill(vjust = 0.5))+
-  #     theme_bw(base_size = 8)+
-  #     scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
-  #     theme(plot.title = element_text(size=5),
-  #           axis.text.x = element_text(angle=90))+
-  #     facet_grid(paste0("is syndrome associated ", is_syndr_associated) ~ .)
-  #   
-  #   filename <- paste0(dirs$figures,temp_colname,"_synd_nosynd_chrom_nochrom_",str_remove_all(temp_onto_names[i]," "),".png")
-  #   ggsave(filename = filename,width = 4,height=4)
-  # }
-}
-
-
-
-for(i in 1:length(temp_onto_names)){
-  ### Next add pLI plot here
-  temp_df <- unique(df[grep(temp_onto_names[i],df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
-  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
-  
-  temp_df_2 <- unique(temp_df[,c("chrom_subset_name","num_genes","num_genes_w_syndrome","num_gene_syndromes","is_chrom_set")])
-  temp_df_2$is_inverse <- FALSE 
-  temp_df_3 <- temp_df_2
-  temp_df_3$num_genes_w_syndrome <- temp_df_2$num_genes - temp_df_2$num_genes_w_syndrome
-  temp_df_3$is_inverse <- TRUE
-  temp_df_2 <- rbind(temp_df_2, temp_df_3)
-  
-  ggplot(temp_df_2, aes(x=chrom_subset_name,y=num_genes_w_syndrome/num_genes,label=num_genes_w_syndrome,fill=paste0(!is_inverse,chrom_subset_name )))+
-    geom_bar(stat = "identity", position="stack")+
-    geom_text(size=3, position=position_stack(vjust = 0.5))+
-    theme_bw(base_size = 8)+
-    scale_fill_manual(values=c("honeydew","mistyrose","lightblue","salmon"))+
-    theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90))
-  filename <- paste0(dirs$figures,"syndrome_gene_count_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
-  ggsave(filename = filename,width = 4,height=4)
-  
-  temp_test <- t.test(temp_df$complexity[temp_df$is_chrom_set],temp_df$complexity[!temp_df$is_chrom_set],
-                           alternative = "greater")
-  temp_df$chrom_subset_name <- paste0(temp_df$chrom_subset_name, "\nn=",temp_df$num_gene_syndromes)
-  ggplot(temp_df, aes(x=chrom_subset_name,y=complexity,color=is_chrom_set))+
-    ggtitle(paste0("Syndrome complexity: \ngenes with ",temp_onto_names[i], " specific expression\np=",format(signif(temp_test$p.value,2),scientific=T) ))+
-    geom_boxplot()+
-    stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
-    scale_y_continuous(breaks=0:max(temp_df$complexity))+
-    theme_bw(base_size = 8)+
-    theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90))
-  filename <- paste0(dirs$figures,"syndrome_complexity_genes_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
-  ggsave(filename = filename,width = 3,height=4) #,units = "in",res=250)
-  
-  
-  temp_df <- unique(df[grep(temp_onto_names[i],df$chrom_subset_name),
-                       !is.element(colnames(df),c("omim_id","complexity","major_systems_affected") )])
-  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
-  temp_df$chrom_subset_name <- paste0(temp_df$chrom_subset_name, "\nn=",temp_df$num_genes_w_syndrome)
-  temp_test <- t.test(temp_df$complexity_gene[temp_df$is_chrom_set],temp_df$complexity_gene[!temp_df$is_chrom_set],
-                           alternative = "greater")
-  ggplot(temp_df, aes(x=chrom_subset_name,y=complexity_gene,color=is_chrom_set))+
-    ggtitle(paste0("Gene complexity: \ngenes with ",temp_onto_names[i], " specific expression\np=",format(signif(temp_test$p.value,2),scientific=T) ))+
-    geom_boxplot()+
-    stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
-    scale_y_continuous(breaks=0:max(temp_df$complexity_gene))+
-    theme_bw(base_size = 8)+
-    theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90))
-  filename <- paste0(dirs$figures,"gene_complexity_genes_w_",str_remove_all(temp_onto_names[i]," "),"_specific_expression.png")
-  ggsave(filename = filename,width = 3,height=4) 
-
+          gridExtra::grid.arrange(gg1,gridExtra::grid.arrange(gg3,gg2,nrow=3,heights=c(1,1,0.05)), ncol=2, widths=c(1,1.5)),
+          width=6,height=8)
   
 }
+
 
 
 
@@ -988,23 +925,6 @@ for(i in 1:nrow(or_df)){
 }
 
 
-ggplot(or_df[grepl("ubiq_chrom|^chrom$", or_df$chrom_subset_name) &
-               grepl("^all$",or_df$contrast_w) &
-               complete.cases(or_df) &  
-               or_df$major_systems_affected != "" 
-             ,], aes(y=major_systems_affected,x=log2(or),color=chrom_subset_name))+
-  ggtitle(paste0("ubiq_chrom contrasted with all"))+
-  geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
-  geom_point(size=1.5,position=position_dodge(width=0.7))+
-  geom_vline(xintercept = 0)+
-  scale_x_continuous(breaks = -5:5) +
-  theme_bw(base_size = 8)+
-  theme(plot.title = element_text(size=5))
-  #theme(axis.text.x = element_text(angle = 90))+
-  #facet_grid(contrast_w ~ .)
-filename <- paste0(dirs$figures,"or_ubiq_chrom.png")
-ggsave(filename,width=5,height=4)
-
 
 
 df$system_name <- str_remove(str_remove(df$major_systems_affected,"Abnormality of "),"the ")
@@ -1018,13 +938,6 @@ temp <- aggregate(ensembl_gene_id ~ major_systems_affected + chrom_subset_name +
                   data=df,FUN=function(x){length(unique(x))})
 colnames(temp)[which(colnames(temp)=="ensembl_gene_id")] <- "num_genes_w_sys_affected"
 
-ggplot(temp, aes(x=chrom_subset_name, y=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name))+
-  geom_col()+
-  #scale_fill_grey()+
-  facet_grid(major_systems_affected ~ . )+
-  theme_bw()+
-  theme(strip.text.y = element_text(angle = 0),
-        axis.text.x =  element_text(angle=45,hjust=0.95))
 temp$chrom_subset_name <- factor(temp$chrom_subset_name, levels=rev(names(temp_list)))
 or_df$contrast_w <- factor(or_df$contrast_w, levels=rev(names(temp_list)))
 for(i in 1:length(temp_onto_names)){
@@ -1113,51 +1026,67 @@ filename <- paste0(dirs$figures,"sysphen_prop_ubiq_chrom.png")
 ggsave(filename,width=5,height=4)
 
 
+ggplot(or_df[grepl("ubiq_chrom|^chrom$", or_df$chrom_subset_name) &
+               grepl("^all$",or_df$contrast_w) &
+               complete.cases(or_df) &  
+               or_df$major_systems_affected != "" 
+             ,], aes(y=major_systems_affected,x=log2(or),color=chrom_subset_name))+
+  ggtitle(paste0("ubiq_chrom contrasted with all"))+
+  geom_errorbar(aes(xmin=log2(or_lb),xmax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
+  geom_point(size=1.5,position=position_dodge(width=0.7))+
+  geom_vline(xintercept = 0)+
+  scale_x_continuous(breaks = -5:5) +
+  theme_bw(base_size = 8)+
+  theme(plot.title = element_text(size=5))
+  #theme(axis.text.x = element_text(angle = 90))+
+  #facet_grid(contrast_w ~ .)
+filename <- paste0(dirs$figures,"or_ubiq_chrom.png")
+ggsave(filename,width=5,height=4)
 
 ###  make upset plot here ##
-
-upset_df <- data.frame(omim_id=character(),
-                       chrom_subset_name=character(),
-                       combination_name=character())
-for(i in 1:length(unique(df$chrom_subset_name))){
-  temp_csn <- unique(df$chrom_subset_name)[i]
-  for(j in 1:length(unique(df$omim_id[which(df$chrom_subset_name==temp_csn)]))){
-    temp_omim_id <-  unique(df$omim_id[which(df$chrom_subset_name==temp_csn)])[j]
-    which <- which(df$omim_id==temp_omim_id & df$chrom_subset_name==temp_csn)
-    temp_combo <- paste0(sort(as.character(df$system_name[which])),collapse="&")
-    upset_df <- rbind(upset_df,
-                      data.frame(
-                        omim_id=temp_omim_id,
-                        chrom_subset_name=temp_csn,
-                        combination_name=temp_combo
-                      ))
-  }
-}
-
-temp_df <-  aggregate(omim_id ~ chrom_subset_name + combination_name, data = upset_df, FUN = length)
-plot_list <- list()
-for(i in 1:length(unique(temp_df$chrom_subset_name))){
-  which <- which(temp_df$chrom_subset_name==unique(temp_df$chrom_subset_name)[i])
-  temp_upvec <- setNames(temp_df$omim_id[which], temp_df$combination_name[which])
-  plot_list[[unique(temp_df$chrom_subset_name)[i]]] <- upset(fromExpression(temp_upvec), 
-        nintersects = 40, 
-        nsets = 14, #length(unique(df$major_systems_affected)), 
-        order.by = "freq", 
-        decreasing = T, 
-        mb.ratio = c(0.6, 0.4),
-        number.angles = 0, 
-        text.scale = 1.1, 
-        point.size = 2.8, 
-        line.size = 1
-        ) 
-}
-
-for(i in 1:length(plot_list)){
-  filename <- paste0(dirs$figures, "upset_",names(plot_list)[i], ".png")
-  png(filename=filename, height = 6,width = 8,units = "in", res=300)
-  print(plot_list[[i]]);print(unique(temp_df$chrom_subset_name)[i])
-  dev.off()
-}
+# 
+# upset_df <- data.frame(omim_id=character(),
+#                        chrom_subset_name=character(),
+#                        combination_name=character())
+# for(i in 1:length(unique(df$chrom_subset_name))){
+#   temp_csn <- unique(df$chrom_subset_name)[i]
+#   for(j in 1:length(unique(df$omim_id[which(df$chrom_subset_name==temp_csn)]))){
+#     temp_omim_id <-  unique(df$omim_id[which(df$chrom_subset_name==temp_csn)])[j]
+#     which <- which(df$omim_id==temp_omim_id & df$chrom_subset_name==temp_csn)
+#     temp_combo <- paste0(sort(as.character(df$system_name[which])),collapse="&")
+#     upset_df <- rbind(upset_df,
+#                       data.frame(
+#                         omim_id=temp_omim_id,
+#                         chrom_subset_name=temp_csn,
+#                         combination_name=temp_combo
+#                       ))
+#   }
+# }
+# 
+# temp_df <-  aggregate(omim_id ~ chrom_subset_name + combination_name, data = upset_df, FUN = length)
+# plot_list <- list()
+# for(i in 1:length(unique(temp_df$chrom_subset_name))){
+#   which <- which(temp_df$chrom_subset_name==unique(temp_df$chrom_subset_name)[i])
+#   temp_upvec <- setNames(temp_df$omim_id[which], temp_df$combination_name[which])
+#   plot_list[[unique(temp_df$chrom_subset_name)[i]]] <- upset(fromExpression(temp_upvec), 
+#         nintersects = 40, 
+#         nsets = 14, #length(unique(df$major_systems_affected)), 
+#         order.by = "freq", 
+#         decreasing = T, 
+#         mb.ratio = c(0.6, 0.4),
+#         number.angles = 0, 
+#         text.scale = 1.1, 
+#         point.size = 2.8, 
+#         line.size = 1
+#         ) 
+# }
+# 
+# for(i in 1:length(plot_list)){
+#   filename <- paste0(dirs$figures, "upset_",names(plot_list)[i], ".png")
+#   png(filename=filename, height = 6,width = 8,units = "in", res=300)
+#   print(plot_list[[i]]);print(unique(temp_df$chrom_subset_name)[i])
+#   dev.off()
+# }
 
 ```
 
