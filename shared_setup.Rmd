@@ -60,12 +60,12 @@ for(bioc_package in req_packages$biocmanager ){
   if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
 };#rm(bioc_package)
 rm(req_packages)
-# remotes::install_github("GuangchuangYu/tidytree")
-# remotes::install_github("YuLab-SMU/yulab.utils")
-# remotes::install_github("YuLab-SMU/GOSemSim")
-# remotes::install_github("YuLab-SMU/ggfun")
-# remotes::install_github("YuLab-SMU/aplot")
-# remotes::install_github("YuLab-SMU/enrichplot")
+# ## remotes::install_github("GuangchuangYu/tidytree")
+# ## remotes::install_github("YuLab-SMU/yulab.utils")
+# ## remotes::install_github("YuLab-SMU/GOSemSim")
+# ## remotes::install_github("YuLab-SMU/ggfun")
+# ## remotes::install_github("YuLab-SMU/aplot")
+# ## remotes::install_github("YuLab-SMU/enrichplot")
 
 date <- format(Sys.time(),"%Y%m%d")
 registerDoParallel(detectCores()-2)
@@ -1026,6 +1026,7 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
   gene_sets$genes_all_go <- rbind(gene_sets$genes_all_go, temp)
   
 }
+gene_sets$genes_all_transcript_w_noncanon <- gene_sets$genes_all_transcript
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
 gene_sets$human_chromatin_modifiers <- list()
@@ -1122,9 +1123,8 @@ temp <- tempfile()
 #For information on constraint, see The mutational constraint spectrum quantified from variation in 141,456 humans. Nature 581, 434–443 (2020). Descriptions of the fields in these files can be found in the Supplementary Dataset 11 section on pages 74-77 of the Supplementary Information.
 download.file("https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz",temp)
 lof_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
-
 gene_sets$lof_metrics <- lof_metrics[,c("gene", "gene_id","pLI","pRec","pNull")]
-
+rm(lof_metrics)
 save.image()
 ```
 

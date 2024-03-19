@@ -322,6 +322,9 @@ result_df <- result_df[which(result_df$id != "root"),]
 
 ### manual cleanup of result df NOT GENERAL
 #result_df <- result_df[-c(85:92,93:96,112:117,130:135,146:165,183:232,244:245,253:254,256:257,277:340,350:434),] # no tau cut
+result_df <- backup_result_df
+result_df$row <- 1:nrow(result_df)
+result_df <- result_df[-c(2,4,62:70,77:87,92:95,102:105,123:147,164:172,177:207,256:347,349:387),]
 
 # rownames(result_df) <- 1:nrow(result_df)
 
@@ -622,27 +625,144 @@ for(i in 1:length(spec_biosamples_list)){
 
 
 ```{r}
-
 df <- data.frame(tau=global_taus,
                  gene_id=names(global_taus),
                  is_chrom=is.element(names(global_taus), gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
 
 
-ggplot(df, aes(x=tau, color=is_chrom,fill=is_chrom))+
-  geom_density(alpha=0.2)
-filename <- paste0(dirs$figures,"spec_tau_chrom_nonchrom_density.png")
-ggsave(filename = filename, height = 3, width=4)
+gg1 <- ggplot(df, aes(x=tau, color=is_chrom))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  scale_y_continuous(breaks = seq(0,1,by=0.2)) +
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank() 
+  )
 
-ggplot(df, aes(x=tau))+
-  geom_histogram()+
-  facet_grid(is_chrom ~ . , scales="free_y")
-filename <- paste0(dirs$figures,"spec_tau_chrom_nonchrom_hist.png")
-ggsave(filename = filename, height = 3, width=4)
 
-ggplot(df, aes(x=tau, color=is_chrom))+
-  geom_step(aes(y=..y..),stat="ecdf")
-filename <- paste0(dirs$figures,"spec_tau_chrom_nonchrom_ecdf.png")
-ggsave(filename = filename, height = 4, width=4)
+gg2 <- ggplot(df, aes(x=tau, color=is_chrom,fill=is_chrom))+
+  geom_density(alpha=0.2)+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  scale_fill_manual(values=c("#00BFC4","#C77CFF"))+
+  scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  scale_y_continuous(breaks = seq(0,3.2,by=0.5)) +
+  theme_bw()
+
+
+filename <- paste0(dirs$figures,"spec_tau_chrom_nonchrom_dense_w_ecdf.png")
+
+ggsave(filename = filename,
+        gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(1,2)),
+       height = 4, width=6)
+
+
+### compare ubiq v nonubiq chrom and non chrom on exon count (in canonical transcript) and unique transcript count
+df <- unique(gene_sets$genes_all_transcript_w_noncanon[,c("ensembl_gene_id","external_gene_name","ensembl_transcript_id","transcript_length","rank")])
+temp <- as.data.frame(table(df$ensembl_transcript_id))
+colnames(temp) <- c("ensembl_transcript_id", "exon_count")
+df <- merge(df,temp)
+temp_df <- aggregate(exon_count ~ ensembl_gene_id,data=df, FUN=max)
+colnames(temp_df)[2] <- "max_exon_count"
+df <- merge(df, temp_df)
+temp_df <- aggregate(transcript_length ~ ensembl_gene_id,data=df, FUN=max)
+colnames(temp_df)[2] <- "max_transcript_length"
+df <- merge(df, temp_df)
+df <- unique(df[,!is.element(colnames(df),c("exon_count","rank"))])
+temp_df <- aggregate(ensembl_transcript_id ~ ensembl_gene_id,data=df, FUN=length)
+colnames(temp_df)[2] <- "unique_transcript_count"
+df <- merge(df, temp_df)
+df <- unique(df[,!is.element(colnames(df),c("ensembl_transcript_id","transcript_length"))])
+
+df <- df[is.element(df$ensembl_gene_id,
+                    gene_sets$genes_all$ensembl_gene_id[gene_sets$genes_all$gene_biotype=="protein_coding"]),]
+df$is_chrom <- is.element(df$ensembl_gene_id, gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers) 
+df$is_ubiq <- is.element(df$ensembl_gene_id, gene_sets$ubiq)
+
+
+
+### regression analyses
+
+## exon count 
+gg1 <- ggplot(df, aes(x=log2(max_exon_count), color=paste0(is_ubiq,is_chrom)))+
+#  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_x_continuous(breaks = seq(0,10,by=1)) +
+  scale_y_continuous(breaks = seq(0,1,by=0.2)) +
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank())
+gg2 <- ggplot(df, aes(x=log2(max_exon_count), color=paste0(is_ubiq,is_chrom) ))+
+  scale_x_continuous(breaks = seq(0,10,by=1)) +
+  geom_density()+
+  theme_bw()+
+  theme(legend.position = "none")
+
+## control for transcript length
+model <- lm(log2(max_exon_count) ~ 
+              log10(max_transcript_length) + is_chrom + is_ubiq + 
+              is_chrom:is_ubiq,
+            data = df)
+sink(file = paste0(dirs$figures,"ubiq_v_non_exon_count_w_tlen_adj.txt"))
+summary(model)
+sink()
+gg3 <- ggplot(df, aes(x=log10(max_transcript_length), y=log2(max_exon_count),
+               color=paste0(is_ubiq,is_chrom)))+
+  scale_y_continuous(limits = c(0,6), breaks=seq(0,10,by=1))+
+  scale_x_continuous(limits = c(2.5,4.5), breaks = seq(0,10,by=1),
+                     minor_breaks = log10(rep(1:9, 21)*(10^rep(-10:10, each=9))) ) +
+  theme_bw()+
+  theme(panel.grid.minor.y = element_blank(),
+        legend.position = "bottom" , legend.direction="vertical")+
+  stat_smooth(method=lm)
+
+filename <- paste0(dirs$figures,"ubiq_v_non_exon_count_w_tlen_adj.png")
+ggsave(filename = filename,
+        gridExtra::grid.arrange(gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
+                                gridExtra::grid.arrange(grob(),gg3,nrow=2,heights=c(.5,5)), ncol=2, widths=c(3,3)),
+       height = 5, width=8)
+
+
+##transcript count
+gg1 <- ggplot(df, aes(x=log2(unique_transcript_count), color=paste0(is_ubiq, is_chrom)))+
+#  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+ scale_x_continuous(breaks = seq(0,20,by=1)) +
+#  scale_y_continuous(breaks = seq(0,1,by=0.2)) +
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank())
+gg2 <- ggplot(df, aes(x=log2(unique_transcript_count), color=paste0(is_ubiq, is_chrom) ))+
+  scale_x_continuous(breaks = seq(0,20,by=1)) +
+  geom_density()+
+  theme_bw()+
+  theme(legend.position = "none")
+model <- lm(log2(unique_transcript_count) ~ 
+              log10(max_transcript_length) + is_chrom + is_ubiq + 
+              is_chrom:is_ubiq,
+            data = df)
+sink(file = paste0(dirs$figures,"ubiq_v_non_tscript_count_w_tlen_adj.txt"))
+summary(model)
+sink()
+gg3 <-ggplot(df, aes(x=log10(max_transcript_length), y=log2(unique_transcript_count),
+               color=paste0(is_ubiq,is_chrom)))+
+  scale_y_continuous(limits = c(0,5), breaks=seq(0,10,by=1))+
+  scale_x_continuous(limits = c(2.5,4.5), breaks = seq(0,10,by=1),
+                     minor_breaks = log10(rep(1:9, 21)*(10^rep(-10:10, each=9))) ) +
+  theme_bw()+
+  theme(panel.grid.minor.y = element_blank(),
+        legend.position = "bottom" , legend.direction="vertical")+
+  stat_smooth(method=lm)
+
+filename <- paste0(dirs$figures,"ubiq_v_non_tscript_count_w_tlen_adj.png")
+ggsave(filename = filename,
+        gridExtra::grid.arrange(gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
+                                gridExtra::grid.arrange(grob(),gg3,nrow=2,heights=c(.5,5)), ncol=2, widths=c(3,3)),
+       height = 5, width=8)
+
 ```
 
 
@@ -1177,6 +1297,13 @@ ggsave( filename, gridExtra::grid.arrange(gg1, gg2, gg3,
 # }
 
 ```
+
+```{r, ubiq exon stats}
+
+save.image()
+
+```
+
 
 ```{r}
 # ## GO analysis
