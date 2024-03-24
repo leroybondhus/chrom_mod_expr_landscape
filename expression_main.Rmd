@@ -631,6 +631,9 @@ df <- data.frame(tau=global_taus,
 
 
 gg1 <- ggplot(df, aes(x=tau, color=is_chrom))+
+  geom_rect(data=data.frame(xmin=0, xmax=0.4, ymin=0, ymax=1),
+            aes(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax),
+            alpha=0.5, fill="grey", inherit.aes = F)+
   scale_color_manual(values=c("#00BFC4","#C77CFF"))+
   scale_x_continuous(breaks = seq(0,1,by=0.1)) +
   scale_y_continuous(breaks = seq(0,1,by=0.2)) +
@@ -641,15 +644,16 @@ gg1 <- ggplot(df, aes(x=tau, color=is_chrom))+
     axis.text.x = element_blank() 
   )
 
-
 gg2 <- ggplot(df, aes(x=tau, color=is_chrom,fill=is_chrom))+
+  geom_rect(data=data.frame(xmin=0, xmax=0.4, ymin=0, ymax=3.2),
+            aes(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax),
+            alpha=0.5, fill="grey", inherit.aes = F)+
   geom_density(alpha=0.2)+
   scale_color_manual(values=c("#00BFC4","#C77CFF"))+
   scale_fill_manual(values=c("#00BFC4","#C77CFF"))+
-  scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  scale_x_continuous(limits = c(0,1),breaks = seq(0,1,by=0.1)) +
   scale_y_continuous(breaks = seq(0,3.2,by=0.5)) +
   theme_bw()
-
 
 filename <- paste0(dirs$figures,"spec_tau_chrom_nonchrom_dense_w_ecdf.png")
 
@@ -657,7 +661,72 @@ ggsave(filename = filename,
         gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(1,2)),
        height = 4, width=6)
 
+## note: spec_biosamples_list should be all genes not ubiq
+!any(is.element(names(spec_biosamples_list),gene_sets$ubiq))
+##
+temp_means_spec <- setNames(rep(NA,length(spec_biosamples_list)),names(spec_biosamples_list))
+temp_means_notspec <- setNames(rep(NA,length(spec_biosamples_list)),names(spec_biosamples_list))
+temp_means <- setNames(rep(NA,length(spec_biosamples_list)),names(spec_biosamples_list))
+for(i in 1:length(spec_biosamples_list)){
+  if(i %% 500 == 0){print(i)}
+  if(nrow(spec_biosamples_list[[i]]$uberon_subtable)==0){next}
+  temp_means_spec[i] <- mean(mat[names(spec_biosamples_list)[i],spec_biosamples_list[[i]]$colids_spec])
+  temp_means_notspec[i] <- mean(mat[names(spec_biosamples_list)[i],spec_biosamples_list[[i]]$colids_not_spec])
+  temp_means[i] <- mean(mat[names(spec_biosamples_list)[i],])
+}
+temp_means_ubiq <- setNames(rep(NA, length(gene_sets$ubiq)),gene_sets$ubiq)
+for(i in 1:length(temp_means_ubiq)){
+  if(i %% 500 == 0){print(i)}
+  temp_means_ubiq[i] <- mean(mat[names(temp_means_ubiq)[i],])
+}
 
+
+df <- data.frame(gene_id=names(temp_means_spec), mean_exp=temp_means_spec,
+                 spec_or_ubiq="spec", is_chrom=is.element(names(temp_means_spec),
+                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),
+                 row.names = NULL)
+df <- rbind(df, data.frame(gene_id=names(temp_means_notspec), mean_exp=temp_means_notspec,
+                 spec_or_ubiq="spec_inv", is_chrom=is.element(names(temp_means_notspec),
+                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),
+                 row.names = NULL))
+df <- rbind(df, data.frame(gene_id=names(temp_means), mean_exp=temp_means,
+                 spec_or_ubiq="spec_w_inv", is_chrom=is.element(names(temp_means),
+                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),
+                 row.names = NULL))
+df <- rbind(df, data.frame(gene_id=names(temp_means_ubiq), mean_exp=temp_means_ubiq,
+                 spec_or_ubiq="ubiq", is_chrom=is.element(names(temp_means_ubiq),
+                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers),
+                 row.names = NULL))
+
+
+ggplot(df[df$is_chrom,], aes(x=mean_exp, color=spec_or_ubiq ))+
+  #geom_density()+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(breaks=seq(0,5,by=1))
+
+ggplot(df[df$is_chrom,], aes(x=mean_exp, color=spec_or_ubiq ))+
+  geom_density()+
+ # geom_step(aes(y=..y..),stat="ecdf")+
+  scale_x_continuous(breaks=seq(0,5,by=1))
+
+ggplot(df, aes(x=mean_exp, color=spec_or_ubiq ))+
+  #geom_density()+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(breaks=seq(0,5,by=1))+
+  facet_grid(is_chrom ~ .)
+
+ggplot(df, aes(x=mean_exp, color=spec_or_ubiq ))+
+  geom_density()+
+ # geom_step(aes(y=..y..),stat="ecdf")+
+  scale_x_continuous(breaks=seq(0,5,by=1))+
+  facet_grid(is_chrom ~ . , scales="free_y")
+
+
+```
+
+```{r}
 ### compare ubiq v nonubiq chrom and non chrom on exon count (in canonical transcript) and unique transcript count
 df <- unique(gene_sets$genes_all_transcript_w_noncanon[,c("ensembl_gene_id","external_gene_name","ensembl_transcript_id","transcript_length","rank")])
 temp <- as.data.frame(table(df$ensembl_transcript_id))
@@ -686,19 +755,22 @@ df$is_ubiq <- is.element(df$ensembl_gene_id, gene_sets$ubiq)
 
 ## exon count 
 gg1 <- ggplot(df, aes(x=log2(max_exon_count), color=paste0(is_ubiq,is_chrom)))+
-#  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
   scale_x_continuous(breaks = seq(0,10,by=1)) +
   scale_y_continuous(breaks = seq(0,1,by=0.2)) +
   geom_step(aes(y=..y..),stat="ecdf")+
   theme_bw()+
-  theme(legend.position = "none",
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank())
+  theme(legend.position = "none")#,
+         # axis.text.x = element_blank(),
+         # axis.title.x = element_blank())
 gg2 <- ggplot(df, aes(x=log2(max_exon_count), color=paste0(is_ubiq,is_chrom) ))+
   scale_x_continuous(breaks = seq(0,10,by=1)) +
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
   geom_density()+
   theme_bw()+
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+         axis.title.x = element_blank())
 
 ## control for transcript length
 model <- lm(log2(max_exon_count) ~ 
@@ -710,6 +782,7 @@ summary(model)
 sink()
 gg3 <- ggplot(df, aes(x=log10(max_transcript_length), y=log2(max_exon_count),
                color=paste0(is_ubiq,is_chrom)))+
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
   scale_y_continuous(limits = c(0,6), breaks=seq(0,10,by=1))+
   scale_x_continuous(limits = c(2.5,4.5), breaks = seq(0,10,by=1),
                      minor_breaks = log10(rep(1:9, 21)*(10^rep(-10:10, each=9))) ) +
@@ -719,27 +792,28 @@ gg3 <- ggplot(df, aes(x=log10(max_transcript_length), y=log2(max_exon_count),
   stat_smooth(method=lm)
 
 filename <- paste0(dirs$figures,"ubiq_v_non_exon_count_w_tlen_adj.png")
-ggsave(filename = filename,
-        gridExtra::grid.arrange(gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
-                                gridExtra::grid.arrange(grob(),gg3,nrow=2,heights=c(.5,5)), ncol=2, widths=c(3,3)),
-       height = 5, width=8)
+ ggsave(filename = filename,
+    #    gridExtra::grid.arrange(gg1,gg3,ncol=2, widths=c(2,3)), height = 2.7, width=8)
+         gridExtra::grid.arrange(gridExtra::grid.arrange(gg2,gg1,nrow=2,heights=c(2,3)),
+                                gridExtra::grid.arrange(grob(),gg3,nrow=2,heights=c(.5,5)), ncol=2, widths=c(3,3)), height = 5, width=8)
 
 
 ##transcript count
 gg1 <- ggplot(df, aes(x=log2(unique_transcript_count), color=paste0(is_ubiq, is_chrom)))+
-#  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
- scale_x_continuous(breaks = seq(0,20,by=1)) +
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
+  scale_x_continuous(breaks = seq(0,20,by=1)) +
 #  scale_y_continuous(breaks = seq(0,1,by=0.2)) +
   geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none")
+gg2 <- ggplot(df, aes(x=log2(unique_transcript_count), color=paste0(is_ubiq, is_chrom) ))+
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
+  scale_x_continuous(breaks = seq(0,20,by=1)) +
+  geom_density()+
   theme_bw()+
   theme(legend.position = "none",
         axis.text.x = element_blank(),
         axis.title.x = element_blank())
-gg2 <- ggplot(df, aes(x=log2(unique_transcript_count), color=paste0(is_ubiq, is_chrom) ))+
-  scale_x_continuous(breaks = seq(0,20,by=1)) +
-  geom_density()+
-  theme_bw()+
-  theme(legend.position = "none")
 model <- lm(log2(unique_transcript_count) ~ 
               log10(max_transcript_length) + is_chrom + is_ubiq + 
               is_chrom:is_ubiq,
@@ -749,6 +823,7 @@ summary(model)
 sink()
 gg3 <-ggplot(df, aes(x=log10(max_transcript_length), y=log2(unique_transcript_count),
                color=paste0(is_ubiq,is_chrom)))+
+  scale_color_manual(values=c("gold","#F8766D","#00BFC4","#C77CFF"))+
   scale_y_continuous(limits = c(0,5), breaks=seq(0,10,by=1))+
   scale_x_continuous(limits = c(2.5,4.5), breaks = seq(0,10,by=1),
                      minor_breaks = log10(rep(1:9, 21)*(10^rep(-10:10, each=9))) ) +
@@ -759,7 +834,7 @@ gg3 <-ggplot(df, aes(x=log10(max_transcript_length), y=log2(unique_transcript_co
 
 filename <- paste0(dirs$figures,"ubiq_v_non_tscript_count_w_tlen_adj.png")
 ggsave(filename = filename,
-        gridExtra::grid.arrange(gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
+        gridExtra::grid.arrange(gridExtra::grid.arrange(gg2,gg1,nrow=2,heights=c(2,3)),
                                 gridExtra::grid.arrange(grob(),gg3,nrow=2,heights=c(.5,5)), ncol=2, widths=c(3,3)),
        height = 5, width=8)
 
@@ -874,10 +949,11 @@ for(i in 1:length(temp_names)){
   temp_system <- temp_names[[i]]
   temp_df <- unique(df[grep(temp_system,df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
   if(temp_system=="ubiq_chrom"){
-    temp_df <- unique(df[grep("^ubiq_chrom$|^all_ubiq$",df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
+    temp_df <- unique(df[grep("^ubiq_chrom$|^all_ubiq$|ubiq",
+                              df$chrom_subset_name),!grepl("major_systems_affected",colnames(df))])
   }
   temp_df <- unique(temp_df[,c("ensembl_gene_id","chrom_subset_name","dom_rec")])
-  temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
+  temp_df$is_chrom_set <- !grepl("ALL|^all_",temp_df$chrom_subset_name)
   temp_df$is_syndr_associated <- TRUE
   
   ## genes spec to temp_onto_names[[i]] but w no syndrome associated
@@ -891,6 +967,19 @@ for(i in 1:length(temp_names)){
   temp <- temp_list[[which]][which(!is.element(temp_list[[which]], temp_df$ensembl_gene_id))]
   temp_df <- rbind(temp_df, data.frame(ensembl_gene_id=temp, chrom_subset_name=names(temp_list)[which],
                                        dom_rec="", is_chrom_set=FALSE, is_syndr_associated=F))
+  
+  if(temp_system=="ubiq_chrom"){
+    which <- grep(paste0("^nonubiq_chrom$"),names(temp_list))
+    temp <- temp_list[[which]][which(!is.element(temp_list[[which]], temp_df$ensembl_gene_id))]
+    temp_df <- rbind(temp_df, data.frame(ensembl_gene_id=temp, chrom_subset_name=names(temp_list)[which],
+                                         dom_rec="",is_chrom_set=TRUE, is_syndr_associated=F))
+  
+    which <- grep(paste0("^all_nonubiq$"),names(temp_list))
+    temp <- temp_list[[which]][which(!is.element(temp_list[[which]], temp_df$ensembl_gene_id))]
+    temp_df <- rbind(temp_df, data.frame(ensembl_gene_id=temp, chrom_subset_name=names(temp_list)[which],
+                                         dom_rec="",is_chrom_set=FALSE, is_syndr_associated=F))
+  }
+  
   
   temp_df <- cbind(temp_df,
       gene_sets$lof_metrics[match(temp_df$ensembl_gene_id,gene_sets$lof_metrics$gene_id),c("pLI","pRec","pNull")])
@@ -912,6 +1001,8 @@ for(i in 1:length(temp_names)){
   if(all(grepl("ubiq",temp_df_1$chrom_subset_name))){
     temp_df_1$chrom_subset_name[which(temp_df_1$chrom_subset_name=="all_ubiq")] <- "ubiq all"
     temp_df_1$chrom_subset_name[which(temp_df_1$chrom_subset_name=="ubiq_chrom")] <- "ubiq"
+    temp_df_1$chrom_subset_name[which(temp_df_1$chrom_subset_name=="all_nonubiq")] <- "z nonubiq all"
+    temp_df_1$chrom_subset_name[which(temp_df_1$chrom_subset_name=="nonubiq_chrom")] <- "z nonubiq"
   }
   gg1 <- ggplot(temp_df_1, aes(fill=paste(chrom_subset_name, is_syndr_associated), x=chrom_subset_name, y=count/sum,
                         label=count))+
@@ -919,7 +1010,13 @@ for(i in 1:length(temp_names)){
     theme_bw(base_size = 8)+
     geom_text(size=1.8, position = position_stack(0.5))+
     scale_y_continuous(breaks = seq(0,1,by=0.1)) +
-    scale_fill_manual(values=c("paleturquoise","#00BFC4","thistle","#C77CFF"))+# "plum","grey50")))+
+    scale_fill_manual(values=c(
+                               "paleturquoise","#00BFC4",
+                               "thistle","#C77CFF",
+                               #"darkseagreen2","#7CAE00",
+                               "wheat","gold2",
+                               "pink2","#F8766D"
+                               ))+# "plum","grey50")))+#
     theme_bw()+
     theme(plot.title = element_text(size=5),
           axis.text.x = element_text(angle=90),
@@ -948,6 +1045,8 @@ for(i in 1:length(temp_names)){
   if(all(grepl("ubiq",temp_df_2$chrom_subset_name))){
     temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="all_ubiq")] <- "ubiq all"
     temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="ubiq_chrom")] <- "ubiq"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="all_nonubiq")] <- "z nonubiq all"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="nonubiq_chrom")] <- "z nonubiq"
   }
   
   gg2 <- ggplot(temp_df_2, aes(fill=paste(chrom_subset_name, both), x=chrom_subset_name, y=count/sum,
@@ -957,7 +1056,12 @@ for(i in 1:length(temp_names)){
     geom_text(size=1.8, position = position_stack(0.5))+
     scale_y_continuous(breaks = seq(0,1,by=0.1),
                        expand = expansion(mult = c(0, 0.15))) +
-    scale_fill_manual(values=c("#00BFC4","lightblue3","#C77CFF","mediumpurple"))+# "plum","grey50")))+
+    scale_fill_manual(values=c("#00BFC4","steelblue3",
+                               "#C77CFF","mediumpurple",
+                               "gold","darkgoldenrod2",
+                               #"#7CAE00","palegreen4",
+                               "#F8766D","salmon3"
+                               ))+#"))+# "plum","grey50")))+
     theme(plot.title = element_text(size=5),
           axis.text.x = element_text(angle=90),
           legend.position = "none") +
@@ -983,8 +1087,12 @@ for(i in 1:length(temp_names)){
   temp_df_2$pgt_p9_w_blabel <- factor(paste(temp_df_2$chrom_subset_name, temp_df_2$both))
   temp_df_2$pgt_p9_w_blabel <- factor(temp_df_2$pgt_p9_w_blabel, levels=rev(levels(temp_df_2$pgt_p9_w_blabel)))
   if(all(grepl("ubiq",temp_df_2$chrom_subset_name))){
-    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="all_ubiq")] <- "ubiq all"
-    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="ubiq_chrom")] <- "ubiq"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="all_ubiq")] <- "ubiq z all"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="ubiq_chrom")] <- "ubiq chrom"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="all_nonubiq")] <- "z nonubiq z all"
+    temp_df_2$chrom_subset_name[which(temp_df_2$chrom_subset_name=="nonubiq_chrom")] <- "z nonubiq chrom"
+    temp_df_2$pgt_p9_w_blabel <- factor(paste(temp_df_2$chrom_subset_name, !temp_df_2$both))
+    #temp_df_2$pgt_p9_w_blabel <- factor(temp_df_2$pgt_p9_w_blabel, levels=levels(temp_df_2$pgt_p9_w_blabel))
   }
   gg3 <- ggplot(temp_df_2, aes(fill=pgt_p9_w_blabel, x=chrom_subset_name, y=count/sum,
                         label=count))+
@@ -993,7 +1101,11 @@ for(i in 1:length(temp_names)){
     geom_text(size=1.8, position = position_stack(0.5))+
     scale_y_continuous(breaks = seq(0,1,by=0.1),
                        expand = expansion(mult = c(0, 0.1))) +
-    scale_fill_manual(values=rev(c("paleturquoise","lightcyan1","thistle","thistle1")))+# "plum","grey50")))+
+    scale_fill_manual(values=c("thistle1","thistle",
+                               "lightcyan1","paleturquoise",
+                               #"darkseagreen1","darkseagreen3",
+                               "pink","pink2",
+                               "lightyellow","wheat"))+# "plum","grey50")))+
     theme(plot.title = element_text(size=5),
           axis.text.x = element_text(angle=90),
           axis.title.x = element_blank(),
@@ -1005,9 +1117,53 @@ for(i in 1:length(temp_names)){
   filename <- paste0(dirs$figures,"sysinhert_pp9",temp_names[i],".png")
   ggsave( filename,
           gridExtra::grid.arrange(gg1,gridExtra::grid.arrange(gg3,gg2,nrow=3,heights=c(1,1,0.05)), ncol=2, widths=c(1,1.7)),
-          width=3,height=5)
+          width=ifelse(all(grepl("ubiq",temp_df$chrom_subset_name)),5,3),height=5)
   
 }
+
+
+df$tau <- global_taus[match(df$ensembl_gene_id, names(global_taus))]
+temp_df <- unique(df[is.element(df$chrom_subset_name, c("all")),
+              c("ensembl_gene_id","complexity_gene","tau")])
+temp_df$is_chrom <- is.element(temp_df$ensembl_gene_id,
+                               gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+model <- lm(complexity_gene ~ 
+              tau + is_chrom,
+            data = temp_df)
+sink(file=paste0(dirs$figures,"complexity_v_tau.txt"))
+summary(model)
+sink()
+
+ggplot(temp_df, aes(x=tau,y=complexity_gene, color=is_chrom))+
+  geom_rect(data=data.frame(xmin=0, xmax=0.4, ymin=0, ymax=max(temp_df$complexity_gene)),
+            aes(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax),
+            alpha=0.5, fill="grey", inherit.aes = F)+
+  scale_color_manual(values=c("turquoise3","purple3"))+
+  geom_jitter(data=temp_df[!temp_df$is_chrom,], alpha=0.3, size=0.5, width = 0, height=0.3)+
+  geom_jitter(data=temp_df[temp_df$is_chrom,],alpha=0.8,size=2)+
+  scale_x_continuous(limits = c(0,1), breaks=seq(0,1,by=0.1))+
+  scale_y_continuous(limits = c(0,max(temp_df$complexity_gene)),
+                     breaks=seq(0,max(temp_df$complexity_gene),by=1))+
+  stat_smooth(method=lm)+
+  theme_bw()+
+  theme(panel.grid.minor.y = element_blank())
+ggsave(filename=paste0(dirs$figures,"complexity_v_tau.png"),
+       height=3,width =6 )
+
+ggplot(temp_df,
+       aes(x=-complexity_gene, color=chrom_subset_name))+
+  geom_line(aes(y=..y..),stat="ecdf")+
+  geom_point(aes(y=..y..),stat="ecdf")
+temp_df <- unique(df[is.element(df$chrom_subset_name, c("all_nonubiq","nonubiq_chrom")),
+              c("ensembl_gene_id","complexity_gene","chrom_subset_name","tau")])
+
+
+
+
+ggplot(temp_df,
+       aes(x=-complexity_gene, color=chrom_subset_name))+
+  geom_line(aes(y=..y..),stat="ecdf")+
+  geom_point(aes(y=..y..),stat="ecdf")
 
 
 
@@ -1114,7 +1270,7 @@ for(i in 1:length(temp_onto_names)){
     geom_errorbar(aes(ymin=-1*log2(or_lb),ymax=-1*log2(or_ub)),position=position_dodge(width=0.7), width=0.7)+
     geom_point(size=1.5,position=position_dodge(width=0.7))+
     #geom_vline(xintercept = 0, color="#C77CFF")+
-    scale_color_manual(values=c("#00BFC4","#7CAE00","#F8766D"))+
+    scale_color_manual(values=c("#00BFC4","#F8766D","gold"))+
     geom_hline(yintercept = 0, color="#C77CFF")+
     # geom_hline(linetype="dashed", color="grey30",
     #   yintercept = (0.5+0:(-1+length(unique(or_df$major_systems_affected))) ))+
@@ -1124,7 +1280,7 @@ for(i in 1:length(temp_onto_names)){
     theme(plot.title = element_text(size=5),
           axis.text.x = element_blank(),
           axis.title.x = element_blank(),
-          panel.grid.minor = element_blank(),
+          panel.grid.minor = element_blank() ,
           legend.position="none")
   
   
@@ -1135,7 +1291,7 @@ for(i in 1:length(temp_onto_names)){
              label=num_genes_w_sys_affected))+
     ggtitle(temp_onto_names[i])+
     geom_col(position="dodge",width = 0.8)+
-    scale_fill_manual(values=c("#C77CFF","#00BFC4","#7CAE00","#F8766D"))+
+    scale_fill_manual(values=c("#C77CFF","#00BFC4","#F8766D","gold"))+
     #geom_vline(xintercept = 1)+
     geom_hline(yintercept = 1, color="grey60")+
     # geom_hline(linetype="dashed", color="grey30",
@@ -1190,7 +1346,7 @@ gg1 <- ggplot(temp_df, aes(y=chrom_subset_name,x=complexity_gene,color=chrom_sub
   geom_boxplot()+
   #geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge",dotsize=0.05,alpha=0.4)+
   stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
-  scale_color_manual(values=rev(c("#C77CFF","#00BFC4","#7CAE00","#F8766D")))+
+  scale_color_manual(values=rev(c("#C77CFF","#00BFC4","#F8766D","gold")))+
   scale_x_continuous(breaks=0:max(temp_df$complexity_gene))+
   theme_bw(base_size = 8)+
   theme(plot.title = element_text(size=5),
@@ -1210,7 +1366,7 @@ gg2 <- ggplot(temp_df_1, aes(x=major_systems_affected,y=log2(or),color=chrom_sub
   geom_errorbar(aes(ymin=log2(or_lb),ymax=log2(or_ub)),position=position_dodge(width=0.7), width=1)+
   geom_point(size=1.5,position=position_dodge(width=0.7))+
   geom_hline(yintercept = 0)+
-  scale_color_manual(values=c("#C77CFF","#00BFC4","#7CAE00","#F8766D"))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4","#F8766D","gold"))+
   scale_y_continuous(breaks = -5:5) +
   theme_bw(base_size = 8)+
   theme(plot.title = element_text(size=5),
@@ -1227,7 +1383,7 @@ gg3 <- ggplot(temp_df_2 , aes(x=major_systems_affected, y=num_genes_w_sys_affect
                        fill=chrom_subset_name, label=num_genes_w_sys_affected))+
   ggtitle("ubiq")+
   geom_col(position="dodge",width = 0.8)+
-  scale_fill_manual(values=c("#C77CFF","#00BFC4","#7CAE00","#F8766D"))+
+  scale_fill_manual(values=c("#C77CFF","#00BFC4","#F8766D","gold"))+
   #geom_vline(xintercept = 1)+
   geom_hline(yintercept = 1, color="grey60")+
   # geom_hline(linetype="dashed", color="grey30",
