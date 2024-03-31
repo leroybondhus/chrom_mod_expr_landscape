@@ -1159,7 +1159,48 @@ save.image()
 # taxonomy$human_lineage <- h_sapiens_lineage
 # taxonomy$names <- taxonomy$nodes <- NULL
 # ```
+```{r, uniprot domains}
 
+temp_map <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","uniprotswissprot","uniprotsptrembl"), mart = ensembl, useCache = F)
+temp <- tempfile()
+#download.file("https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Creviewed%2Cid%2Cgene_names%2Corganism_name%2Clength%2Cprotein_families%2Cft_region%2Cft_domain&format=tsv&query=%28*%29+AND+%28model_organism%3A9606%29+AND+%28reviewed%3Atrue%29",temp)
+download.file("https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Creviewed%2Cid%2Cgene_names%2Corganism_name%2Clength%2Cprotein_families%2Cft_region%2Cft_domain&format=tsv&query=%28*%29+AND+%28model_organism%3A9606%29+AND+%28reviewed%3Atrue%29",temp)
+protein_domains <- read.table( temp, skip=0, header = TRUE, sep = "\t", fill=TRUE, quote = "")
+protein_domains$prop_disordered <- NA
+protein_domains$disorder_starts <- NA
+protein_domains$disorder_ends <- NA
+protein_domains$disorder_lengths <- NA
+for(i in 1:nrow(protein_domains)){
+  temp <- strsplit(protein_domains$Region[i],"(?<=.)(?=REGION)",perl = T)[[1]]
+  temp_df <- data.frame(start=numeric(),
+                        end=numeric(),
+                        type=character())
+  for(j in 1:length(temp)){
+    temp_df <- rbind(temp_df,
+                     data.frame(
+                       start=as.numeric(str_extract(str_extract(temp[j],"REGION [0-9]*"),"[0-9]+")),
+                       end=as.numeric(str_remove(str_extract(temp[j],"REGION.*\\.\\.[0-9]*"),".*\\.\\.")),
+                       type=str_remove(str_extract(temp[j],"note=\\\"[a-zA-Z0-9 \t]*"),"note=\\\"")
+                     )) 
+  }
+  which <- which(temp_df$type == "Disordered")
+  protein_domains$prop_disordered[i] <- sum(temp_df$end[which] - temp_df$start[which]) / protein_domains$Length[i]
+  if(length(which)==0){next}
+  protein_domains$disorder_starts[i] <- paste(temp_df$start[which],collapse=",")
+  protein_domains$disorder_ends[i]  <- paste(temp_df$end[which],collapse=",")
+  protein_domains$disorder_lengths[i]  <- paste(temp_df$end[which]-temp_df$start[which],collapse=",")
+}
+
+protein_domains$ensembl_gene_id <- NA
+protein_domains$ensembl_gene_id <- temp_map$ensembl_gene_id[match(protein_domains$Entry,temp_map$uniprotswissprot)]
+which <- which(is.na(protein_domains$ensembl_gene_id))
+protein_domains$ensembl_gene_id[which] <- temp_map$ensembl_gene_id[match(protein_domains$Entry[which],temp_map$uniprotsptrembl)]
+which <- which(is.na(protein_domains$ensembl_gene_id))
+for(i in 1:length(which)){
+  temp <- gene_sets$genes_all$ensembl_gene_id[is.element(gene_sets$genes_all$external_gene_name, str_split(protein_domains$Gene.Names[which[i]]," ")[[1]])]
+  protein_domains$ensembl_gene_id[which[i]] <- ifelse(length(temp)==1,temp,NA)
+}
+```
 
 ```{r, custom ggplot themes}
 barcode_theme <- theme_classic()+
