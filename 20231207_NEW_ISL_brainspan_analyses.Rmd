@@ -757,6 +757,26 @@ for (z in 1:length(cutoffs)){
   mcl_df <- data.frame(metacluster=mcl)
   mcl_df$structure <- sapply(str_split(rownames(mcl_df), '--'), `[[`, 1)
   mcl_df$cluster <- sapply(str_split(rownames(mcl_df), '--'), `[[`, 3)
+  cluster_gene_count <- vector("numeric", nrow(mcl_df))
+  for (i in 1:length(cluster_gene_count)){
+    cluster_gene_count[i] <- length(cutoff_gene_lists[[cutoff_name]][[mcl_df$structure[i]]][[cutoff_name]][[mcl_df$cluster[i]]])
+  }
+  mcl_df$gene_count <- cluster_gene_count
+  
+  write.csv(mcl_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_metacluster_df(cutoff=", cutoff, ").csv"))
+  
+  # metacluster cluster gene count summary
+  mcl_cluster_gene_summary <- NULL
+  for (i in 1:max(mcl)){
+    unique_structs <- unique(mcl_df[["structure"]][which(mcl_df[["metacluster"]]==i)])
+    for (j in 1:length(unique_structs)){
+      count = sum(mcl_df$gene_count[which(mcl_df[["metacluster"]]==i & mcl_df[["structure"]] == unique_structs[j])])
+      mcl_cluster_gene_summary <- rbind(mcl_cluster_gene_summary, c(i, unique_structs[j], count))
+    }
+  }
+  colnames(mcl_cluster_gene_summary) <- c("metacluster", "structure", "gene_count")
+  
+  write.csv(mcl_cluster_gene_summary, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_mcl_cluster_gene_summary(cutoff=", cutoff, ").csv"))
   
   # for each metacluster, get the union of all genes across all clusters in a given metacluster, then for each gene in the union count how many of the tissues that gene is in in one of the clusters that belongs to the metacluster - this might be better than the jaccard stat because we can then identify which genes are in most tissues in the same metacluster and which are more unique to a particular tissue.
   mcl_gene_counts <- vector("list", max(mcl))
