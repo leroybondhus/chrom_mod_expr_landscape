@@ -35,97 +35,58 @@ library(scales)
   epigenes<- dplyr::left_join(epigenes,subcell, by="ensembl_gene_id")
 
 
-#(4) clean up to plot ALL unique epigenes: select columns needed only for visualization
-  PLOTall_eg<-epigenes%>%dplyr::select(ensembl_gene_id,
-                                             hgnc_symbol,
-                                             "Main.location",
-                                             "Additional.location",
-                                             "Extracellular.location")%>%unique()
-  PLOTall_eg<-PLOTall_eg%>%tidyr::replace_na(list("Main.location" = "No info available",
-                                                              "Additional.location" = "No info available",
-                                                              "Extracellular.location"="No info available"))
-  
-  
-  print(unique(PLOTall_eg$Main.location))
-  
-  
-#(5) clean up to plot ALL unique epigenes: collapse nucleus sub-compartments 
-  #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
-  #will collapse nucleus sub-compartments into "nucleus"
-  #ref https://www.r-bloggers.com/2022/07/how-to-replace-string-in-column-in-r/
-  
-  PLOTall_eg_nucleus<-PLOTall_eg
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Midbody;Nucleoplasm'] <- 'Midbody & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Vesicles'] <- 'Cytosol & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria'] <- 'Cytosol & Mitochondria' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Golgi apparatus'] <- 'Cytosol & Golgi apparatus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoplasm'] <- 'Mitochondria & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Vesicles'] <- 'Nucleus & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centriolar satellite;Nucleoplasm'] <- 'Centriolar satellite & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Actin filaments;Cytosol'] <- 'Actin filaments & Cytosol' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Vesicles'] <- 'Golgi apparatus & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nuclear bodies'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Microtubules;Nucleoli fibrillar center'] <- 'Microtubules & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Endoplasmic reticulum;Nucleoplasm'] <- 'Endoplasmic reticulum & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Nucleoplasm'] <- 'Golgi apparatus & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Plasma membrane'] <- 'Cytosol & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centrosome;Nucleoplasm'] <- 'Centrosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Kinetochore;Nuclear bodies'] <- 'Kinetochore & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cell Junctions;Nucleoplasm'] <- 'Cell Junctions & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli fibrillar center'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm;Plasma membrane'] <- 'Cytosol, Nucleus, & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli;Nucleoplasm'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoli'] <- 'Mitochondria & Nucleus'
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria;Nucleoplasm'] <- 'Cytosol, Mitochondria, & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+#(4) master DF = thing we care about, encodes epigene info into df
+  df<-subcell[,c("ensembl_gene_id","Gene.name","Main.location","Additional.location")]
+  df$is_epigene<-FALSE
+  df$is_epigene[is.element(df$ensembl_gene_id,epigenes$ensembl_gene_id)]<-TRUE
 
+#(5) location DF = unlist and find unique subcell then concatinate unique locations across main and additional
+  #then save as a vector called cell_locs
+cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$Additional.location,";"))))
+  
+#(6) empty df (initializing df) = making plotting DFs
+  df_gg<-data.frame(ensembl_gene_id=character(),
+                    Gene.name=character(),
+                    loc=character(),
+                    is_epigene=logical(),
+                    is_main_loc=logical())
+  
+#(7) filling df_gg
+  #singular= individual elements at current iteration of for look (for i)
+  #plural= what you're through
+  for(cell_loc in cell_locs){
+    which <- which(sapply(str_split(df$Main.location,";"),function(x){any(is.element(cell_loc,x))}))
+    if(length(which)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which],
+        Gene.name=df$Gene.name[which],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which],
+        is_main_loc=T)
+      df_gg <- rbind(df_gg ,temp_df)
+    }
+    
+    which_2 <-  which(sapply(str_split(df$Additional.location,";"),function(x){any(is.element(cell_loc,x))}))
+    which_2 <- setdiff(which_2, which)
+    if(length(which_2)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which_2],
+        Gene.name=df$Gene.name[which_2],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which_2],
+        is_main_loc=F)
+      df_gg <- rbind(df_gg, temp_df)
+    }
+  }
   
   
-  print(unique(PLOTall_eg_nucleus$Main.location))
-
   
-#(6) plot location of ALL unique epigenes: collapse nucleus sub-compartments 
   
-barplot_subcell<-PLOTall_eg_nucleus %>% 
-    count(Main.location) %>% 
-    mutate(prop = n/sum(n)) %>% 
-    ggplot(aes(x = Main.location, y = prop)) +
-    geom_col(fill = "#FF7F24") +
-    geom_text(aes(label = percent(prop)), vjust = -1) +
-    coord_cartesian(clip = "off") +
-    scale_y_continuous(labels = percent_format()) +
-    coord_flip()+
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
-          axis.title = element_blank(),
-          plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
-
   
-ggsave(  filename="TESTplot.jpeg",
-  plot = last_plot())
+  
+  
+  
+  
   
 
 #remove useless variables
@@ -135,44 +96,143 @@ ggsave(  filename="TESTplot.jpeg",
 
 
 
+#random, 1st attempt, collapsed nuclei terms
+```{r}
+
+# #(4) clean up to plot ALL unique epigenes: select columns needed only for visualization
+#   PLOTall_eg<-epigenes%>%dplyr::select(ensembl_gene_id,
+#                                              hgnc_symbol,
+#                                              "Main.location",
+#                                              "Additional.location",
+#                                              "Extracellular.location")%>%unique()
+#   PLOTall_eg<-PLOTall_eg%>%tidyr::replace_na(list("Main.location" = "No info available",
+#                                                               "Additional.location" = "No info available",
+#                                                               "Extracellular.location"="No info available"))
+#   
+#   
+#   print(unique(PLOTall_eg$Main.location))
+#    
+# #(5) clean up to plot ALL unique epigenes: collapse nucleus sub-compartments 
+#   #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
+#   #will collapse nucleus sub-compartments into "nucleus"
+#   #ref https://www.r-bloggers.com/2022/07/how-to-replace-string-in-column-in-r/
+#   
+#   PLOTall_eg_nucleus<-PLOTall_eg
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Midbody;Nucleoplasm'] <- 'Midbody & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Vesicles'] <- 'Cytosol & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria'] <- 'Cytosol & Mitochondria' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Golgi apparatus'] <- 'Cytosol & Golgi apparatus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoplasm'] <- 'Mitochondria & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Vesicles'] <- 'Nucleus & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centriolar satellite;Nucleoplasm'] <- 'Centriolar satellite & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Actin filaments;Cytosol'] <- 'Actin filaments & Cytosol' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Vesicles'] <- 'Golgi apparatus & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nuclear bodies'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Microtubules;Nucleoli fibrillar center'] <- 'Microtubules & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Endoplasmic reticulum;Nucleoplasm'] <- 'Endoplasmic reticulum & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Nucleoplasm'] <- 'Golgi apparatus & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Plasma membrane'] <- 'Cytosol & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centrosome;Nucleoplasm'] <- 'Centrosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Kinetochore;Nuclear bodies'] <- 'Kinetochore & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cell Junctions;Nucleoplasm'] <- 'Cell Junctions & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli fibrillar center'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm;Plasma membrane'] <- 'Cytosol, Nucleus, & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoli'] <- 'Mitochondria & Nucleus'
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria;Nucleoplasm'] <- 'Cytosol, Mitochondria, & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+# 
+#   
+#   
+#   print(unique(PLOTall_eg_nucleus$Main.location))
+
+#   
+# #(6) plot location of ALL unique epigenes: collapse nucleus sub-compartments 
+#   
+# barplot_subcell<-PLOTall_eg_nucleus %>% 
+#     count(Main.location) %>% 
+#     mutate(prop = n/sum(n)) %>% 
+#     ggplot(aes(x = Main.location, y = prop)) +
+#     geom_col(fill = "#FF7F24") +
+#     geom_text(aes(label = percent(prop)), vjust = -1) +
+#     coord_cartesian(clip = "off") +
+#     scale_y_continuous(labels = percent_format()) +
+#     coord_flip()+
+#     theme_minimal() +
+#     theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
+#           axis.title = element_blank(),
+#           plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+#   
+# ggsave(  filename="TESTplot.jpeg",
+#   plot = last_plot())
+  
+
+```
 
 
-#Attempt1 - pulling protein domains from HPA for all epigenes.
+
+
+
+#random, Attempt1 - pulling protein domains from HPA for all epigenes.
 ```{r}
 
 
-# Install and load the required packages
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install("AnnotationHub")
-BiocManager::install("biomaRt")
-
-library(AnnotationHub)
-library(biomaRt)
-
-# Use the appropriate Ensembl database for human genes
-ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-
-# Get the list of all protein-coding genes
-genes <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),
-               filters = "biotype",
-               values = "protein_coding",
-               mart = ensembl)
-
-# Create an AnnotationHub object for Pfam annotations
-dir.create(path = "~/.AnnotationHub")
-options(AnnotationHub.cache = "~/.AnnotationHub")
-
-ahub <- AnnotationHub()
-
-# Retrieve Pfam annotations
-pfam_key <- "AH73911"
-pfam_annotations <- query(ahub, keys = genes$ensembl_gene_id, columns = c("PFAM_ID", "GENEID"), keytype = "ENSEMBL")
-pfam_annotations <- merge(genes, pfam_annotations, by.x = "ensembl_gene_id", by.y = "QUERYID", all.x = TRUE)
-
-# View the resulting data frame
-print(pfam_annotations)
+# # Install and load the required packages
+# if (!requireNamespace("BiocManager", quietly = TRUE)) {
+#   install.packages("BiocManager")
+# }
+# BiocManager::install("AnnotationHub")
+# BiocManager::install("biomaRt")
+# 
+# library(AnnotationHub)
+# library(biomaRt)
+# n
+# # Use the appropriate Ensembl database for human genes
+# ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+# 
+# # Get the list of all protein-coding genes
+# genes <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),
+#                filters = "biotype",
+#                values = "protein_coding",
+#                mart = ensembl)
+# 
+# # Create an AnnotationHub object for Pfam annotations
+# dir.create(path = "~/.AnnotationHub")
+# options(AnnotationHub.cache = "~/.AnnotationHub")
+# 
+# ahub <- AnnotationHub()
+# 
+# # Retrieve Pfam annotations
+# pfam_key <- "AH73911"
+# pfam_annotations <- query(ahub, keys = genes$ensembl_gene_id, columns = c("PFAM_ID", "GENEID"), keytype = "ENSEMBL")
+# pfam_annotations <- merge(genes, pfam_annotations, by.x = "ensembl_gene_id", by.y = "QUERYID", all.x = TRUE)
+# 
+# # View the resulting data frame
+# print(pfam_annotations)
 
 
 ```
