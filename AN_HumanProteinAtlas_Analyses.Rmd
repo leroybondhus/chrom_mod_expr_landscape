@@ -51,7 +51,7 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
                     is_epigene=logical(),
                     is_main_loc=logical())
   
-#(7) filling df_gg
+#(7) filling df_gg with all genes all unnested subcellular locations (ready for plotting)
   #singular= individual elements at current iteration of for look (for i)
   #plural= what you're through
   for(cell_loc in cell_locs){
@@ -83,7 +83,9 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
   
   
   
-  
+ #(8) pulling all nuclear terms
+  df_gg$loc_is_nucl <- is.element(df_gg$loc,
+                                  c(NUCLEAR_NAMESHERE))
   
   
   
