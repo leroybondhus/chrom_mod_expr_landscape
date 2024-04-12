@@ -113,6 +113,9 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
                                     "Mitotic spindle"
                                     ))
   
+#(10) Label all the genes in mitochondria 
+  df_gg$loc_is_mito <- is.element(df_gg$loc,
+                                  c("Mitochondria"))
   
   
   
