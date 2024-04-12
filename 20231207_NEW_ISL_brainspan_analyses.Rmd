@@ -323,7 +323,7 @@ count_corr <- function(corr_mat, lower_bound, upper_bound){
 chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
 matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
 matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
-chrom_mod_corr <- corr_matrix[matched_modifiers,]
+# chrom_mod_corr <- corr_matrix[matched_modifiers,]
 
 # modify threshold cutoffs for correlation
 upper = 0.6
@@ -348,6 +348,7 @@ for (dir in structure_dirs){
 };rm(dir)
 
 cutoff_gene_lists <- list()
+protein_coding_genes <- gene_sets$genes_all[gene_sets$genes_all$gene_biotype=="protein_coding",][["ensembl_gene_id"]]
 
 for (a in 1:length(cutoffs)){
   cutoff <- cutoffs[a]
@@ -371,6 +372,8 @@ for (a in 1:length(cutoffs)){
       # normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
       normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
       all_genes_significant <- row.names(normalized_expr_matrix)
+      protein_coding_sig_genes <- match(all_genes_significant, protein_coding_genes)
+      protein_coding_sig_genes <- protein_coding_genes[protein_coding_sig_genes[!is.na(protein_coding_sig_genes)]]
       
       chrom_mod_normalized_expr <- na.omit(normalized_expr_matrix[match(rows_meta$ensembl_gene_id[matched_modifiers], row.names(normalized_expr_matrix)),])
       
@@ -490,7 +493,7 @@ for (a in 1:length(cutoffs)){
         all_gene_lists <- vector("list", n_clusters)
         names(all_gene_lists) <- cluster_names
         for(i in 1:n_clusters){
-          all_gene_lists[[i]] = all_genes_significant[which(struct_cluster_assignment == cluster_names[i])]
+          all_gene_lists[[i]] = protein_coding_sig_genes[which(struct_cluster_assignment == cluster_names[i])]
         }
         
         # all_gene_lists_high <- vector("list", n_clusters_high)
@@ -513,7 +516,9 @@ proc.time() - ptm
 
 
 ```{r, GO analysis setup}
-gene_universe <- rows_meta$ensembl_gene_id # all genes in brainspan
+gene_universe <- rows_meta$ensembl_gene_id[which(is.element(rows_meta$ensembl_gene_id, protein_coding_genes))] # protein-coding genes in brainspan
+
+# gene_universe <- rows_meta$ensembl_gene_id
 
 # ontologies <- c("ALL", "BP", "MF", "CC") # vector of ontology options
 
@@ -595,11 +600,6 @@ write.csv(all_genes_GO_results, paste0(dirs$table_cluster_analysis, date, "_all_
 
 ```{r,  inter-anatomic-gene-cluster-time-similarity-matrix }
 ptm <- proc.time()
-# modest_GO_indices <- which(all_genes_GO_results$Cutoff=='modest_cutoff_0.4')
-# high_GO_indices <- which(all_genes_GO_results$Cutoff=='high_cutoff_0.2')
-# 
-# unique_pairs_modest <- unique(paste(all_genes_GO_results$Structure[modest_GO_indices], all_genes_GO_results$Cutoff[modest_GO_indices], all_genes_GO_results$Cluster[modest_GO_indices], sep = '--'))
-# unique_pairs_high <- unique(paste(all_genes_GO_results$Structure[high_GO_indices], all_genes_GO_results$Cutoff[high_GO_indices], all_genes_GO_results$Cluster[high_GO_indices], sep = '--'))
 
 cutoffs_iagc_time_sim_mat <- list()
 
@@ -736,13 +736,13 @@ save(cutoffs_iagc_time_sim_mat, file = "./cutoffs_iagc_time_sim_mat.RData")
 
 
 ```{r,  inter-anatomic-gene-cluster-time-similarity-matrix}
+
+# TRY 0.1 cutoff
 ptm <- proc.time()
 for (z in 1:length(cutoffs)){
   cutoff = cutoffs[z]
   cutoff_name = names(cutoffs)[z]
   cutoff_dir = cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
-
-
   
   hc_meta <- hclust(as.dist(1-(cutoffs_iagc_time_sim_mat[[cutoff_name]]+1)/2), "ave")
   
@@ -752,7 +752,7 @@ for (z in 1:length(cutoffs)){
   dev.off()
   
   
-  mcl <- cutree(hc_meta, h=0.4)
+  mcl <- cutree(hc_meta, h=cutoff) # USING 0.1 METACLUSTER CUTOFF for both clustering cutoffs
   
   mcl_df <- data.frame(metacluster=mcl)
   mcl_df$structure <- sapply(str_split(rownames(mcl_df), '--'), `[[`, 1)
@@ -764,6 +764,10 @@ for (z in 1:length(cutoffs)){
   mcl_df$gene_count <- cluster_gene_count
   
   write.csv(mcl_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_metacluster_df(cutoff=", cutoff, ").csv"))
+  
+  # cluster count per metacluster
+  clusters_in_mcl <- table(mcl)
+  write.csv(clusters_in_mcl, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_cluster_count_in_mcl(cutoff=0.2).csv"))
   
   # metacluster cluster gene count summary
   mcl_cluster_gene_summary <- NULL
@@ -833,7 +837,7 @@ for (z in 1:length(cutoffs)){
   write.csv(mcl_gene_dist_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_unique_tissue_count_per_gene.csv"))
   
   # directory for all metaclusters
-  mcl_dirs <- paste0(unique(mcl_gene_dist_df$metacluster))
+  mcl_dirs <- unique(mcl_gene_dist_df$metacluster[which(mcl_gene_dist_df$unique_tissues >= 5)])
   for(dir in mcl_dirs){
     if(!dir.exists(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, dir,'/')))
       {dir.create(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, dir,'/'))}
@@ -845,7 +849,8 @@ for (z in 1:length(cutoffs)){
   all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
   # all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .errorhandling = 'pass') %dopar% {
   # for (n in 1:length(mcl_dirs)){
-    clusters <- str_split(rownames(mcl_df[which(mcl_df$metacluster == n),]),'--')
+    metacluster <- as.numeric(gsub("\\D", "", mcl_dirs[n]))
+    clusters <- str_split(rownames(mcl_df[which(mcl_df$metacluster == metacluster),]),'--')
     gene_expr_df <- foreach(i = 1:length(clusters), .combine = rbind) %dopar% {
       expr <- cutoff_gene_lists[[cutoff_name]][[clusters[[i]][1]]][["expr_df"]][grep(paste0("cluster:",str_split(clusters[[i]][3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[clusters[[i]][1]]][["expr_df"]][["group_name"]]),]
       expr$structure <- clusters[[i]][1]
@@ -899,6 +904,27 @@ for (z in 1:length(cutoffs)){
     mcl_avg_expr_df <- data.frame(pcw = strtoi(names(mcl_avg_expr)), expr = mcl_avg_expr)
     mcl_avg_expr_df$metacluster <- mcl_dirs[n]
     
+    if (!is.null(ncol(new_gene_expr_df))){ # only 1 cluster
+      test <- melt(new_gene_expr_df, id = rownames(new_gene_expr_df), value.name = "expr", varnames = c("pcw", "sample"))
+      test$is_ave=F
+      test <- test[complete.cases(test),]
+      avg_expr <- data.frame(pcw = mcl_avg_expr_df$pcw, 
+                             sample = mcl_avg_expr_df$metacluster,
+                             expr=mcl_avg_expr_df$expr,
+                             is_ave=TRUE)
+      
+      gg_spaghetti <- ggplot(test, aes(x = pcw, y = expr, color = sample, group = sample)) + 
+        geom_line(alpha = 0.3) + theme_bw() + 
+        geom_line(data=avg_expr, alpha=1, linewidth=2)+
+        theme(legend.position = "none") + 
+        ggtitle(paste0(mcl_dirs[n],' spaghetti plot for expression over time')) + 
+        labs(x = "pcw", y = "expression") + 
+        scale_color_grey()
+      
+      ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_spaghetti_plot_average_expression_over_time.png'), plot = gg_spaghetti, width = 10, height = 8) 
+    }
+      
+    
     log_mcl_expr <- ggplot(mcl_avg_expr_df, aes(x = log10(pcw), y = expr)) +
                 geom_point() + geom_line() +
                 ggtitle(paste0(mcl_dirs[n],' average log expression over time')) + 
@@ -912,34 +938,17 @@ for (z in 1:length(cutoffs)){
                 labs(x = "pcw", y = "average expr") + 
                geom_vline(xintercept = 40, color = "red") 
     # + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
-          
+    
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_expression_over_time.png'), plot = mcl_expr, width = 10, height = 8)
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_log_expression_over_time.png'), plot = log_mcl_expr, width = 10, height = 8)
     
     mcl_avg_expr_df # object to save
   }
   
-  # all_mcl_log_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = log10(pcw), y = expr)) +
-  #             geom_point() + geom_line() +
-  #             facet_wrap(~metacluster) +
-  #       theme(legend.position = "none") +
-  #             ggtitle('metacluster average log expression over time') +
-  #             labs(x = "log10(pcw)", y = "normalized expr") +
-  #            geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
-  # 
-  # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_log_expression_over_time.png'), plot = all_mcl_log_expr_plot, width = 10, height = 8)
+  # spaghetti plot for all metaclusters
   
-  # all_mcl_expr_plot <- ggplot(all_mcl_avg_expr, aes(x = pcw, y = expr)) +
-  #             geom_point() + geom_line() +
-  #             facet_wrap(~metacluster) +
-  #       theme(legend.position = "none") +
-  #             ggtitle('metacluster average expression over time') +
-  #             labs(x = "pcw", y = "normalized expr") +
-  #            geom_vline(xintercept = 40, color = "red") + geom_vline(xintercept = 52*15, color = "red") + geom_vline(xintercept = 52*10, color = "red")
-
-  # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_average_expression_over_time.png'), plot = all_mcl_expr_plot, width = 10, height = 8)
   
-  # plot only developmental time
+  # plot only developmental time for all metaclusters
   develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
               geom_point() + geom_line() +
               facet_wrap(~metacluster) +
@@ -984,12 +993,13 @@ for (z in 1:length(cutoffs)){
   # extract chromatin modifier information
   chrom_mod_mcl_counts <- vector("list", length(mcl_dirs))
   names(chrom_mod_mcl_counts) <- mcl_dirs
-  for (i in 1:length(mcl_gene_counts)){
-    matched_modifiers <- match(chromatin_modifiers, names(mcl_gene_counts[[i]]))
+  for (i in 1:length(mcl_dirs)){
+    metacluster <- as.numeric(gsub("\\D", "", mcl_dirs[i]))
+    matched_modifiers <- match(chromatin_modifiers, names(mcl_gene_counts[[metacluster]]))
     # remove NA values
     matched_modifiers <- matched_modifiers[!is.na(matched_modifiers)]
     
-    chrom_mod_mcl_counts[[i]] <- mcl_gene_counts[[i]][matched_modifiers]
+    chrom_mod_mcl_counts[[i]] <- mcl_gene_counts[[metacluster]][matched_modifiers]
   }
   
   chrom_mod_counts_df <- as.data.frame(unlist(chrom_mod_mcl_counts), col.names = 'count')
@@ -1008,134 +1018,271 @@ for (z in 1:length(cutoffs)){
     mcl_gene_list[[mcl_dirs[i]]] <- names(mcl_gene_counts[[mcl_dirs[i]]][which(mcl_gene_counts[[mcl_dirs[i]]]>=3)])
   }
   
-  ptm <- proc.time()
-  all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %dopar% {
-    if(length(mcl_gene_list[[i]])>0){
-        enrich_result <- enrichGO(gene = mcl_gene_list[[i]],
-                              universe = gene_universe,
-                              keyType = "ENSEMBL", 
-                              OrgDb = org.Hs.eg.db, 
-                              ont = "ALL", 
-                              pAdjustMethod = "BH", 
-                              qvalueCutoff = 0.05,
-                              readable = TRUE)
-      saved_enrich <- as.data.frame(enrich_result)
-      if (nrow(saved_enrich) > 0){
-        saved_enrich$Metacluster <- mcl_dirs[i]
-        
-        p_cnetplot <- cnetplot(enrich_result, showCategory = 5, layout = "kk", circular = FALSE,
-           color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
-           cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
-           title = paste("Enrichment Cnetplot -", mcl_dirs[i])) +
-                custom_theme_2() +
-                ggtitle(paste("Enrichment Cnetplot -", mcl_dirs[i]))
-        # ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_cnetplot.png'), p_cnetplot, width = 15, height = 10, units = "in", bg = "white")
-        
-        term_sim_matrix <- pairwise_termsim(enrich_result)
-        p_emapplot <- emapplot(term_sim_matrix, showCategory = 15, layout = "kk", circular = FALSE,
-           color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
-           cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
-           title = paste("Enrichment emapplot -", mcl_dirs[i])) +
-                custom_theme_2() +
-                ggtitle(paste("Enrichment emapplot -", mcl_dirs[i]))
-        # ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_emapplot.png'), p_emapplot, width = 15, height = 10, units = "in", bg = "white")
-        ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_combined_plot.png'), grid.arrange(p_cnetplot, p_emapplot), width = 15, height = 10, units = "in", bg = "white")
-        
-      } else{
-        saved_enrich$Metacluster <- character()
-      }
-    } else{
-      saved_enrich <- character(11)
-    }
-    saved_enrich
-  }
+  #just keep emapplot
   
-              
-  
-  write.csv(all_mcl_GO_results, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_all_mcl_GO_results.csv"))
+  # all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %dopar% {
+  #   if(length(mcl_gene_list[[i]])>0){
+  #       enrich_result <- enrichGO(gene = mcl_gene_list[[i]],
+  #                             universe = gene_universe,
+  #                             keyType = "ENSEMBL", 
+  #                             OrgDb = org.Hs.eg.db, 
+  #                             ont = "ALL", 
+  #                             pAdjustMethod = "BH", 
+  #                             qvalueCutoff = 0.05,
+  #                             readable = TRUE)
+  #     saved_enrich <- as.data.frame(enrich_result)
+  #     if (nrow(saved_enrich) > 0){
+  #       saved_enrich$Metacluster <- mcl_dirs[i]
+  #       
+  #       # p_cnetplot <- cnetplot(enrich_result, showCategory = 5, layout = "kk", circular = FALSE,
+  #       #    color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
+  #       #    cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
+  #       #    title = paste("Enrichment Cnetplot -", mcl_dirs[i])) +
+  #       #         custom_theme_2() +
+  #       #         ggtitle(paste("Enrichment Cnetplot -", mcl_dirs[i]))
+  #       # ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_cnetplot.png'), p_cnetplot, width = 15, height = 10, units = "in", bg = "white")
+  #       
+  #       term_sim_matrix <- pairwise_termsim(enrich_result)
+  #       p_emapplot <- emapplot(term_sim_matrix, showCategory = 15, layout = "kk", circular = FALSE,
+  #          color.params = list(edge = TRUE, category = 'firebrick', gene = 'black'), 
+  #          cex.params = list(category_node = 0.6, gene_node = 0.6, category_label = 1, gene_label = 0.7),
+  #          title = paste("Enrichment emapplot -", mcl_dirs[i])) +
+  #               custom_theme_2() +
+  #               ggtitle(paste("Enrichment emapplot -", mcl_dirs[i]))
+  #       ggsave(paste0(dirs$figure_cluster_analysis, 'all_genes_modest_res_cutoff_0.4/', mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_emapplot.png'), p_emapplot, width = 15, height = 10, units = "in", bg = "white")
+  #       # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_combined_plot.png'), grid.arrange(p_cnetplot, p_emapplot), width = 15, height = 10, units = "in", bg = "white")
+  #       
+  #     } else{
+  #       saved_enrich$Metacluster <- character()
+  #     }
+  #   } else{
+  #     saved_enrich <- character(11)
+  #   }
+  #   saved_enrich
+  # }
+  # 
+  # write.csv(all_mcl_GO_results, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_all_mcl_GO_results.csv"))
 }
 
 proc.time() - ptm
 
+# distribution of epigenes (brainregions on y-axis, counts of epigenes on x-axis)
+
+# grid plot (each row is  (in at least 3 clusters/metacluster), each vertical is tissue) - similar gene sets w/ diff temporal pattern
+```
+
+
+```{r, test hpo enrichments}
+## for each HPO, test enrichment of chrom modifiers in set
+## plot by signif and OR, add labels (padj by bonferroni)
+
+# adapted from lines 237-367 in phenotype_analyses.Rmd
+
+which <- which(is.element(gene_universe, names(mcl_gene_counts[[1]]))) # use all genes in a given metacluster
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,] # can modify -which for some other contrast gene set - all other genes (setdiff function) - use all protein coding genes
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+temp_res_df <- data.frame(p.value=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_lb=numeric(length(ontos$hpo$ont$id)),
+                          odds_ratio_ub=numeric(length(ontos$hpo$ont$id)),
+                          num_chrom_associated=numeric(length(ontos$hpo$ont$id)),
+                          num_non_chrom_associated=numeric(length(ontos$hpo$ont$id)))
+
+for(i in 1:length(ontos$hpo$ont$id)){
+  if(i %% 1000 == 1){print(i)}
+  hps <- c(ontos$hpo$ont$id[i],ontos$hpo$ont$descendants[[i]])
+  which <- which(is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+
+    ### Use all genes or only those with some HP association ?
+  which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+  temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+  which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+  temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+
+  temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+  
+  ## Odds Ratio
+  temp_res_df$p.value[i] <- temp_res$p.value
+  temp_res_df$odds_ratio[i] <- temp_res$estimate
+  temp_res_df$odds_ratio_lb[i] <- temp_res$conf.int[1]
+  temp_res_df$odds_ratio_ub[i] <- temp_res$conf.int[2]
+  temp_res_df$num_chrom_associated[i] <- temp_chrom_hp
+  temp_res_df$num_non_chrom_associated[i] <- temp_not_chrom_hp 
+}
+
+## plot Gene-Gene phenotype similarity (asymetric if want subsumption test e.g.  if A has subset of phens of B)
+## subsumption test may be useful later if make meta-genes by aggregation of complex components..... 
+
+
+which <- which(is.element(onto_maps$HPO_OMIM_GENE$map$Ensembl_Gene_ID,
+           gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+temp_chrom <- onto_maps$HPO_OMIM_GENE$map[which,]
+temp_not_chrom <- onto_maps$HPO_OMIM_GENE$map[-which,]
+temp_not_chrom <- temp_not_chrom[which(temp_not_chrom$Ensembl_Gene_ID!=""),]
+onto <- ontos$hpo$ont
+
+onto$is_signif <- rep(F,length(onto$id))
+for( layer in 1:max(onto$height)){
+  print(paste0("layer is: ",layer ))
+  els_in_layer <- which(onto$height==layer)
+  i = 1
+  for( el in els_in_layer ){
+    if(i %% 250 == 0){print(i)}
+    i <- i+1
+    hps <-  c(onto$id[el],onto$descendants[[el]])
+  
+    which <- which(is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+  
+      ### Use all genes or only those with some HP association ?
+    which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+    temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+    which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+    temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+    
+    temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                  c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+    
+    is_signif <- temp_res$p.value < 0.05
+    if(!is_signif){next}
+    ## get list of signif children - these form the mask set.. 
+    ## actually.. probs want all signif descendants? Probs don't
+    ## need to deal with children of signif children, but children of
+    ## insignif children may themselves have substantial signal/ be signif...
+    ## and then drive association at later ancestor level.. 
+    
+
+    signif_descendants <- get_mask_set(onto$id[el], onto)
+    
+    if(length(signif_descendants>0)){ ### replace with children that are already called as significant only
+      for( child in signif_descendants){
+        hps <- onto$id[el] ## want to retain any that are directly associated with _self_.. 
+        ## NOTE: Don't want to retain _self_ in hps if database includes redundant associations.. i.e. database should
+        ## only include most specific instance and NOT also all ancestors of that instance ..
+        for( other_child in signif_descendants){
+          if( other_child == child){next}
+          hps <- c(hps, onto$descendants[[which(onto$id==other_child)]])
+        } 
+  
+        which <- which(is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_hp <- length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <- which(is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+      
+          ### Use all genes or only those with some HP association ?
+        which <-  which(!is.element(temp_chrom$HPO_ID, hps))
+        temp_chrom_not_hp <-  length(unique(temp_chrom$Ensembl_Gene_ID[which]))
+        which <-  which(!is.element(temp_not_chrom$HPO_ID, hps))
+        temp_not_chrom_not_hp <- length(unique(temp_not_chrom$Ensembl_Gene_ID[which]))
+        
+        temp_res <- fisher.test(x=cbind(c(temp_chrom_hp, temp_chrom_not_hp),
+                                      c(temp_not_chrom_hp, temp_not_chrom_not_hp)))
+        is_signif <- temp_res$p.value < 0.05 
+        if(!is_signif){break}
+      }
+      
+    }
+    onto$is_signif[el] <- is_signif
+  }
+}
+
+
+temp_df <- cbind(data.frame(id=onto$id, name=onto$name, is_signif=onto$is_signif,
+                            height=onto$height, depth=onto$depth),
+                 temp_res_df)
+rownames(temp_df) <- temp_df$id
+
+ontos$hpo$chrom_enrichments <- temp_df
+
+filename <- paste0(dirs$tables,"chrom_modifiers_HPO_enrichments.csv")
+write.csv(ontos$hpo$chrom_enrichments, file=filename)
 ```
 
 
 ```{r, iagc_time_sim_mat_high}
-ptm <- proc.time()
-iagc_time_sim_mat_high <- foreach(a = 1:length(unique_pairs_high), .combine = 'rbind') %:%
-  foreach(b = 1:length(unique_pairs_high), .combine = 'c') %dopar% {
-    first <- unique_pairs_high[[a]]
-    second <- unique_pairs_high[[b]]
-    # For all clusters within the same anatomic group, just set inter-anatomic cluster dist = 0
-    if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
-      result = 0
-    } else{
-          
-      first_expr <- cutoff_gene_lists[[cutoff_name]][[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[first[1]]][["expr_df"]][["group_name"]]),]
-  
-      second_expr <- cutoff_gene_lists[[cutoff_name]][[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[second[1]]][["expr_df"]][["group_name"]]),]
-      
-      pcw_pairs <- vector(mode = "integer")
-      
-      first_matches <- vector(mode = "integer", length = nrow(first_expr))
-      for (i in 1:length(first_matches)){
-        first_matches[i] = paste0(first_expr$pcw[i], '-',second_expr$pcw[which.min(abs(second_expr$pcw - first_expr$pcw[i]))])
-      }
-      
-      second_matches <- vector(mode = "integer", length = nrow(second_expr))
-      for (i in 1:length(second_matches)){
-        second_matches[i] = paste0(first_expr$pcw[which.min(abs(first_expr$pcw - second_expr$pcw[i]))], '-', second_expr$pcw[i])
-      }
-      pairs <- list(first_matches, second_matches)
-      if(length(first_matches) == length(second_matches)){
-        pcw_pairs <- first_matches
-        to_append <- second_matches
-      } else{
-        pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
-        to_append <- pairs[[which.min(c(length(first_matches), length(second_matches)))]]
-      }
-      pcw_pairs <- union(pcw_pairs, to_append)
-      # for (i in 1:length(to_append)){
-      #   if (is.na(match(to_append[i], pcw_pairs))){
-      #     pcw_pairs <- append(pcw_pairs,to_append[i])
-      #   }
-      # }
-      unsorted_pcws <- length(pcw_pairs)
-      # sort matches to ascending weeks order
-      for (i in 1:length(pcw_pairs)){
-        unsorted_pcws[i] <- strtoi(str_split(pcw_pairs, '-')[[i]][1])
-      }
-      sorted_pairs <- pcw_pairs[order(unsorted_pcws)]
-      
-      new_first_expr <- vector(mode = "numeric", length = length(sorted_pairs))
-      new_second_expr <- vector(mode = "numeric",length = length(sorted_pairs))
-      
-      names(new_first_expr) <- sorted_pairs
-      names(new_second_expr) <- sorted_pairs
-      
-      for(k in 1:length(new_first_expr)){
-        first_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][1])
-        second_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][2])
-        first_pcw_match <- which(first_expr$pcw == first_pcw)
-        second_pcw_match <- which(second_expr$pcw == second_pcw)
-        new_first_expr[k] <- first_expr$expr[first_pcw_match]
-        new_second_expr[k] <- second_expr$expr[second_pcw_match]
-      }
-      result = cor(new_first_expr, new_second_expr)
-    }
-    result
-  }
-
-rownames(iagc_time_sim_mat_high) <- sapply(seq(1, length(unlist(unique_pairs_high)), by = 3), function(i) paste(unlist(unique_pairs_high)[i:(i + 2)], collapse = "--"))
-colnames(iagc_time_sim_mat_high) <- sapply(seq(1, length(unlist(unique_pairs_high)), by = 3), function(i) paste(unlist(unique_pairs_high)[i:(i + 2)], collapse = "--"))
-
-proc.time() - ptm
-
-write.csv(iagc_time_sim_mat_high, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat_high.csv"))
-
-hc_time_high <- hclust(as.dist(1-(iagc_time_sim_mat_high+1)/2), "ave")
-plot(hc_time_high,labels=FALSE, main = "metaclusters for iagc_time high resolution (cutoff = 0.2)")
-rect.hclust(hc_time_high, h=0.2)
+# ptm <- proc.time()
+# iagc_time_sim_mat_high <- foreach(a = 1:length(unique_pairs_high), .combine = 'rbind') %:%
+#   foreach(b = 1:length(unique_pairs_high), .combine = 'c') %dopar% {
+#     first <- unique_pairs_high[[a]]
+#     second <- unique_pairs_high[[b]]
+#     # For all clusters within the same anatomic group, just set inter-anatomic cluster dist = 0
+#     if(first[[1]] == second[[1]] & first[[2]] == second[[2]] & first[[3]]!= second[[3]]){
+#       result = 0
+#     } else{
+#           
+#       first_expr <- cutoff_gene_lists[[cutoff_name]][[first[1]]][["expr_df"]][grep(paste0("cluster:",str_split(first[3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[first[1]]][["expr_df"]][["group_name"]]),]
+#   
+#       second_expr <- cutoff_gene_lists[[cutoff_name]][[second[1]]][["expr_df"]][grep(paste0("cluster:",str_split(second[3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[second[1]]][["expr_df"]][["group_name"]]),]
+#       
+#       pcw_pairs <- vector(mode = "integer")
+#       
+#       first_matches <- vector(mode = "integer", length = nrow(first_expr))
+#       for (i in 1:length(first_matches)){
+#         first_matches[i] = paste0(first_expr$pcw[i], '-',second_expr$pcw[which.min(abs(second_expr$pcw - first_expr$pcw[i]))])
+#       }
+#       
+#       second_matches <- vector(mode = "integer", length = nrow(second_expr))
+#       for (i in 1:length(second_matches)){
+#         second_matches[i] = paste0(first_expr$pcw[which.min(abs(first_expr$pcw - second_expr$pcw[i]))], '-', second_expr$pcw[i])
+#       }
+#       pairs <- list(first_matches, second_matches)
+#       if(length(first_matches) == length(second_matches)){
+#         pcw_pairs <- first_matches
+#         to_append <- second_matches
+#       } else{
+#         pcw_pairs <- pairs[[which.max(c(length(first_matches), length(second_matches)))]]
+#         to_append <- pairs[[which.min(c(length(first_matches), length(second_matches)))]]
+#       }
+#       pcw_pairs <- union(pcw_pairs, to_append)
+#       # for (i in 1:length(to_append)){
+#       #   if (is.na(match(to_append[i], pcw_pairs))){
+#       #     pcw_pairs <- append(pcw_pairs,to_append[i])
+#       #   }
+#       # }
+#       unsorted_pcws <- length(pcw_pairs)
+#       # sort matches to ascending weeks order
+#       for (i in 1:length(pcw_pairs)){
+#         unsorted_pcws[i] <- strtoi(str_split(pcw_pairs, '-')[[i]][1])
+#       }
+#       sorted_pairs <- pcw_pairs[order(unsorted_pcws)]
+#       
+#       new_first_expr <- vector(mode = "numeric", length = length(sorted_pairs))
+#       new_second_expr <- vector(mode = "numeric",length = length(sorted_pairs))
+#       
+#       names(new_first_expr) <- sorted_pairs
+#       names(new_second_expr) <- sorted_pairs
+#       
+#       for(k in 1:length(new_first_expr)){
+#         first_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][1])
+#         second_pcw <- as.numeric(str_split(sorted_pairs[k], '-')[[1]][2])
+#         first_pcw_match <- which(first_expr$pcw == first_pcw)
+#         second_pcw_match <- which(second_expr$pcw == second_pcw)
+#         new_first_expr[k] <- first_expr$expr[first_pcw_match]
+#         new_second_expr[k] <- second_expr$expr[second_pcw_match]
+#       }
+#       result = cor(new_first_expr, new_second_expr)
+#     }
+#     result
+#   }
+# 
+# rownames(iagc_time_sim_mat_high) <- sapply(seq(1, length(unlist(unique_pairs_high)), by = 3), function(i) paste(unlist(unique_pairs_high)[i:(i + 2)], collapse = "--"))
+# colnames(iagc_time_sim_mat_high) <- sapply(seq(1, length(unlist(unique_pairs_high)), by = 3), function(i) paste(unlist(unique_pairs_high)[i:(i + 2)], collapse = "--"))
+# 
+# proc.time() - ptm
+# 
+# write.csv(iagc_time_sim_mat_high, paste0(dirs$table_cluster_analysis, date, "_iagc_time_sim_mat_high.csv"))
+# 
+# hc_time_high <- hclust(as.dist(1-(iagc_time_sim_mat_high+1)/2), "ave")
+# plot(hc_time_high,labels=FALSE, main = "metaclusters for iagc_time high resolution (cutoff = 0.2)")
+# rect.hclust(hc_time_high, h=0.2)
 ```
 
 
