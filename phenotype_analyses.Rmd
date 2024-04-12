@@ -188,6 +188,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
         }
       }
     }
+    if(length(major_systems_affected)==0){next}
     temp_df <- merge(data.frame(ensembl_gene_id = unique(temp_submap$Ensembl_Gene_ID)),
                      data.frame(omim_id = temp_omim_id,
                                 major_systems_affected = strsplit(major_systems_affected,",")[[1]],
@@ -217,7 +218,7 @@ df$system_name <- factor(df$system_name, levels = temp$Group.1)
 ggplot(df, aes(x=system_name, fill=system_name))+
   geom_bar()+
   scale_fill_grey()+
-  facet_grid(chrom_subset_name ~ . )+
+  facet_grid(chrom_subset_name ~ . ,scale="free_y")+
   theme_bw()+
   theme(strip.text.y = element_text(angle = 0),
         axis.text.x =  element_text(angle=45,hjust=0.95))

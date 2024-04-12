@@ -10,80 +10,54 @@ library(cowplot)
 
 #### add to density plot line for all genes
 
-df <- cbind(gene_sets$genes_all[0,],
-            data.frame(gene_length = numeric(), chrom_subset_name = character()))
-for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
-  ## get current subset of genes
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
-  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
-  if(length(chrom_subset)==0){next}
-  ## map current subset to table with gene lenght info
-  temp_df <- gene_sets$genes_all[which(is.element(gene_sets$genes_all$ensembl_gene_id, chrom_subset )),]
-  temp_df$gene_length <- temp_df$end_position - temp_df$start_position
-  temp_df$chrom_subset_name <- chrom_subset_name
-  df <- rbind(df, temp_df)
-}
-
-ggl <- list()
-ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(gene_length), color=chrom_subset_name))+
-  coord_cartesian(xlim = c(2, 6.5))+
-  geom_density(alpha=0.5)+
-  barcode_theme+
-  theme(axis.title.x = element_blank())
-
-ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name,invert=T),], aes(x=log10(gene_length),xend=log10(gene_length), y=0,yend=1))+
-  geom_segment(alpha=0.5)+
-  coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
-  barcode_theme+
-  facet_grid(chrom_subset_name ~ . )+
-  theme(strip.text.y = element_text(angle = 0))
-  
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(3,8))
-ggl$composite
-
-filename <- paste0(dirs$figures, "gene_size__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite, base_height = 6, base_asp = 1.2)
-```
-
-```{r, transcript length barcode plot, pretty}
-library(cowplot)
-
-#### add to density plot line for all genes
-
-df <- data.frame(ensembl_gene_id = character(),
-                 transcript_length = numeric(),
+df <- data.frame(gene_id=character(),
+                 length = numeric(),
+                 type = character(),
                  chrom_subset_name = character())
-for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
-  ## get current subset of genes
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
-  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
-  if(length(chrom_subset)==0){next}
-  ## map current subset to table with transcript length info
-  temp_df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset )),]
-  temp_df <- unique(temp_df[,c("ensembl_gene_id", "transcript_length")])
-  temp_df$chrom_subset_name <- chrom_subset_name
-  df <- rbind(df, temp_df)
+
+for(chrom_subset_name in c("control_set__non_chrom_mod","all_chrom_modifiers")){
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[chrom_subset_name]]
+  temp_df <- gene_sets$genes_all[which(is.element(gene_sets$genes_all$ensembl_gene_id, chrom_subset )),]
+  df <- rbind(df, data.frame(gene_id=temp_df$ensembl_gene_id,
+                             length=temp_df$end_position-temp_df$start_position,
+                             type="gene",
+                             chrom_subset_name=chrom_subset_name))
+  
+  temp_df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id, chrom_subset ) &
+                                                    gene_sets$genes_all_transcript$transcript_is_canonical),]
+  temp_df <- unique(temp_df[,c("ensembl_gene_id","transcript_length")])
+  df <- rbind(df, data.frame(gene_id=temp_df$ensembl_gene_id,
+                             length=temp_df$transcript_length,
+                             type="transcript",
+                             chrom_subset_name=chrom_subset_name))
+  
 }
 
-ggl <- list()
-ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(transcript_length),color=chrom_subset_name))+
-  coord_cartesian(xlim = c(2, 6.5))+
+
+gg1 <- ggplot(df, aes(x=log10(length), color=paste0(chrom_subset_name,type) ))+
+  scale_color_manual(values=c("#C77CFF","purple2","#00BFC4","turquoise3"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  coord_cartesian(xlim = c(2, 6.2))+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        legend.position = "none")
+
+gg2 <- ggplot(df, aes(x=log10(length), color=paste0(chrom_subset_name,type) ))+
+  scale_color_manual(values=c("#C77CFF","purple2","#00BFC4","turquoise3"))+
+  coord_cartesian(xlim = c(2, 6.2))+
   geom_density(alpha=0.5)+
-  barcode_theme+
-  theme(axis.title.x = element_blank())
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        legend.position = "bottom")
 
-ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name,invert=T),], aes(x=log10(transcript_length),xend=log10(transcript_length), y=0,yend=1))+
-  geom_segment(alpha=0.5)+
-  coord_cartesian(ylim = c(0.2,0.5), xlim = c(2, 6.5))+
-  barcode_theme+
-  facet_grid(chrom_subset_name ~ . )+
-  theme(strip.text.y = element_text(angle = 0))
-  
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(3,8))
-ggl$composite
 
-filename <- paste0(dirs$figures, "transcript_size__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite,base_height = 6, base_asp = 1.2)
+
+filename <- paste0(dirs$figures, "gene_size.png")
+ggsave(filename = filename,
+       gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
+       height = 4, width=6)
+
 ```
 
 ```{r, first and last exon v all exons, pretty}
@@ -96,16 +70,16 @@ df <- data.frame(ensembl_gene_id = character(),
                  rank_from_end = numeric(),
                  transcript_length = numeric(),
                  chrom_subset_name = character())
-for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+for(chrom_subset_name in c("control_set__non_chrom_mod","all_chrom_modifiers")){#}, "ubiq","non_ubiq")){
   ## get current subset of genes
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]] 
-  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[chrom_subset_name]] 
   if(length(chrom_subset)==0){next}
   ## map current subset to table with exon info
   
   ## exon length
   temp_df <- gene_sets$genes_all_transcript[which(is.element(gene_sets$genes_all_transcript$ensembl_gene_id,
                                                         chrom_subset )),]
+  temp_df <- unique(temp_df)
   temp_df$exon_length <- temp_df$exon_chrom_end - temp_df$exon_chrom_start
   temp_df$gene_factor_num <- as.numeric(as.factor(temp_df$ensembl_gene_id))
   temp_name <- paste0(chrom_subset_name, ": ", "exon_length")
@@ -123,7 +97,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   df <- rbind(df, temp_df[,which(is.element(colnames(temp_df),colnames(df)))])
 }
 
-ggl <- list()
+
 df$is_last <- df$rank_from_end == 1 & df$rank != 1
 df$is_first <- df$rank == 1 & df$rank_from_end != 1
 
@@ -131,127 +105,76 @@ df$first_last_single_middle <- "middle"
 df$first_last_single_middle[which(df$exon_count==1)] <- "single"  
 df$first_last_single_middle[which(df$is_first)] <- "first"
 df$first_last_single_middle[which(df$is_last)] <- "last"
+df$first_last_single_middle <- factor(df$first_last_single_middle, levels=c("first","middle","last","single"))
+df$is_chrom <- !grepl("non_chrom",df$chrom_subset_name)
 
-ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(exon_length),
-                                                                                     color=first_last_single_middle,
-                                                                                     linetype=chrom_subset_name))+
+ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(exon_length), linetype=chrom_subset_name))+
   coord_cartesian(xlim = c(0, 5.5))+
   geom_density(alpha=0.5)+
-  barcode_theme+
+  theme_bw()+
   theme(axis.title.x = element_blank())+
-  facet_grid(first_last_single_middle ~  .)
-table(df$first_last_single_middle)
+  facet_grid(first_last_single_middle ~ .,scale="free")
+filename <- paste0(dirs$figures, "exon_size__group_by_fmls.png")
+ggsave(filename = filename, height=4,width=6)
 
-ggl[["barcodes"]] <- ggplot(df[grep("^control",df$chrom_subset_name, invert=T),], aes(x=log10(exon_length),xend=log10(exon_length),
-               y=0.25*as.numeric(as.factor(first_last_single_middle)),
-               yend=0.25*as.numeric(as.factor(first_last_single_middle))+0.25,
-               color=first_last_single_middle))+
-  geom_segment(alpha=0.5)+
-  coord_cartesian(ylim = c(0.25,1.25), xlim = c(0, 5.5))+
-  barcode_theme+
-  facet_grid(chrom_subset_name ~ . )+
-  theme(strip.text.y = element_text(angle = 0))
-  
-ggl[["composite"]] <- plot_grid(ggl$all_density, ggl$barcodes, align="v",axis="r",nrow = 2, rel_heights = c(6,8))
-ggl$composite
-
-filename <- paste0(dirs$figures, "exon_size__group_by_fmls__partition_by_chromModType.png")
-save_plot(filename = filename, ggl$composite, base_height = 6, base_asp = 1.2)
-
-
-# ggl[["all_density"]] <- ggplot(df[grep("^all_|^control",df$chrom_subset_name),], aes(x=log10(exon_length), color=chrom_subset_name))+
-#   coord_cartesian(xlim = c(0, 5.5))+
-#   geom_density(alpha=0.5)+
-#   barcode_theme+
-#   theme(axis.title.x = element_blank())+
-#   facet_grid(first_last_single_middle ~ . )
-# table(df$first_last_single_middle)
+ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(transcript_length),y=exon_length/transcript_length,color=is_chrom))+
+  coord_cartesian(xlim = c(2, 5))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  geom_point(data=df[!df$is_chrom & df$first_last_single_middle != "single",],alpha=0.1,size=0.5)+
+  geom_point(data=df[df$is_chrom & df$first_last_single_middle != "single",],alpha=0.7,size=0.5)+
+  scale_y_continuous(breaks = seq(0,1,by=0.1))+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        panel.grid.minor.y = element_blank())+
+  stat_smooth(method=lm)+
+  facet_grid(first_last_single_middle ~ .,scale="free")
+filename <- paste0(dirs$figures, "exon_size_v_transcript_len_group_by_fmls.png")
+ggsave(filename = filename, height=6,width=9)
 
 
-#which <- which(df$first_last_single_middle=="last"  & grepl("control_set|all_chrom",df$chrom_subset_name) )
+model <- lm(log10(exon_length) ~ 
+              chrom_subset_name + log10(transcript_length),
+            data = df[df$first_last_single_middle=="last",])
+summary(model)
 
-which <- which(df$is_last & grepl("control_set|all_chrom",df$chrom_subset_name) )
-
-ggplot(df[which,],aes(x=log10(exon_count+1),color=chrom_subset_name))+
-  geom_step(aes(y=..y..),stat="ecdf")
-  # geom_density()#+
-  # facet_grid(. ~ chrom_subset_name)
-filename <- paste0(dirs$figures, "exon_count__ecdf.png")
-ggsave(filename = filename, height = 4, dpi=250)
 
   
-ggplot(df[which,],aes(x=exon_length/transcript_length,color=chrom_subset_name))+
-  geom_step(aes(y=..y..),stat="ecdf") #geom_histogram()
-filename <- paste0(dirs$figures, "last_exon_div_by_transcript_len.png")
-ggsave(filename = filename, height = 4, dpi=250)
+df$tau <- global_taus[df$ensembl_gene_id]
+df$is_ubiq <- df$tau < 0.4
+df <- df[complete.cases(df),]
+temp_df <- unique(df[,c("ensembl_gene_id","exon_count","transcript_length","chrom_subset_name","is_chrom","is_ubiq","tau")])
+ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=is_chrom))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  geom_point(data=df[which(df$first_last_single_middle=="last" & 
+                             !df$is_chrom),], size=0.8, alpha=0.2)+
+  geom_point(data=df[which(df$first_last_single_middle=="last" &
+                             df$is_chrom),], size=1.6, alpha=0.8)+
+  stat_smooth(method=lm)+
+  #geom_density_2d()+
+  xlim(2.5,4.5)
+
+temp_df$tau <- global_taus[temp_df$ensembl_gene_id]
+model <- lm(log2(exon_count) ~ 
+              is_chrom + log10(transcript_length) + tau,
+            data = temp_df)
+summary(model)
 
 
-ggplot(df[which,],aes(y=exon_length/transcript_length, x=log10(transcript_length), color=chrom_subset_name))+
-  geom_point(aes(alpha=chrom_subset_name),size=0.5)+
-  scale_alpha_manual(name = "chrom_subset_name", values = c(.4, .05))+
-  geom_density_2d() +
+ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=paste0(is_ubiq,is_chrom) ))+
+  scale_color_manual(values=c("gold2","#F8766D","#00BFC4","#C77CFF"))+
+  theme_bw()+
+  geom_jitter(height=0.1, data=df[which(df$first_last_single_middle=="last" &
+                                          !df$is_chrom),],size=0.2, alpha=0.4)+
+  geom_jitter(height=0.1,data=df[which(df$first_last_single_middle=="last" &
+                             df$is_chrom),], size=0.6, alpha=0.8)+
+  stat_smooth(method=lm)+
   xlim(2.5,4.5)+
- # geom_smooth(method='lm', formula= x~y)+
-  facet_grid(chrom_subset_name ~ . )
-filename <- paste0(dirs$figures, "last_exon_div_by_transcript_len_v_log10transcript_len.png")
-ggsave(filename = filename, height = 5, dpi=250)
-
-which <- which(df$is_last & grepl("control_set|all_chrom",df$chrom_subset_name) & 
-                 df$transcript_length > 10^2.5 & df$transcript_length < 10^4.5)
-df$log10_transcript_length_bin <- cut(log10(df$transcript_length),breaks=seq(0,10,by=0.5))
+  ylim(0.8,6.5)+
+  facet_grid(. ~ is_ubiq )
+filename <- paste0(dirs$figures, "exon_count_v_transcript_len.png")
+ggsave(filename = filename, height=5,width=8)
 
 
-
-ggplot(df[which,],aes(x=exon_length/transcript_length,color=chrom_subset_name))+
-  geom_density()+ #geom_histogram()+
-  facet_grid(. ~ log10_transcript_length_bin )
-filename <- paste0(dirs$figures, "exonlength_div_tranlen_density.png")
-ggsave(filename = filename, height = 4, dpi=250)
-
-ggplot(df[which,],aes(x=exon_length/transcript_length,color=chrom_subset_name))+
-  geom_step(aes(y=..y..),stat="ecdf")+ #geom_histogram()+
-  facet_grid(. ~ log10_transcript_length_bin )
-filename <- paste0(dirs$figures, "exonlength_div_tranlen_density_ecdf.png")
-ggsave(filename = filename, height = 4, dpi=250)
-
-
-ggplot(df[which,],aes(x=exon_length/transcript_length,linetype=chrom_subset_name, color=log10_transcript_length_bin))+
-  geom_step(aes(y=..y..),stat="ecdf") #+ #geom_histogram()+
-filename <- paste0(dirs$figures, "exonlength_div_tranlen_density_ecdf_one_panel.png")
-ggsave(filename = filename, height = 4, dpi=250)
-
-
-
-ggplot(df[which,],aes(y=log10(exon_count+1), x=log10(transcript_length), color=chrom_subset_name))+
-  geom_point(aes(alpha=chrom_subset_name),size=0.5)+
-  scale_alpha_manual(name = "chrom_subset_name", values = c(.4, .05))+
-  geom_density_2d() +
-  facet_grid(chrom_subset_name ~ .)
-filename <- paste0(dirs$figures, "exon_count_v_log10transcript_len.png")
-ggsave(filename = filename, height = 5, dpi=250)
-
-
-## for each transcript size bin - look at distribution of exon count
-which <- which(df$is_last & grepl("control_set|all_chrom",df$chrom_subset_name) & 
-                 df$transcript_length > 10^2.5 & df$transcript_length < 10^4.5)
-df$log10_transcript_length_bin <- cut(log10(df$transcript_length),breaks=seq(0,10,by=0.5))
-ggplot(df[which,],aes(x=log10(exon_count+1), color=chrom_subset_name))+
-  geom_density()+
-  facet_grid(. ~ log10_transcript_length_bin )
-filename <- paste0(dirs$figures, "exon_count_by_transcript_size_bin.png")
-ggsave(filename = filename, height = 4, dpi=250)
-
-
-ggplot(df[which,],aes(x=log10(exon_count+1), color=chrom_subset_name))+
-  geom_step(aes(y=..y..),stat="ecdf")+
-  facet_grid(. ~ log10_transcript_length_bin )
-filename <- paste0(dirs$figures, "exon_count_by_transcript_size_bin_ecdf.png")
-ggsave(filename = filename, height = 4, dpi=250)
-
-ggplot(df[which,],aes(x=log10(exon_count+1),linetype=chrom_subset_name , color=log10_transcript_length_bin))+
-  geom_step(aes(y=..y..),stat="ecdf")
-filename <- paste0(dirs$figures, "exon_count_by_transcript_size_bin_ecdf_one_panel.png")
-ggsave(filename = filename, height = 4, dpi=250)
 
 ```
 
@@ -260,6 +183,56 @@ ggsave(filename = filename, height = 4, dpi=250)
 
 ```
 
+
+```{r, disorder domain analyses}
+
+
+
+protein_domains$is_chrom <- is.element(protein_domains$ensembl_gene_id,
+                                      gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+protein_domains$is_chrom_f <- factor(protein_domains$is_chrom, levels=c("TRUE","FALSE"))
+gg1 <- ggplot(protein_domains[protein_domains$prop_disordered > 0,], aes(y=log10(prop_disordered*Length), x=log10(Length),color=is_chrom_f ))+
+  geom_abline(slope=1, intercept = log10(1-c(0,0.5,0.75,0.9,0.99)),color="grey40",linetype="dashed")+
+  scale_color_manual(values=c("purple","steelblue3"))+
+  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
+                                    !protein_domains$is_chrom,],color="#00BFC4",alpha=0.2,size=0.3)+
+  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
+                                    protein_domains$is_chrom,],color="#C77CFF",alpha=0.6)+
+  #geom_point(data=data.frame(x=log10(seq(0,1e4,length.out=100)),y=log10(0.1*seq(0,1e4,length.out=100))),aes(x=x,y=y),inherit.aes = F)+
+  xlim(1,5)+ylim(1,4)+
+  theme_bw()+
+  stat_smooth(method=lm)+
+  facet_grid(. ~ is_chrom_f)
+
+gg2 <- ggplot(protein_domains[protein_domains$prop_disordered > 0,], aes(y=prop_disordered, x=log10(Length),color=is_chrom_f ))+
+  scale_color_manual(values=c("purple","steelblue3"))+
+  geom_abline(slope=0,intercept = 1-c(0,0.5,0.75,0.9,0.99),color="grey40",linetype="dashed")+
+  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
+                                    !protein_domains$is_chrom,],color="#00BFC4",alpha=0.2,size=0.3)+
+  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
+                                    protein_domains$is_chrom,],color="#C77CFF",alpha=0.6)+
+  theme_bw()+
+  scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(1,4.5))+
+  stat_smooth(method=lm)+
+  facet_grid(. ~ is_chrom_f)
+
+
+filename <- paste0(dirs$figures,"chrom_disordered_domain_proportion.png")
+ggsave(filename = filename, gg1,
+        #gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(3,3)),
+       height = 3, width=7)
+
+model <- lm(log10(prop_disordered * Length) ~ 
+              log10(Length) + is_chrom,
+            data = protein_domains[protein_domains$prop_disordered > 0,])
+summary(model)
+model <- lm(log10(prop_disordered * Length) ~ 
+              log10(Length) + is_chrom + is_chrom:log10(Length),
+            data = protein_domains[protein_domains$prop_disordered > 0,])
+summary(model)
+
+```
 
 
 ```{r, DRAFT extract protein complex associations}

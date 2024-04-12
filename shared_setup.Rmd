@@ -44,19 +44,28 @@ rm(OMIM_genemap2_URL)
 ```
 
 ```{r, load libraries}
+
+
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
-               "ggiraph","ggraph","igraph","collapsibleTree","webshot",
-               "dendextend","factoextra","cowplot","httr","jsonlite", "circlize"),
-  biocmanager = c("Gviz","biomaRt","ComplexHeatmap")
+               "ggiraph","ggraph","igraph","collapsibleTree","webshot","remotes","devtools",
+               "dendextend","factoextra","cowplot","httr","jsonlite", "circlize","UpSetR","tidyverse"),
+  biocmanager = c("Gviz","biomaRt","ComplexHeatmap","DOSE","pathview","clusterProfiler",
+                  "org.Hs.eg.db","topGO","enrichplot")
 )
 for(std_package in req_packages$standard ){
   if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
 };rm(std_package)
 for(bioc_package in req_packages$biocmanager ){
   if(!require(bioc_package, quietly=T, character.only=T)){BiocManager::install(bioc_package)}
-};rm(bioc_package)
+};#rm(bioc_package)
 rm(req_packages)
+# ## remotes::install_github("GuangchuangYu/tidytree")
+# ## remotes::install_github("YuLab-SMU/yulab.utils")
+# ## remotes::install_github("YuLab-SMU/GOSemSim")
+# ## remotes::install_github("YuLab-SMU/ggfun")
+# ## remotes::install_github("YuLab-SMU/aplot")
+# ## remotes::install_github("YuLab-SMU/enrichplot")
 
 date <- format(Sys.time(),"%Y%m%d")
 registerDoParallel(detectCores()-2)
@@ -527,6 +536,15 @@ while(TRUE){
     ontos$go$ont$name[term_num] <- str_remove(line, "^name:[[:space:]]")
   } else if(grepl("^namespace:",line)){
     ontos$go$ont$namespace[term_num] <- str_remove(line, "^namespace:[[:space:]]")
+  } else if(grepl("^relationship:.*GO",line)){
+    temp_relation  <- str_remove(str_remove(line, "^relationship:[[:space:]]"),"[[:space:]]*!.*")
+    temp_df <- data.frame(relation = str_remove(temp_relation, " .*"),
+                          id = str_extract(temp_relation, "GO:[0-9]+"))
+    temp_gci_relation <- str_remove(str_remove(str_extract(line,"gci_relation.*\""),"gci_relation=\""),"\"")
+    ## if gci_relation exists and does not match temp_df$relation skip
+    if(!is.na(temp_gci_relation) & temp_gci_relation != temp_df$relation){next} 
+    ontos$go$ont$relations[term_num][[1]] <- rbind(ontos$go$ont$relations[term_num][[1]],
+                                                       temp_df) 
   } else if(grepl("^is_a:",line)){
     ontos$go$ont$parents[term_num][[1]] <- c(ontos$go$ont$parents[term_num][[1]], str_remove(str_remove(line, "^is_a:[[:space:]]"),"[[:space:]]*!.*")) 
   } else if(grepl("^is_obsolete: true",line)){
@@ -538,10 +556,12 @@ close(con);rm(con,term_num,num_terms,line)
 ### replace is_a with parents
 ### add children attribute to each term for ease of navigation up and down ontology
 ontos$go$ont <- add_children_from_parents(ontos$go$ont)
-ontos$go$ont <- add_descendants(ontos$go$ont)
+# ontos$go$ont <- add_descendants(ontos$go$ont)
 ##### done: read in and set up ontology ####
-
-
+ontos$go$ont <- add_inverse_relation(ontos$go$ont, "part_of",
+                                         inverse_relation_name = "has_part(SUPP_INV(part_of))")
+ontos$go$ont <- add_descendants(ontos$go$ont, descendant_relations = c("has_part(SUPP_INV(part_of))"))
+save.image()
 
 
 
@@ -1006,6 +1026,7 @@ for(chr in c(as.character(1:22),"X","Y","MT" )){
   gene_sets$genes_all_go <- rbind(gene_sets$genes_all_go, temp)
   
 }
+gene_sets$genes_all_transcript_w_noncanon <- gene_sets$genes_all_transcript
 gene_sets$genes_all_transcript <- gene_sets$genes_all_transcript[which(!is.na(gene_sets$genes_all_transcript$transcript_is_canonical)),]
 
 gene_sets$human_chromatin_modifiers <- list()
@@ -1096,6 +1117,14 @@ gene_sets$human_chromatin_modifiers$gene_subsets$control_set__non_chrom_mod <-
   setdiff(  gene_sets$genes_all$ensembl_gene_id[which(gene_sets$genes_all$gene_biotype=="protein_coding")] ,
   gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
 
+
+
+temp <- tempfile()
+#For information on constraint, see The mutational constraint spectrum quantified from variation in 141,456 humans. Nature 581, 434–443 (2020). Descriptions of the fields in these files can be found in the Supplementary Dataset 11 section on pages 74-77 of the Supplementary Information.
+download.file("https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz",temp)
+lof_metrics <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+gene_sets$lof_metrics <- lof_metrics[,c("gene", "gene_id","pLI","pRec","pNull")]
+rm(lof_metrics)
 save.image()
 ```
 
@@ -1130,7 +1159,48 @@ save.image()
 # taxonomy$human_lineage <- h_sapiens_lineage
 # taxonomy$names <- taxonomy$nodes <- NULL
 # ```
+```{r, uniprot domains}
 
+temp_map <- getBM(attributes=c('ensembl_gene_id',"external_gene_name","uniprotswissprot","uniprotsptrembl"), mart = ensembl, useCache = F)
+temp <- tempfile()
+#download.file("https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Creviewed%2Cid%2Cgene_names%2Corganism_name%2Clength%2Cprotein_families%2Cft_region%2Cft_domain&format=tsv&query=%28*%29+AND+%28model_organism%3A9606%29+AND+%28reviewed%3Atrue%29",temp)
+download.file("https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Creviewed%2Cid%2Cgene_names%2Corganism_name%2Clength%2Cprotein_families%2Cft_region%2Cft_domain&format=tsv&query=%28*%29+AND+%28model_organism%3A9606%29+AND+%28reviewed%3Atrue%29",temp)
+protein_domains <- read.table( temp, skip=0, header = TRUE, sep = "\t", fill=TRUE, quote = "")
+protein_domains$prop_disordered <- NA
+protein_domains$disorder_starts <- NA
+protein_domains$disorder_ends <- NA
+protein_domains$disorder_lengths <- NA
+for(i in 1:nrow(protein_domains)){
+  temp <- strsplit(protein_domains$Region[i],"(?<=.)(?=REGION)",perl = T)[[1]]
+  temp_df <- data.frame(start=numeric(),
+                        end=numeric(),
+                        type=character())
+  for(j in 1:length(temp)){
+    temp_df <- rbind(temp_df,
+                     data.frame(
+                       start=as.numeric(str_extract(str_extract(temp[j],"REGION [0-9]*"),"[0-9]+")),
+                       end=as.numeric(str_remove(str_extract(temp[j],"REGION.*\\.\\.[0-9]*"),".*\\.\\.")),
+                       type=str_remove(str_extract(temp[j],"note=\\\"[a-zA-Z0-9 \t]*"),"note=\\\"")
+                     )) 
+  }
+  which <- which(temp_df$type == "Disordered")
+  protein_domains$prop_disordered[i] <- sum(temp_df$end[which] - temp_df$start[which]) / protein_domains$Length[i]
+  if(length(which)==0){next}
+  protein_domains$disorder_starts[i] <- paste(temp_df$start[which],collapse=",")
+  protein_domains$disorder_ends[i]  <- paste(temp_df$end[which],collapse=",")
+  protein_domains$disorder_lengths[i]  <- paste(temp_df$end[which]-temp_df$start[which],collapse=",")
+}
+
+protein_domains$ensembl_gene_id <- NA
+protein_domains$ensembl_gene_id <- temp_map$ensembl_gene_id[match(protein_domains$Entry,temp_map$uniprotswissprot)]
+which <- which(is.na(protein_domains$ensembl_gene_id))
+protein_domains$ensembl_gene_id[which] <- temp_map$ensembl_gene_id[match(protein_domains$Entry[which],temp_map$uniprotsptrembl)]
+which <- which(is.na(protein_domains$ensembl_gene_id))
+for(i in 1:length(which)){
+  temp <- gene_sets$genes_all$ensembl_gene_id[is.element(gene_sets$genes_all$external_gene_name, str_split(protein_domains$Gene.Names[which[i]]," ")[[1]])]
+  protein_domains$ensembl_gene_id[which[i]] <- ifelse(length(temp)==1,temp,NA)
+}
+```
 
 ```{r, custom ggplot themes}
 barcode_theme <- theme_classic()+
