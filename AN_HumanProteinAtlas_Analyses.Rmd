@@ -79,13 +79,39 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
     }
   }
   
+ #(8) Label all the genes in nucleus 
+  df_gg$loc_is_nucleus <- is.element(df_gg$loc,
+                                  c("Nuclear membrane",
+                                    "Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim",
+                                    "Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"
+                                    ))
   
-  
-  
-  
- #(8) pulling all nuclear terms
-  df_gg$loc_is_nucl <- is.element(df_gg$loc,
-                                  c(NUCLEAR_NAMESHERE))
+ #(9) Label all the genes in cytoplasm 
+  df_gg$loc_is_cytoplasm <- is.element(df_gg$loc,
+                                  c("Actin filaments",
+                                    "Cleavage furrow",
+                                    "Focal adhesion sites",
+                                    "Centriolar satellite",
+                                    "Centrosome",
+                                    "Aggresome",
+                                    "Cytoplasmic bodies",
+                                    "Cytosol",
+                                    "Rods & rings",
+                                    "Intermediate filaments",
+                                    "Cytokinetic bridge",
+                                    "Microtubule ends",
+                                    "Microtubules",
+                                    "Midbody",
+                                    "Midbody ring",
+                                    "Mitotic spindle",
+                                    "Mitotic spindle"
+                                    ))
   
   
   
@@ -96,6 +122,81 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
 
 ```
 
+
+
+
+
+#key of subcell locations
+```{r}
+
+##########  Nucleus  #################
+### Nuclear Membrane
+  ##"Nuclear membrane"
+
+### Nucleoli
+  ##"Nucleoli"
+  ##"Nucleoli fibrillar center"
+  ##"Nucleoli rim"
+
+### Nucleoplasm
+  ##"Kinetochore"
+  ##"Mitotic chromosome"
+  ##"Nuclear bodies"
+  ##"Nuclear speckles"
+  ##"Nucleoplasm"
+
+##########  cytoplasm  #################
+### Actin Filaments
+  ##"Actin filaments"
+  ##"Cleavage furrow"
+  ##"Focal adhesion sites"
+
+### Centrosome
+  ##"Centriolar satellite"
+  ##"Centrosome"
+
+### Cytosol
+  ##"Aggresome"
+  ##"Cytoplasmic bodies"
+  ##"Cytosol"
+  ##"Rods & rings"
+
+### Intermediate Filaments
+  ##"Intermediate filaments"
+
+### Microtubules
+  ##"Cytokinetic bridge"
+  ##"Microtubule ends"
+  ##"Microtubules"
+  ##"Midbody"
+  ##"Midbody ring"
+  ##"Mitotic spindle"
+
+### Mitochondria
+  ##"Mitochondria"
+
+##########  Endomembrane system   #################
+## Endoplasmic Reticulum
+  ##Endoplasmic reticulum
+
+## Golgi Apparatus
+  ##Golgi apparatus
+
+## Plasma Membrane
+  ##Cell junctions
+  ##Plasma membrane
+
+## Vesicles
+  ##Endosomes
+  ##Lipid droplets
+  ##Lysosomes
+  ##Peroxisomes
+  ##Vesicles
+
+
+
+
+```
 
 
 #random, 1st attempt, collapsed nuclei terms
