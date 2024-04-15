@@ -9,7 +9,7 @@ output: html_document
 
 
 
-#Attempt1 - Plots of subcell distribution for all epigenes or just those that cause chromatinopathies.
+#Creating DF for ggplot2 - all genes labeled by epigene and subcell location
   #step1> pulling subcellular localization from HPA for all epigenes.
 ```{r}
 
@@ -102,7 +102,7 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
                                     "Aggresome",
                                     "Cytoplasmic bodies",
                                     "Cytosol",
-                                    "Rods & rings",
+                                    "Rods & Rings",
                                     "Intermediate filaments",
                                     "Cytokinetic bridge",
                                     "Microtubule ends",
@@ -110,21 +110,278 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
                                     "Midbody",
                                     "Midbody ring",
                                     "Mitotic spindle",
-                                    "Mitotic spindle"
+                                    "Mitochondria"
                                     ))
   
-#(10) Label all the genes in mitochondria 
-  df_gg$loc_is_mito <- is.element(df_gg$loc,
-                                  c("Mitochondria"))
+
   
-  
+#(10) Label all the genes in the Endomembrane system
+  df_gg$loc_is_endoSys <- is.element(df_gg$loc,
+                                  c("Endoplasmic reticulum",
+                                    "Golgi apparatus",
+                                    "Cell Junctions",
+                                    "Plasma membrane",
+                                    "Endosomes",
+                                    "Lipid droplets",
+                                    "Lysosomes",
+                                    "Peroxisomes",
+                                    "Vesicles"
+                                    ))
   
 
+#(11) create membership column to aggregate all info about subcell location
+  # Define the set of columns to search
+  columns_to_search <- c( "loc_is_nucleus","loc_is_cytoplasm","loc_is_endoSys")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership <- function(row) {
+    for (col in columns_to_search) {
+      if (row[col]) {
+        return(col)
+      }
+    }
+    return(NA)  # Return NA if no TRUE value is found in the specified columns
+  }
+  
+  # Apply the function row-wise to the dataframe
+  df_gg$membership <- apply(df_gg[columns_to_search], 1, find_membership)
+
+  
+  
+#(12) fix membership annotations and epigene column for legend
+df_gg$membership[df_gg$membership == "loc_is_endoSys"] <- "Endomembrane System"
+df_gg$membership[df_gg$membership == "loc_is_cytoplasm"] <- "Cytoplasm"
+df_gg$membership[df_gg$membership == "loc_is_nucleus"] <- "Nucleus"
+
+
+#(13) remove all rows with 'NA' in df_gg$loc
+  #Only rows where all values are complete (non-NA) will be retained.
+  #these are created when a gene has no alternative location.
+
+df_gg <- df_gg[complete.cases(df_gg$loc), ]
+
+
+
+
 #remove useless variables
-  rm(url,zip_file)
+  rm(url,zip_file,df,temp_df)
 
 ```
 
+
+#disordered domain plots 
+```{r}
+#(1)add disordered domain information to df_gg
+  dis_domain_stats<-read.csv(file="prot_dis_domain_stats.csv", row.names = 1)
+  dis_domain_stats<-dis_domain_stats%>%select("ensembl_gene_id", 
+                                              "Length",
+                                              "prop_disordered",
+                                              "max_disorder_length")
+  
+  df_gg_p<-dplyr::left_join(df_gg,dis_domain_stats,by="ensembl_gene_id")
+  df_gg_p<-unique(df_gg_p)
+  df_gg_p<-df_gg_p%>%drop_na(prop_disordered)
+
+###### (2) plot function1: density for each of the 3 location membership #########################
+
+plot_density <- function(data, membership) {
+  # Filter data based on membership
+  data <- data[data$membership == membership, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    geom_density(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("Membership:", membership))
+  
+  return(p)
+  
+}
+
+
+
+# Plot for "Endomembrane System" membership
+plot_density(df_gg_p, "Endomembrane System")
+  ggsave(  filename="240414_Epi-v-NonEpi_disorder-prop_Endomembrane.jpeg",
+    plot = last_plot())
+
+
+# Plot for "Cytoplasm" membership
+plot_density(df_gg_p, "Cytoplasm")
+  ggsave(  filename="240414_Epi-v-NonEpi_disorder-prop_Cytoplasm.jpeg",
+    plot = last_plot())
+
+# Plot for "Nucleus" membership
+plot_density(df_gg_p, "Nucleus")
+  ggsave(  filename="240414_Epi-v-NonEpi_disorder-prop_Nucleus.jpeg",
+    plot = last_plot())
+
+
+
+
+###### (4) plot function2 for all data in 1 #########################
+
+plot_density2 <- function(data) {
+  # Filter data for nuclear and epigene
+  nuclear_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == TRUE, ]
+  
+  # Filter data for nuclear and non-epigene
+  nuclear_non_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == FALSE, ]
+  
+  # Filter data for non-nuclear and epigene
+  non_nuclear_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == TRUE, ]
+  
+  # Filter data for non-nuclear and non-epigene
+  non_nuclear_non_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = nuclear_epigene, aes(x = prop_disordered, color = "Nuclear Epigene")) +
+    geom_density(data = nuclear_non_epigene, aes(x = prop_disordered, color = "Nuclear Non-Epigene")) +
+    geom_density(data = non_nuclear_epigene, aes(x = prop_disordered, color = "Non-Nuclear Epigene")) +
+    geom_density(data = non_nuclear_non_epigene, aes(x = prop_disordered, color = "Non-Nuclear Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Nuclear Epigene" = "#7b3294", 
+                                   "Nuclear Non-Epigene" = "#008837", 
+                                   "Non-Nuclear Epigene" = "#c2a5cf", 
+                                   "Non-Nuclear Non-Epigene" = "#a6dba0")) +
+    theme_minimal() +
+    ggtitle("Density Distributions by Location and Epigene Status")
+  
+  return(p)
+}
+
+# Plot density distributions
+plot_density2(df_gg_p)
+  ggsave(filename="240414_Epi-v-NonEpi X Nuc-v-nonNuc_disorder-prop.jpeg",
+    plot = last_plot())
+
+
+
+```
+
+
+
+
+
+######### Random NOTES ############## 
+#Bargraph of all genes vs epigenes across all locations
+```{r}
+# 
+# library(ggplot2)
+# library(dplyr)
+# library(tidyr)
+# library(scales)
+# 
+# # Convert logical to numeric (TRUE = 1, FALSE = 0)
+# df_gg$is_epigene <- as.numeric(df_gg$is_epigene)
+# 
+# # Calculate counts and proportions of epigenes and non-epigenes for each location
+# prop_df <- df_gg %>%
+#   group_by(loc) %>%
+#   summarise(Epigenes = sum(is_epigene == 1),
+#             Non_Epigenes = sum(is_epigene == 0)) %>%
+#   mutate(prop_Epigenes = Epigenes / sum(Epigenes),
+#          prop_Non_Epigenes = Non_Epigenes / sum(Non_Epigenes))
+# 
+# # Plot
+# barplot_subcell <- ggplot(prop_df, aes(x = loc)) +
+#   geom_col(aes(y = prop_Epigenes, fill = "Epigenes"), position = "dodge", width = 0.4) +
+#   geom_col(aes(y = prop_Non_Epigenes, fill = "Non-Epigenes"), position = "dodge", width = 0.4) +
+#   scale_fill_manual(values = c("Epigenes" = "#FF7F24", "Non-Epigenes" = "#3CB371")) +
+#   # geom_text(aes(y = prop_Epigenes, label = percent(prop_Epigenes), group = 1), vjust = -0.5, position = position_dodge(width = 0.4)) +
+#   # geom_text(aes(y = prop_Non_Epigenes, label = percent(prop_Non_Epigenes), group = 2), vjust = -0.5, position = position_dodge(width = 0.4)) +
+#   scale_y_continuous(labels = percent_format()) +
+#   coord_flip() +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+#         axis.title = element_blank(),
+#         plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+# 
+# barplot_subcell
+# 
+# 
+# ggsave(  filename="TESTplot2_all.jpeg",
+#   plot = last_plot())
+
+
+################################################################################
+#(1) all genes
+
+# barplot_subcell<-df_gg %>%
+#     count(loc) %>%
+#     mutate(prop = n/sum(n)) %>%
+#     ggplot(aes(x = loc, y = prop)) +
+#     geom_col(fill = "#FF7F24") +
+#     geom_text(aes(label = percent(prop)), vjust = -1) +
+#     coord_cartesian(clip = "off") +
+#     scale_y_continuous(labels = percent_format()) +
+#     coord_flip()+
+#     theme_minimal() +
+#     theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
+#           axis.title = element_blank(),
+#           plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+# barplot_subcell
+# 
+# ggsave(  filename="TESTplot.jpeg",
+#   plot = last_plot())
+#   
+
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# df_gg2 <- merge(df_gg,prot_dis_domain_stats)
+# 
+# 
+# 
+# df_gg2$prop_disordered_gt_p3 <- df_gg2$max_disorder_length > 140
+# ggplot(df_gg2, aes(y=loc,fill=paste0(prop_disordered_gt_p3,is_epigene) ))+
+#   geom_bar(data=df_gg2[df_gg2$is_epigene & df_gg2$prop_disordered_gt_p3 & df_gg2$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg2[!df_gg2$is_epigene & df_gg2$prop_disordered_gt_p3 & df_gg2$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ paste0(prop_disordered_gt_p3,is_epigene), scales = "free")
+
+
+
+
+
+```
 
 
 
@@ -162,7 +419,7 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
   ##"Aggresome"
   ##"Cytoplasmic bodies"
   ##"Cytosol"
-  ##"Rods & rings"
+  ##"Rods & Rings"
 
 ### Intermediate Filaments
   ##"Intermediate filaments"
@@ -186,7 +443,7 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
   ##Golgi apparatus
 
 ## Plasma Membrane
-  ##Cell junctions
+  ##Cell Junctions
   ##Plasma membrane
 
 ## Vesicles
@@ -303,43 +560,4 @@ cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$
 
 
 
-#random, Attempt1 - pulling protein domains from HPA for all epigenes.
-```{r}
-
-
-# # Install and load the required packages
-# if (!requireNamespace("BiocManager", quietly = TRUE)) {
-#   install.packages("BiocManager")
-# }
-# BiocManager::install("AnnotationHub")
-# BiocManager::install("biomaRt")
-# 
-# library(AnnotationHub)
-# library(biomaRt)
-# n
-# # Use the appropriate Ensembl database for human genes
-# ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-# 
-# # Get the list of all protein-coding genes
-# genes <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),
-#                filters = "biotype",
-#                values = "protein_coding",
-#                mart = ensembl)
-# 
-# # Create an AnnotationHub object for Pfam annotations
-# dir.create(path = "~/.AnnotationHub")
-# options(AnnotationHub.cache = "~/.AnnotationHub")
-# 
-# ahub <- AnnotationHub()
-# 
-# # Retrieve Pfam annotations
-# pfam_key <- "AH73911"
-# pfam_annotations <- query(ahub, keys = genes$ensembl_gene_id, columns = c("PFAM_ID", "GENEID"), keytype = "ENSEMBL")
-# pfam_annotations <- merge(genes, pfam_annotations, by.x = "ensembl_gene_id", by.y = "QUERYID", all.x = TRUE)
-# 
-# # View the resulting data frame
-# print(pfam_annotations)
-
-
-```
 
