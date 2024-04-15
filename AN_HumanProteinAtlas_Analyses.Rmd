@@ -154,7 +154,60 @@ df_gg$membership[df_gg$membership == "loc_is_cytoplasm"] <- "Cytoplasm"
 df_gg$membership[df_gg$membership == "loc_is_nucleus"] <- "Nucleus"
 
 
-#(13) remove all rows with 'NA' in df_gg$loc
+###
+
+
+#(13) Label all the genes in nucleur SUB compartments 
+  df_gg$loc_is_nucMem <- is.element(df_gg$loc,
+                                  c("Nuclear membrane"))
+
+  df_gg$loc_is_nucleoli <- is.element(df_gg$loc,
+                                  c("Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim"))
+
+  df_gg$loc_is_nucleoplasm <- is.element(df_gg$loc,
+                                  c("Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"))
+
+
+  
+  
+#(14) create membership2 column to aggregate all info about nucleus sub loc
+  # Define the set of columns to search
+  columns_to_search2 <- c( "loc_is_nucMem","loc_is_nucleoli","loc_is_nucleoplasm")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership2 <- function(row) {
+    if (all(!row[columns_to_search2])) {
+      return(NA)  # Return NA if all values in the row are FALSE
+    } else {
+      for (col in columns_to_search2) {
+        if (row[col]) {
+          return(col)
+        }
+      }
+      return(NA)  # Return NA if no TRUE value is found in the specified columns
+    }
+  }
+
+  # Apply the function row-wise to the dataframe
+  df_gg$membership2 <- apply(df_gg[columns_to_search2], 1, find_membership2)
+
+  
+  
+#(15) fix membership2 annotations and epigene column for legend
+df_gg$membership2[df_gg$membership2 == "loc_is_nucMem"] <- "Nuclear Membrane"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoli"] <- "Nucleoli"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoplasm"] <- "Nucleoplasm"
+
+
+
+  
+#(16) remove all rows with 'NA' in df_gg$loc
   #Only rows where all values are complete (non-NA) will be retained.
   #these are created when a gene has no alternative location.
 
@@ -165,6 +218,9 @@ df_gg <- df_gg[complete.cases(df_gg$loc), ]
 
 #remove useless variables
   rm(url,zip_file,df,temp_df)
+  
+  
+  
 
 ```
 
@@ -182,7 +238,8 @@ df_gg <- df_gg[complete.cases(df_gg$loc), ]
   df_gg_p<-unique(df_gg_p)
   df_gg_p<-df_gg_p%>%drop_na(prop_disordered)
 
-##(2) Density distribution plots: 1 plot per membership #########################
+###################################################################################
+##(2) Density plot 1: 1 plot per membership #########################
 
 plot_density1 <- function(data, membership) {
   # Filter data based on membership
@@ -221,7 +278,8 @@ plot_density1(df_gg_p, "Nucleus")
   ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleus.jpeg",
     plot = last_plot())
 
-##(3) Density distribution plot: 1 plot of all data #########################
+###################################################################################
+##(3) Density plot2: 1 plot of all data #########################
 
 plot_density2 <- function(data) {
   # Filter data for nuclear and epigene
@@ -258,8 +316,50 @@ plot_density2(df_gg_p)
   ggsave(filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi X Nuc-v-nonNuc_disorder-prop.jpeg",
     plot = last_plot())
 
+###################################################################################
+##(4) Density plot3: 1 plot per membership2 #########################
 
-##(4) ecdf plot: 1 plot per membership #########################
+plot_density3 <- function(data, membership2) {
+  # Filter data based on membership2
+  data <- data[data$membership2 == membership2, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    geom_density(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("Density by epigene status & Membership:", membership2))
+  
+  return(p)
+  
+}
+
+# Plot for "Nuclear Membrane" membership2
+plot_density3(df_gg_p, "Nuclear Membrane")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_NuclearMembrane.jpeg",
+    plot = last_plot())
+
+
+# Plot for "Nucleoli" membership2
+plot_density3(df_gg_p, "Nucleoli")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleoli.jpeg",
+    plot = last_plot())
+
+# Plot for "Nucleoplasm" membership2
+plot_density3(df_gg_p, "Nucleoplasm")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleoplasm.jpeg",
+    plot = last_plot())
+  
+  
+  
+###################################################################################
+##(5) ecdf plot1: 1 plot per membership #########################
 
 plot_ecdf1 <- function(data, membership) {
   # Filter data based on membership
@@ -282,8 +382,6 @@ plot_ecdf1 <- function(data, membership) {
   
 }
 
-
-
 # ECDF Plot for "Endomembrane System" membership
 plot_ecdf1(df_gg_p, "Endomembrane System")
   ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Endomembrane.jpeg",
@@ -302,8 +400,8 @@ plot_ecdf1(df_gg_p, "Nucleus")
 
 
 
-
-##(3) Density distribution plot: 1 plot of all data #########################
+###################################################################################
+##(6) ECDF plot2: 1 plot of all data #########################
 
 plot_ecdf2 <- function(data) {
   # Filter data for nuclear and epigene
@@ -340,8 +438,46 @@ plot_ecdf2(df_gg_p)
   ggsave(filename="./_MyResults/240414_ECDF_Epi-v-NonEpi X Nuc-v-nonNuc_disorder-prop.jpeg",
     plot = last_plot())
 
+
+###################################################################################
+##(7) ecdf plot3: 1 plot per membership2 #########################
+
+plot_ecdf3 <- function(data, membership2) {
+  # Filter data based on membership2
+  data <- data[data$membership2 == membership2, ]
   
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
   
+  # Create ggplot object
+  p <- ggplot() +
+    stat_ecdf(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    stat_ecdf(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Cumulative Probability") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("ECDF by epigene status & Membership:", membership2))
+  
+  return(p)
+  
+}
+
+# ECDF Plot for "Nuclear Membrane" membership2
+plot_ecdf3(df_gg_p, "Nuclear Membrane")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_NuclearMembrane.jpeg",
+    plot = last_plot())
+
+
+# ECDF Plot for "Nucleoli" membership2
+plot_ecdf3(df_gg_p, "Nucleoli")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Nucleoli.jpeg",
+    plot = last_plot())
+
+# ECDF Plot for "Nucleoplasm" membership2
+plot_ecdf3(df_gg_p, "Nucleoplasm")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Nucleoplasm.jpeg",
+    plot = last_plot())
   
   
 
