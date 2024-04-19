@@ -1056,8 +1056,8 @@ for (z in 1:length(cutoffs)){
   
   master_mcl_gene_list[[cutoff_name]] <- mcl_gene_list # save significant gene lists
   
-  #just keep emapplot
   
+  #just keep emapplot
   all_mcl_GO_results <- foreach(i = 1:length(mcl_gene_list), .combine = rbind) %dopar% {
     if(length(mcl_gene_list[[i]])>0){
         enrich_result <- enrichGO(gene = mcl_gene_list[[i]],
@@ -1109,11 +1109,24 @@ for (z in 1:length(cutoffs)){
   # grid plot using geom_time - each row is an epigene, each column is tissue (will have to determine order to show message)
   # grid plot (each row is  (in at least 3 clusters/metacluster), each vertical is tissue) - similar gene sets w/ diff temporal pattern
   
+  top_epigenes <- vector('character', length = 5*length(mcl_dirs))
+  # find top 5 epigenes in each metacluster
+  for (i in 1:length(mcl_dirs)){
+    sorted_mcl_genes <- sort(mcl_gene_counts[[mcl_dirs[i]]], decreasing = TRUE)
+    sorted_mcl_epigenes <- sorted_mcl_genes[which(is.element(names(sorted_mcl_genes),brainspan_chrom_mod))]
+    top_epigenes[(5*i-4):(5*i)] <- names(sorted_mcl_epigenes)[1:5]
+  }
+  # remove NA epigene values + make unique
+  all_top_epigenes <- unique(na.omit(top_epigenes))
+  
+  sorted_cols_structs <- str_replace_all(sorted_cols$structure_name, "[ /]", "_")
+  sorted_cols_structs <- str_replace_all(sorted_cols_structs, "[()]", ".")
+  
   for (i in 1:length(mcl_dirs)){
     # create empty grid data frame
     grid_df <- data.frame(matrix(data = 0,nrow = length(brainspan_chrom_mod), ncol = length(structure_names), dimnames = list(brainspan_chrom_mod, str_replace_all(structure_names, "[ /]", "_"))))
     
-    # determine if genes were expressed in each tissue in a metacluster
+    # determine if genes were expressed in each tissue in a metacluster or else perform pearson correlation analysis for gene-tissue pair to metacluster average expression 
     sub_df <- mcl_df[which(mcl_df$metacluster==i),]
     for (j in 1:nrow(sub_df)){
       # get epigenes in a given tissue-cluster pair
@@ -1124,16 +1137,69 @@ for (z in 1:length(cutoffs)){
       cluster_all_genes <- cutoff_gene_lists[[cutoff_name]][[struct_old]][[cutoff_name]][[cluster]]
       cluster_epigenes <- brainspan_chrom_mod[which(is.element(brainspan_chrom_mod, cluster_all_genes))]
       
-      grid_df[which(is.element(rownames(grid_df), cluster_epigenes)),which(colnames(grid_df)==struct)] = 1
+      grid_df[which(is.element(rownames(grid_df), cluster_epigenes)),which(colnames(grid_df)==struct)] = 1 # similarity = 1
     }
     
+    # fill in gene-tissue pairs not in metacluster with expression correlation to avg metacluster expression by looping through columns (tissues)
+    
+    # calculate correlation for gene-tissue pairs not in metacluster
+    mcl_expr <- all_mcl_avg_expr$expr[which(all_mcl_avg_expr$metacluster == mcl_dirs[i])]
+    names(mcl_expr) <- all_mcl_avg_expr$pcw[which(all_mcl_avg_expr$metacluster == mcl_dirs[i])]
+    
+    # get expression for each gene-tissue pair
+    for (a in 1:ncol(grid_df)){
+      tissue <- colnames(grid_df)[a]
+      # loop through genes
+      for (b in 1:nrow(grid_df)){
+        if (grid_df[b,a]!=1){
+          gene = rownames(grid_df)[b]
+          gene_expr <- normal_expr[which(rows_meta$ensembl_gene_id==gene),which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
+          names(gene_expr) <- sorted_cols$age[which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
+          new_gene_expr <- vector("numeric", length(mcl_expr))
+          names(new_gene_expr) <- names(mcl_expr)
+          for (k in 1:length(names(mcl_expr))){
+            if (length(which(is.element(names(gene_expr), names(mcl_expr)[k])))>0){
+              new_gene_expr[k] <- gene_expr[which(names(gene_expr) == names(mcl_expr)[k])]
+            }
+            else{
+            new_gene_expr[k] <- NA
+            }
+          }
+          similarity <- suppressWarnings(cor(mcl_expr, new_gene_expr, use = 'pairwise.complete.obs'))
+          if (!is.na(similarity)){
+            grid_df[b,a] = similarity
+          }
+          else{
+            grid_df[b,a] = 0
+          }
+        }
+      }
+    }
+    
+    
+    # subset grid_df for top 40 epigenes in a metacluster
+    # sorted_mcl_genes <- sort(mcl_gene_counts[[mcl_dirs[i]]], decreasing = TRUE)
+    # sorted_mcl_epigenes <- sorted_mcl_genes[which(is.element(names(sorted_mcl_genes),rownames(grid_df)))] 
+    # top_epigenes <- names(sorted_mcl_epigenes)[which(sorted_mcl_epigenes >= 4)]
+    
+    matched_epigene_indices <- which(is.element(rownames(grid_df),all_top_epigenes))
+    sub_grid_df <- grid_df[matched_epigene_indices,]
+    sub_grid_df <- sub_grid_df[1:40,]
+    
     # format grid_df for plotting
-    grid_df$gene <- rownames(grid_df)
-    melted_grid_df <- melt(grid_df, id.vars = 'gene', value.name = 'is_expr')
+    sub_grid_df$gene <- rows_meta$gene_symbol[which(is.element(rows_meta$ensembl_gene_id, rownames(sub_grid_df)))] # use gene symbol instead of ensembl id
+    melted_grid_df <- melt(sub_grid_df, id.vars = 'gene', value.name = 'is_expr')
+    
     
     # grid plot (heatmap using geom_tile)
     p_grid <- ggplot(melted_grid_df, aes(variable, gene, fill= is_expr)) + 
-      geom_tile()
+      geom_tile() + 
+      ggtitle(paste0(mcl_dirs[i], ' epigenes-tissue grid plot')) + 
+      labs(x = "tissue", y = "gene") + 
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+      scale_fill_gradient2()
+    
+    ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_epigenes_tissue_grid_plot.png'), plot = p_grid, width = 10, height = 8)
   }
   
 }
