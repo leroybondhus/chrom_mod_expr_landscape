@@ -761,7 +761,7 @@ master_mcl_gene_list <- vector("list", length(cutoffs))
 names(master_mcl_gene_list) <- names(cutoffs)
 
 ptm <- proc.time()
-for (z in 1:length(cutoffs)){
+for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   cutoff = cutoffs[z]
   cutoff_name = names(cutoffs)[z]
   cutoff_dir = cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
@@ -769,10 +769,12 @@ for (z in 1:length(cutoffs)){
   hc_meta <- hclust(as.dist(1-(cutoffs_iagc_time_sim_mat[[cutoff_name]]+1)/2), "ave")
   
   png(filename = paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_metacluster_clustering_dendrogram(cutoff=", cutoff, ").png"), width = 960, height = 480)
-  plot(hc_meta, main = paste0("metaclusters for iagc_time_similarity matrix resolution (cutoff=", cutoff, ")"), cex=0.25)
+  plot(hc_meta, main = paste0("metaclusters for iagc_time_similarity matrix resolution (cutoff=", cutoff, ")"), cex=0.25, labels = FALSE)
   rect.hclust(hc_meta, h=cutoff)
   dev.off()
   
+  # plot(as.dendrogram(hc_meta), main = paste0("metaclusters for iagc_time_similarity matrix resolution (cutoff=", cutoff, ")"), cex=0.25, labels = FALSE)
+  # rect.dendrogram(as.dendrogram(hc_meta), h=cutoff)
   
   mcl <- cutree(hc_meta, h=cutoff) # USING 0.1 METACLUSTER CUTOFF for both clustering cutoffs - decide to just use same cutoffs
   
@@ -869,7 +871,8 @@ for (z in 1:length(cutoffs)){
   # on left plot metacluster average temporal pattern (similar to cluster time plots)
   # need to find unique time points across all gene clusters
   # can change to in parallel for each metacluster
-  all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
+  all_mcl_expr_lists <- foreach(n = 1:length(mcl_dirs), .errorhandling = 'pass') %dopar% {
+  # all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .combine = rbind) %dopar% {
   # all_mcl_avg_expr <- foreach(n = 1:length(mcl_dirs), .errorhandling = 'pass') %dopar% {
   # for (n in 1:length(mcl_dirs)){
     metacluster <- as.numeric(gsub("\\D", "", mcl_dirs[n]))
@@ -880,7 +883,7 @@ for (z in 1:length(cutoffs)){
       expr
     }
     
-    # get unique list of time points
+    # get unique list of time points - just kept as NA
     timepoints <- sort(unique(gene_expr_df$pcw))
     
     # impute time points for missing data
@@ -898,24 +901,56 @@ for (z in 1:length(cutoffs)){
         }
       }
       new_expr
-      # filled_expr <- new_expr
-      # names(filled_expr) <- timepoints
-      # # fill in NA values with average of nearest non-NA data points
-      # for (k in 1:length(new_expr)){
-      #   if (is.na(new_expr[k])){
-      #     if (all(is.na(new_expr[1:k]))){ # no non-NA value to the left
-      #       filled_expr[k] <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
-      #     }
-      #     else if (all(is.na(new_expr[k:length(new_expr)]))){ # no non-NA value to the right
-      #       filled_expr[k] <- new_expr[max(which(!is.na(new_expr[1:k])))]
-      #     }
-      #     else{ # average of nearest right/left non-NA values
-      #       filled_expr[k] = (new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1] + new_expr[max(which(!is.na(new_expr[1:k])))])/2 
-      #     }
-      #   }
-      # }
-      # filled_expr
+    }
+    
+    # impute for spaghetti plots
+    imputed_gene_expr_df <- foreach(i = 1:length(clusters), .combine = cbind) %dopar% {
+      expr_df <- cutoff_gene_lists[[cutoff_name]][[clusters[[i]][1]]][["expr_df"]][grep(paste0("cluster:",str_split(clusters[[i]][3], 'r')[[1]][2],','), cutoff_gene_lists[[cutoff_name]][[clusters[[i]][1]]][["expr_df"]][["group_name"]]),]
+      expr_df$structure <- clusters[[i]][1]
+      new_expr <- vector('numeric', length(timepoints))
+      names(new_expr) <- timepoints
+      for(j in 1:length(new_expr)){
+        if (length(which(expr_df$pcw == timepoints[j]))>0){
+          new_expr[j] <- expr_df$expr[which(expr_df$pcw == timepoints[j])]
+        }
+        else{
+          new_expr[j] <- NA
+        }
       }
+      new_expr
+      filled_expr <- new_expr
+      names(filled_expr) <- timepoints
+      # fill in NA values with average of nearest non-NA data points
+      for (k in 1:length(new_expr)){
+        if (is.na(new_expr[k])){
+          if (all(is.na(new_expr[1:k]))){ # no non-NA value to the left
+            filled_expr[k] <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
+          }
+          else if (all(is.na(new_expr[k:length(new_expr)]))){ # no non-NA value to the right
+            filled_expr[k] <- new_expr[max(which(!is.na(new_expr[1:k])))]
+          }
+          else{ # average of nearest right/left non-NA values (make weighted)
+            expr_left <- new_expr[max(which(!is.na(new_expr[1:k])))]
+            expr_right <- new_expr[k+min(which(!is.na(new_expr[k:length(new_expr)])))-1]
+            pcw_left <- strtoi(names(expr_left))
+            pcw_right <- strtoi(names(expr_right))
+            pcw_current <- strtoi(names(new_expr[k]))
+            pcw_range <- pcw_right - pcw_left
+            filled_expr[k] = unname(expr_left*(1-(pcw_current-pcw_left)/pcw_range) + expr_right*(1-(pcw_right-pcw_current)/pcw_range))
+          }
+        }
+      }
+      filled_expr
+    }
+    
+    # imputed average expr of metacluster (average of columns)
+    if (is.null(ncol(imputed_gene_expr_df))){ # only 1 cluster
+      imputed_mcl_avg_expr <- imputed_gene_expr_df[!is.na(imputed_gene_expr_df)]
+    }else{
+      imputed_mcl_avg_expr <- rowMeans(imputed_gene_expr_df, na.rm = TRUE)
+    }
+    imputed_mcl_avg_expr_df <- data.frame(pcw = strtoi(names(imputed_mcl_avg_expr)), expr = imputed_mcl_avg_expr)
+    imputed_mcl_avg_expr_df$metacluster <- mcl_dirs[n]
     
     # average expression of metacluster is average of columns
     if (is.null(ncol(new_gene_expr_df))){ # only 1 cluster
@@ -923,30 +958,51 @@ for (z in 1:length(cutoffs)){
     }else{
       mcl_avg_expr <- rowMeans(new_gene_expr_df, na.rm = TRUE)
     }
-    
+
     mcl_avg_expr_df <- data.frame(pcw = strtoi(names(mcl_avg_expr)), expr = mcl_avg_expr)
     mcl_avg_expr_df$metacluster <- mcl_dirs[n]
     
-    if (!is.null(ncol(new_gene_expr_df))){ # only 1 cluster
-      test <- melt(new_gene_expr_df, id = rownames(new_gene_expr_df), value.name = "expr", varnames = c("pcw", "sample"))
-      test$is_ave=F
-      test <- test[complete.cases(test),]
-      avg_expr <- data.frame(pcw = mcl_avg_expr_df$pcw, 
-                             sample = mcl_avg_expr_df$metacluster,
-                             expr=mcl_avg_expr_df$expr,
-                             is_ave=TRUE)
+    if (!is.null(ncol(imputed_gene_expr_df))){ # only 1 cluster
+      imputed_spaghetti_df <- melt(imputed_gene_expr_df, id = rownames(imputed_gene_expr_df), value.name = "expr", varnames = c("pcw", "sample"))
+      # imputed_spaghetti_df$is_ave=F
+      # imputed_spaghetti_df <- imputed_spaghetti_df[complete.cases(imputed_spaghetti_df),]
+      imputed_avg_expr <- data.frame(pcw = imputed_mcl_avg_expr_df$pcw, 
+                             sample = imputed_mcl_avg_expr_df$metacluster,
+                             expr=imputed_mcl_avg_expr_df$expr)
       
-      gg_spaghetti <- ggplot(test, aes(x = pcw, y = expr, color = sample, group = sample)) + 
+      imputed_gg_spaghetti <- ggplot(imputed_spaghetti_df, aes(x = pcw, y = expr, color = sample, group = sample)) + 
         geom_line(alpha = 0.3) + theme_bw() + 
-        geom_line(data=avg_expr, alpha=1, linewidth=2)+
+        geom_line(data=imputed_avg_expr, alpha=1, linewidth=2)+
         theme(legend.position = "none") + 
-        ggtitle(paste0(mcl_dirs[n],' spaghetti plot for expression over time')) + 
+        ggtitle(paste0(mcl_dirs[n],' imputed spaghetti plot for expression over time')) + 
         labs(x = "pcw", y = "expression") + 
         scale_color_grey()
       
-      ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_spaghetti_plot_average_expression_over_time.png'), plot = gg_spaghetti, width = 10, height = 8) 
+      ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_imputed_spaghetti_plot_average_expression_over_time.png'), plot = imputed_gg_spaghetti, width = 10, height = 8) 
+    } else{
+      imputed_spaghetti_df <- data.frame(pcw = names(imputed_gene_expr_df), sample = 'result.1', expr = imputed_gene_expr_df)
     }
-      
+    
+    # if (!is.null(ncol(new_gene_expr_df))){ # only 1 cluster
+    #   spaghetti_df <- melt(new_gene_expr_df, id = rownames(new_gene_expr_df), value.name = "expr", varnames = c("pcw", "sample"))
+    #   # spaghetti_df$is_ave=F
+    #   spaghetti_df <- spaghetti_df[complete.cases(spaghetti_df),]
+    #   avg_expr <- data.frame(pcw = mcl_avg_expr_df$pcw, 
+    #                          sample = mcl_avg_expr_df$metacluster,
+    #                          expr=mcl_avg_expr_df$expr,
+    #                          is_ave=TRUE)
+    #   
+    #   gg_spaghetti <- ggplot(spaghetti_df, aes(x = pcw, y = expr, color = sample, group = sample)) + 
+    #     geom_line(alpha = 0.3) + theme_bw() + 
+    #     geom_line(data=avg_expr, alpha=1, linewidth=2)+
+    #     theme(legend.position = "none") + 
+    #     ggtitle(paste0(mcl_dirs[n],' spaghetti plot for expression over time')) + 
+    #     labs(x = "pcw", y = "expression") + 
+    #     scale_color_grey()
+    #   
+    #   ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_spaghetti_plot_average_expression_over_time.png'), plot = gg_spaghetti, width = 10, height = 8) 
+    # }
+    
     
     log_mcl_expr <- ggplot(mcl_avg_expr_df, aes(x = log10(pcw), y = expr)) +
                 geom_point() + geom_line() +
@@ -965,11 +1021,47 @@ for (z in 1:length(cutoffs)){
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_expression_over_time.png'), plot = mcl_expr, width = 10, height = 8)
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[n],'/', date, '_', mcl_dirs[n],'_average_log_expression_over_time.png'), plot = log_mcl_expr, width = 10, height = 8)
     
-    mcl_avg_expr_df # object to save
+    imputed_spaghetti_df$metacluster <- mcl_dirs[n]
+    output <- list(imputed_spaghetti_df, mcl_avg_expr_df, imputed_mcl_avg_expr_df)
+    names(output) <- c('spaghetti_expr_df', 'mcl_avg_expr_df', 'imputed_mcl_avg_expr_df' )
+    output # object to save
+    # mcl_avg_expr_df # object to save
   }
+  names(all_mcl_expr_lists) <- mcl_dirs
   
-  # spaghetti plot for all metaclusters?? - try later
+  first_elements <- lapply(all_mcl_expr_lists, function(lst) lst[[1]])
+  all_mcl_spaghetti_expr <- do.call(rbind, first_elements) # Combine the dataframes
   
+  second_elements <- lapply(all_mcl_expr_lists, function(lst) lst[[2]])
+  all_mcl_avg_expr <- do.call(rbind, second_elements) # Combine the dataframes
+  
+  third_elements <- lapply(all_mcl_expr_lists, function(lst) lst[[3]])
+  imputed_all_mcl_avg_expr <- do.call(rbind, third_elements) # Combine the dataframes
+
+  # AGGREGATED SPAGHETTI PLOTS
+  cell_cycle_mcls <- mcl_dirs[c(1,8,17,25,58,92)]
+  synaptogenesis_mcls <- mcl_dirs[c(13,18,23,61,76)]
+  angio_mcls <- mcl_dirs[c(4,31)]
+  
+  angio_spaghetti_df <- all_mcl_spaghetti_expr[which(is.element(all_mcl_spaghetti_expr[['metacluster']], angio_mcls)),]
+  angio_spaghetti_df$pcw <- strtoi(angio_spaghetti_df$pcw)
+  
+  angio_imputed_mcl_avg_expr <- imputed_all_mcl_avg_expr[which(is.element(imputed_all_mcl_avg_expr[['metacluster']], angio_mcls)),]
+  
+  angio_mcl4 <- angio_imputed_mcl_avg_expr[which(angio_imputed_mcl_avg_expr$metacluster==angio_mcls[1]),]
+  angio_mcl4 <- data.frame(pcw = angio_mcl4$pcw, sample = 'average', expr = angio_mcl4$expr, metacluster = angio_mcl4$metacluster) # need columns to match spaghetti df
+  
+  angio_mcl31 <- angio_imputed_mcl_avg_expr[which(angio_imputed_mcl_avg_expr$metacluster==angio_mcls[2]),]
+  angio_mcl31 <- data.frame(pcw = angio_mcl31$pcw, sample = 'average', expr = angio_mcl31$expr, metacluster = angio_mcl31$metacluster)
+  
+  angio_gg_spaghetti <- ggplot(angio_spaghetti_df, aes(x = pcw, y = expr, color = metacluster, group = sample)) + 
+        geom_line(alpha = 0.3) + theme_bw() + 
+        geom_line(data=angio_mcl4, alpha=1, linewidth=2) +
+        geom_line(data=angio_mcl31, alpha=1, linewidth=2)+
+        # theme(legend.position = "none") + 
+        ggtitle(paste0('angiogenesis spaghetti plot for expression over time')) + 
+        labs(x = "pcw", y = "expression")
+        # scale_color_grey()
   
   # plot only developmental time for all metaclusters
   develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
@@ -1011,7 +1103,6 @@ for (z in 1:length(cutoffs)){
   
   ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_all_metaclusters_gene_tissue_freq_hist.png'), plot = mcl_hist, width = 10, height = 8) 
   # summary of gene count - genes in each cluster, genes in each metacluster
-  
   
   # extract chromatin modifier information
   chrom_mod_mcl_counts <- vector("list", length(mcl_dirs))
@@ -1107,7 +1198,7 @@ for (z in 1:length(cutoffs)){
 
   write.csv(all_mcl_GO_results, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_all_mcl_GO_results.csv"))
   
-  # grid plot using geom_time - each row is an epigene, each column is tissue (will have to determine order to show message)
+  # GRID PLOT using geom_time - each row is an epigene, each column is tissue (will have to determine order to show message)
   # grid plot (each row is  (in at least 3 clusters/metacluster), each vertical is tissue) - similar gene sets w/ diff temporal pattern
   interest_mcls <- c('metacluster4','metacluster31','metacluster17','metacluster1')
   # top_epigenes <- vector('character', length = 5*length(mcl_dirs))
@@ -1198,8 +1289,11 @@ for (z in 1:length(cutoffs)){
     melted_grid_df <- melt(sub_grid_df, id.vars = 'gene', value.name = 'is_expr')
     # melted_grid_df$gene <- factor(melted_grid_df$gene, levels=melted_grid_df$gene)
     
-    custom_palette <- colorRampPalette(c("red", "white", "blue", "cyan"))(100)
+    # custom_palette <- colorRampPalette(c("red", "white", "blue", "cyan"))(100)
+    custom_palette <- colorRampPalette(c("cyan4","cyan","white", "red3", "darkred","black"))(100)
+    # c("cyan4","cyan","lightcyan","white","white","pink", "red3", "darkred","black") [from leroy]
     
+    # black as perfect match
     # grid plot (heatmap using geom_tile)
     p_grid <- ggplot(melted_grid_df, aes(variable, gene, fill=is_expr)) + 
       geom_tile() + 
@@ -1211,6 +1305,16 @@ for (z in 1:length(cutoffs)){
     
     ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_epigenes_tissue_grid_plot.png'), plot = p_grid, width = 10, height = 8)
   }
+  
+  # calculate correlation of metaclusters
+  mcl_cor <- vector("numeric", length(mcl_dirs))
+  for (i in 1:length(mcl_dirs)){
+    data <- all_mcl_avg_expr[which(all_mcl_avg_expr$metacluster == mcl_dirs[i]),]
+    mcl_cor[i] <- cor(data$pcw, data$expr)
+  }
+  
+  which(mcl_cor > 0.6) # strong pos cor - 4 13 15 31 49
+  which(mcl_cor < -0.6) # strong neg cor -  1  2 17 27 64 81 91 92
   
 }
 
