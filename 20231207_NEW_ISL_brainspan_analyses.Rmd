@@ -260,7 +260,7 @@ normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 # visit each node until below cutpoint and return subdendrogram/tree
 ```
 
-```{r, calculate gene expression correlation - DON"T NEED}
+```{r, calculate gene expression correlation}
 # calculate gene expression for all genes for a given brain structure - based on log time
 calc_correlation <- function(cols_meta,expr_mat){
   corr <- vector("numeric", nrow(expr_mat))
@@ -281,21 +281,27 @@ calc_correlation <- function(cols_meta,expr_mat){
 
 # first create matrix with columns for each brain structure and rows for the correlation of each gene
 # create list of matrices (time-correlation sum)
-num_unique_structures <- length(unique(sorted_cols$structure_name))
+# num_unique_structures <- length(unique(sorted_cols$structure_name))
 unique_structures <- unique(sorted_cols$structure_name)
-corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
-p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
-confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
-confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_unique_structures, dimnames = list(NULL, unique_structures))
+structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+num_structs <- length(structure_names)
+
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
 
 # also create vector to store number of time points for each unique brainspan structure
-num_struct_timepoints <- vector("integer", num_unique_structures)
+num_struct_timepoints <- vector("integer", num_structs)
 
 # index gene expression columns to obtain submatrices of each brain structure
-for(i in 1:length(unique(sorted_cols$structure_name))){ # for each unique brain structure
-  struct <- struct_to_ids$unique_structures[i]
+for(i in 1:num_structs){ # for each unique brain structure
+  struct <- structure_names[i]
   temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
   temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+  # filter for only embryonic time
+  temp_mat <- temp_mat[,which(temp_cols$age <= 40)]
+  temp_cols <- temp_cols[which(temp_cols$age <= 40),]
   num_struct_timepoints[i] = nrow(temp_cols)
   if(nrow(temp_cols) > 2){
     result = calc_correlation(temp_cols, temp_mat)
@@ -334,11 +340,50 @@ matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
 matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
 # chrom_mod_corr <- corr_matrix[matched_modifiers,]
 
-# modify threshold cutoffs for correlation
-upper = 0.6
-lower = 0.2
+# filter for tissues with at least 5 timepoints
+# structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+chrom_mod_corr <- corr_matrix[matched_modifiers, ]
 
-corr_summary_stats <- data.frame(struct_to_ids$unique_structures, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
+# filtered_timepoints <- num_struct_timepoints[which(is.element(colnames(corr_matrix), structure_names))]
+
+# modify threshold cutoffs for correlation
+upper = 0.7
+lower = 0.3
+
+epigenes_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper),
+low_corr = count_corr(chrom_mod_corr, -lower, lower), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
+
+corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(corr_matrix, upper, 1.0), modest_pos_corr = count_corr(corr_matrix, lower, upper), low_corr = count_corr(corr_matrix, -lower, lower), modest_neg_corr = count_corr(corr_matrix, -upper, -lower), high_neg_corr = count_corr(corr_matrix, -1, -upper))
+
+write.csv(corr_summary_stats, paste0(dirs$results_embryo, date, "_all_genes_corr_summary_stats.csv"))
+
+write.csv(epigenes_corr_summary_stats, paste0(dirs$results_embryo, date, "_epigenes_corr_summary_stats.csv"))
+
+epigenes_corr_df <- melt(epigenes_corr_summary_stats[,3:7], value.name = "count")
+
+epigenes_corr_gg <- ggplot(epigenes_corr_df, aes(x = variable, y = count)) + 
+  geom_boxplot() + 
+  geom_point() +
+  theme_bw() +
+  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+  ggtitle('epigenes correlation summary counts') +
+  labs(x = "correlation cutoffs", y = "count")
+
+ggsave(paste0(dirs$results_embryo, date, "_", "epigenes_corr_summary_boxplots.png"), plot = epigenes_corr_gg, width = 10, height = 8)
+
+
+all_genes_corr_df <- melt(corr_summary_stats[,3:7], value.name = "count")
+
+all_genes_corr_gg <- ggplot(all_genes_corr_df, aes(x = variable, y = count)) + 
+  geom_boxplot() + 
+  geom_point() +
+  theme_bw() +
+  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+  ggtitle('all genes correlation summary counts') +
+  labs(x = "correlation cutoffs", y = "count")
+
+ggsave(paste0(dirs$results_embryo, date, "_", "all_genes_corr_summary_boxplots.png"), plot = all_genes_corr_gg, width = 10, height = 8)
+  
 
 ```
 
@@ -357,7 +402,7 @@ brainspan_chrom_mod <- rows_meta$ensembl_gene_id[matched_modifiers]
 cutoffs <- list(modest_cutoff = 0.4,high_cutoff = 0.2)
 
 ptm <- proc.time()
-structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+# structure_names <- names(which(table(sorted_cols$structure_name)>=5))
 
 structure_dirs <- paste0(str_replace_all(structure_names, "[ /]", "_"), "/")
 for (dir in structure_dirs){
@@ -1031,6 +1076,7 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   
   first_elements <- lapply(all_mcl_expr_lists, function(lst) lst[[1]])
   all_mcl_spaghetti_expr <- do.call(rbind, first_elements) # Combine the dataframes
+  all_mcl_spaghetti_expr$sample <- paste0(all_mcl_spaghetti_expr$metacluster,'_',all_mcl_spaghetti_expr$sample)
   
   second_elements <- lapply(all_mcl_expr_lists, function(lst) lst[[2]])
   all_mcl_avg_expr <- do.call(rbind, second_elements) # Combine the dataframes
@@ -1039,29 +1085,71 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   imputed_all_mcl_avg_expr <- do.call(rbind, third_elements) # Combine the dataframes
 
   # AGGREGATED SPAGHETTI PLOTS
-  cell_cycle_mcls <- mcl_dirs[c(1,8,17,25,58,92)]
-  synaptogenesis_mcls <- mcl_dirs[c(13,18,23,61,76)]
+  # ** FILTER METACLUSTERS WITH at least 10 genes in at least 3 tissues
+  cell_cycle_mcls <- mcl_dirs[c(1,17)]
+  synaptogenesis_mcls <- mcl_dirs[c(13,18,23)]
   angio_mcls <- mcl_dirs[c(4,31)]
+  # cell_cycle_mcls <- mcl_dirs[c(1,8,17,25,58,92)]
+  # synaptogenesis_mcls <- mcl_dirs[c(13,18,23,61,76)]
+  # angio_mcls <- mcl_dirs[c(4,31)]
   
+  # CAN PROB CHANGE INTO A LOOP NOW
   angio_spaghetti_df <- all_mcl_spaghetti_expr[which(is.element(all_mcl_spaghetti_expr[['metacluster']], angio_mcls)),]
   angio_spaghetti_df$pcw <- strtoi(angio_spaghetti_df$pcw)
   
   angio_imputed_mcl_avg_expr <- imputed_all_mcl_avg_expr[which(is.element(imputed_all_mcl_avg_expr[['metacluster']], angio_mcls)),]
   
-  angio_mcl4 <- angio_imputed_mcl_avg_expr[which(angio_imputed_mcl_avg_expr$metacluster==angio_mcls[1]),]
-  angio_mcl4 <- data.frame(pcw = angio_mcl4$pcw, sample = 'average', expr = angio_mcl4$expr, metacluster = angio_mcl4$metacluster) # need columns to match spaghetti df
+  angio_imputed_mcl_avg_expr <- data.frame(pcw = angio_imputed_mcl_avg_expr$pcw, sample = 'average', expr = angio_imputed_mcl_avg_expr$expr, metacluster = angio_imputed_mcl_avg_expr$metacluster)
   
-  angio_mcl31 <- angio_imputed_mcl_avg_expr[which(angio_imputed_mcl_avg_expr$metacluster==angio_mcls[2]),]
-  angio_mcl31 <- data.frame(pcw = angio_mcl31$pcw, sample = 'average', expr = angio_mcl31$expr, metacluster = angio_mcl31$metacluster)
-  
-  angio_gg_spaghetti <- ggplot(angio_spaghetti_df, aes(x = pcw, y = expr, color = metacluster, group = sample)) + 
-        geom_line(alpha = 0.3) + theme_bw() + 
-        geom_line(data=angio_mcl4, alpha=1, linewidth=2) +
-        geom_line(data=angio_mcl31, alpha=1, linewidth=2)+
+  angio_gg_spaghetti <- ggplot() + 
+        geom_line(data = angio_spaghetti_df, alpha = 0.3, aes(x = pcw, y = expr, color = metacluster, group = sample)) + theme_bw() + 
+        geom_line(data=angio_imputed_mcl_avg_expr, linewidth=2, aes(x = pcw, y = expr, color = metacluster, group = metacluster)) +
         # theme(legend.position = "none") + 
         ggtitle(paste0('angiogenesis spaghetti plot for expression over time')) + 
         labs(x = "pcw", y = "expression")
+  
+  ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_angiogenesis_imputed_spaghetti_plot_average_expression_over_time.png'), plot = angio_gg_spaghetti, width = 10, height = 8) 
+  
+  
+  cell_cycle_spaghetti_df <- all_mcl_spaghetti_expr[which(is.element(all_mcl_spaghetti_expr[['metacluster']], cell_cycle_mcls)),]
+  cell_cycle_spaghetti_df$pcw <- strtoi(cell_cycle_spaghetti_df$pcw)
+  
+  cell_cycle_imputed_mcl_avg_expr <- imputed_all_mcl_avg_expr[which(is.element(imputed_all_mcl_avg_expr[['metacluster']], cell_cycle_mcls)),]
+  
+  cell_cycle_imputed_mcl_avg_expr <- data.frame(pcw = cell_cycle_imputed_mcl_avg_expr$pcw, sample = 'average', expr = cell_cycle_imputed_mcl_avg_expr$expr, metacluster = cell_cycle_imputed_mcl_avg_expr$metacluster) # need columns to match
+
+  
+  cell_cycle_gg_spaghetti <- ggplot() + 
+        geom_line(data = cell_cycle_spaghetti_df, aes(x = pcw, y = expr, color = metacluster, group = sample), alpha = 0.3) + theme_bw() +
+        geom_line(data=cell_cycle_imputed_mcl_avg_expr,linewidth=2, aes(x = pcw, y = expr, color = metacluster, group = metacluster)) +
+        # geom_line(data=cell_cycle_mcl1, alpha=1, linewidth=2)+
+        # geom_line(data=cell_cycle_mcl8, alpha=1, linewidth=2)+
+        # theme(legend.position = "none") + 
+        ggtitle(paste0('cell cycle spaghetti plot for expression over time')) + 
+        labs(x = "pcw", y = "expression")
         # scale_color_grey()
+  
+  ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_cell_cycle_imputed_spaghetti_plot_average_expression_over_time.png'), plot = cell_cycle_gg_spaghetti, width = 10, height = 8) 
+  
+  
+  synaptogenesis_spaghetti_df <- all_mcl_spaghetti_expr[which(is.element(all_mcl_spaghetti_expr[['metacluster']], synaptogenesis_mcls)),]
+  synaptogenesis_spaghetti_df$pcw <- strtoi(synaptogenesis_spaghetti_df$pcw)
+  
+  synaptogenesis_imputed_mcl_avg_expr <- imputed_all_mcl_avg_expr[which(is.element(imputed_all_mcl_avg_expr[['metacluster']], synaptogenesis_mcls)),]
+  
+  synaptogenesis_imputed_mcl_avg_expr <- data.frame(pcw = synaptogenesis_imputed_mcl_avg_expr$pcw, sample = 'average', expr = synaptogenesis_imputed_mcl_avg_expr$expr, metacluster = synaptogenesis_imputed_mcl_avg_expr$metacluster) # need columns to match
+
+  
+  synaptogenesis_gg_spaghetti <- ggplot() + 
+        geom_line(data = synaptogenesis_spaghetti_df, aes(x = pcw, y = expr, color = metacluster, group = sample), alpha = 0.3) + theme_bw() +
+        geom_line(data=synaptogenesis_imputed_mcl_avg_expr,linewidth=2, aes(x = pcw, y = expr, color = metacluster, group = metacluster)) +
+        # theme(legend.position = "none") + 
+        ggtitle(paste0('synaptogenesis spaghetti plot for expression over time')) + 
+        labs(x = "pcw", y = "expression")
+        # scale_color_grey()
+  
+  ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_synaptogenesis_imputed_spaghetti_plot_average_expression_over_time.png'), plot = synaptogenesis_gg_spaghetti, width = 10, height = 8) 
+  
   
   # plot only developmental time for all metaclusters
   develop_mcl_log_expr_plot <- ggplot(subset(all_mcl_avg_expr, pcw <= 40), aes(x = log10(pcw), y = expr)) +
@@ -1200,110 +1288,152 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   
   # GRID PLOT using geom_time - each row is an epigene, each column is tissue (will have to determine order to show message)
   # grid plot (each row is  (in at least 3 clusters/metacluster), each vertical is tissue) - similar gene sets w/ diff temporal pattern
-  interest_mcls <- c('metacluster4','metacluster31','metacluster17','metacluster1')
-  # top_epigenes <- vector('character', length = 5*length(mcl_dirs))
-  top_epigenes <- vector('character', length = 5*length(interest_mcls))
-  # find top 5 epigenes in each metacluster
-  # for (i in 1:length(mcl_dirs)){
-  for (i in 1:length(interest_mcls)){
-    sorted_mcl_genes <- sort(mcl_gene_counts[[interest_mcls[i]]], decreasing = TRUE)
-    sorted_mcl_epigenes <- sorted_mcl_genes[which(is.element(names(sorted_mcl_genes),brainspan_chrom_mod))]
-    top_epigenes[(5*i-4):(5*i)] <- names(sorted_mcl_epigenes)[1:5]
-  }
-  # remove NA epigene values + make unique
-  # all_top_epigenes <- unique(na.omit(top_epigenes))
-  all_top_epigenes <- na.omit(top_epigenes)
+  # interest_mcls <- c('metacluster4','metacluster31','metacluster17','metacluster1')
   
-  sorted_cols_structs <- str_replace_all(sorted_cols$structure_name, "[ /]", "_")
-  sorted_cols_structs <- str_replace_all(sorted_cols_structs, "[(),-]", ".")
+  mcl_groups <- list(cell_cycle=cell_cycle_mcls, synaptogenesis=synaptogenesis_mcls, angiogenesis=angio_mcls)
   
-  x <- foreach(i = 1:length(mcl_dirs), .combine = rbind) %dopar% {
-  # for (i in 1:length(mcl_dirs)){
-    # create empty grid data frame
-    grid_df <- data.frame(matrix(data = 0,nrow = length(brainspan_chrom_mod), ncol = length(structure_names), dimnames = list(brainspan_chrom_mod, str_replace_all(structure_names, "[ /]", "_"))))
-    
-    # determine if genes were expressed in each tissue in a metacluster or else perform pearson correlation analysis for gene-tissue pair to metacluster average expression 
-    sub_df <- mcl_df[which(mcl_df$metacluster==i),]
-    for (j in 1:nrow(sub_df)){
-      # get epigenes in a given tissue-cluster pair
-      struct_old <- sub_df$structure[j]
-      struct <- str_replace_all(sub_df$structure[j], "[ /]", "_")
-      struct <- str_replace_all(struct, "[(),-]", ".")
-      cluster <- sub_df$cluster[j]
-      cluster_all_genes <- cutoff_gene_lists[[cutoff_name]][[struct_old]][[cutoff_name]][[cluster]]
-      cluster_epigenes <- brainspan_chrom_mod[which(is.element(brainspan_chrom_mod, cluster_all_genes))]
-      
-      grid_df[which(is.element(rownames(grid_df), cluster_epigenes)),which(colnames(grid_df)==struct)] = 2 # similarity = 1
+  nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigenes.csv"))[,2]
+  
+  # for (g in 1:length(mcl_groups)){
+  for (g in 1:1){
+    interest_mcls <- mcl_groups[g][[1]]
+    mcl_group_name <- names(mcl_groups[g])
+    num_epigenes = 17
+    top_epigenes <- vector('character', length = num_epigenes*length(interest_mcls))
+    # find top n (5) epigenes in each metacluster
+    # for (i in 1:length(mcl_dirs)){
+    for (i in 1:length(interest_mcls)){
+      sorted_mcl_genes <- sort(mcl_gene_counts[[interest_mcls[i]]], decreasing = TRUE)
+      sorted_mcl_epigenes <- sorted_mcl_genes[which(is.element(names(sorted_mcl_genes),brainspan_chrom_mod))]
+      top_epigenes[(num_epigenes*i-(num_epigenes-1)):(num_epigenes*i)] <- names(sorted_mcl_epigenes)[1:num_epigenes]
     }
     
-    # fill in gene-tissue pairs not in metacluster with expression correlation to avg metacluster expression by looping through columns (tissues)
+    rows_meta$gene_symbol[match(top_epigenes, rows_meta$ensembl_gene_id)]
+    # remove NA epigene values + make unique
+    all_top_epigenes <- na.omit(top_epigenes)
+    # all_top_epigenes <- unique(na.omit(top_epigenes))
     
-    # calculate correlation for gene-tissue pairs not in metacluster
-    mcl_expr <- all_mcl_avg_expr$expr[which(all_mcl_avg_expr$metacluster == mcl_dirs[i])]
-    names(mcl_expr) <- all_mcl_avg_expr$pcw[which(all_mcl_avg_expr$metacluster == mcl_dirs[i])]
+    # all_top_epigenes <- nervous_spec_epigenes[51:95]
     
-    # get expression for each gene-tissue pair
-    for (a in 1:ncol(grid_df)){
-      tissue <- colnames(grid_df)[a]
-      # loop through genes
-      for (b in 1:nrow(grid_df)){
-        if (grid_df[b,a]!=2){
-          gene = rownames(grid_df)[b]
-          gene_expr <- normal_expr[which(rows_meta$ensembl_gene_id==gene),which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
-          names(gene_expr) <- sorted_cols$age[which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
-          new_gene_expr <- vector("numeric", length(mcl_expr))
-          names(new_gene_expr) <- names(mcl_expr)
-          for (k in 1:length(names(mcl_expr))){
-            if (length(which(is.element(names(gene_expr), names(mcl_expr)[k])))>0){
-              new_gene_expr[k] <- gene_expr[which(names(gene_expr) == names(mcl_expr)[k])]
+    sorted_cols_structs <- str_replace_all(sorted_cols$structure_name, "[ /]", "_")
+    sorted_cols_structs <- str_replace_all(sorted_cols_structs, "[(),-]", ".")
+    
+    # x <- foreach(i = 1:length(mcl_dirs), .combine = rbind) %dopar% {
+    all_grid_dfs <- foreach(i = 1:length(interest_mcls), .combine = rbind) %dopar% {
+    # for (i in 1:length(mcl_dirs)){
+      # create empty grid data frame
+      grid_df <- data.frame(matrix(data = 0,nrow = length(brainspan_chrom_mod), ncol = length(structure_names), dimnames = list(brainspan_chrom_mod, str_replace_all(structure_names, "[ /]", "_"))))
+      
+      # determine if genes were expressed in each tissue in a metacluster or else perform pearson correlation analysis for gene-tissue pair to metacluster average expression 
+      mcl_index <- sapply(str_split(interest_mcls[i], 'r'),"[[",2)
+      sub_df <- mcl_df[which(mcl_df$metacluster==mcl_index),]
+      for (j in 1:nrow(sub_df)){
+        # get epigenes in a given tissue-cluster pair
+        struct_old <- sub_df$structure[j]
+        struct <- str_replace_all(sub_df$structure[j], "[ /]", "_")
+        struct <- str_replace_all(struct, "[(),-]", ".")
+        cluster <- sub_df$cluster[j]
+        cluster_all_genes <- cutoff_gene_lists[[cutoff_name]][[struct_old]][[cutoff_name]][[cluster]]
+        cluster_epigenes <- brainspan_chrom_mod[which(is.element(brainspan_chrom_mod, cluster_all_genes))]
+        
+        grid_df[which(is.element(rownames(grid_df), cluster_epigenes)),which(colnames(grid_df)==struct)] = 2 # similarity = 1
+      }
+      
+      # fill in gene-tissue pairs not in metacluster with expression correlation to avg metacluster expression by looping through columns (tissues)
+      
+      # calculate correlation for gene-tissue pairs not in metacluster
+      mcl_expr <- all_mcl_avg_expr$expr[which(all_mcl_avg_expr$metacluster == interest_mcls[i])]
+      names(mcl_expr) <- all_mcl_avg_expr$pcw[which(all_mcl_avg_expr$metacluster == interest_mcls[i])]
+      
+      # get expression for each gene-tissue pair
+      for (a in 1:ncol(grid_df)){
+        tissue <- colnames(grid_df)[a]
+        # loop through genes
+        for (b in 1:nrow(grid_df)){
+          if (grid_df[b,a]!=2){
+            gene = rownames(grid_df)[b]
+            gene_expr <- normal_expr[which(rows_meta$ensembl_gene_id==gene),which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
+            names(gene_expr) <- sorted_cols$age[which(sorted_cols_structs==tissue & sorted_cols$age <= 40)]
+            new_gene_expr <- vector("numeric", length(mcl_expr))
+            names(new_gene_expr) <- names(mcl_expr)
+            for (k in 1:length(names(mcl_expr))){
+              if (length(which(is.element(names(gene_expr), names(mcl_expr)[k])))>0){
+                new_gene_expr[k] <- gene_expr[which(names(gene_expr) == names(mcl_expr)[k])]
+              }
+              else{
+              new_gene_expr[k] <- NA
+              }
+            }
+            similarity <- suppressWarnings(cor(mcl_expr, new_gene_expr, use = 'pairwise.complete.obs'))
+            if (!is.na(similarity)){
+              grid_df[b,a] = similarity
             }
             else{
-            new_gene_expr[k] <- NA
+              grid_df[b,a] = 0
             }
-          }
-          similarity <- suppressWarnings(cor(mcl_expr, new_gene_expr, use = 'pairwise.complete.obs'))
-          if (!is.na(similarity)){
-            grid_df[b,a] = similarity
-          }
-          else{
-            grid_df[b,a] = 0
           }
         }
       }
+      
+      matched_epigene_indices <- match(all_top_epigenes, rownames(grid_df))
+      matched_epigene_indices <- na.omit(matched_epigene_indices)
+      rownames(grid_df) <- rows_meta$gene_symbol[match(rownames(grid_df), rows_meta$ensembl_gene_id)]
+      sub_grid_df <- grid_df[matched_epigene_indices,]
+      
+      
+      # format grid_df for plotting
+      # row_ids <- sapply(str_split(rownames(sub_grid_df), '[.]'),"[[",1)
+      sub_grid_df$gene <- rownames(sub_grid_df)
+      # sub_grid_df$gene <- rows_meta$gene_symbol[match(rownames(sub_grid_df), rows_meta$ensembl_gene_id)] # use gene symbol instead of ensembl id
+      sub_grid_df$gene <- factor(sub_grid_df$gene, levels=sub_grid_df$gene)
+      melted_grid_df <- melt(sub_grid_df, id.vars = 'gene', value.name = 'is_expr')
+      # melted_grid_df$gene <- factor(melted_grid_df$gene, levels=melted_grid_df$gene)
+      
+      # custom_palette <- colorRampPalette(c("red", "white", "blue", "cyan"))(100)
+      # custom_palette <- colorRampPalette(c("cyan4","cyan","white", "red3", "darkred","black"))(100)
+      # c("cyan4","cyan","lightcyan","white","white","pink", "red3", "darkred","black") [from leroy]
+      
+      # black as perfect match
+      # grid plot (heatmap using geom_tile)
+      p_grid <- ggplot(melted_grid_df, aes(variable, gene, fill=is_expr)) + 
+        geom_tile() + 
+        ggtitle(paste0(interest_mcls[i], ' epigenes-tissue grid plot')) + 
+        labs(x = "tissue", y = "gene") + 
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+        scale_fill_gradientn(colors = c("cyan4","cyan","white", "red3", "darkred","black"), limits = c(-1, 2), breaks = c(-1, 0, 1, 2), labels = c("-1", "0", "1", "2")) 
+        # scale_fill_gradientn(colours = c('red', 'white', 'blue', 'cyan'), values = c(-1, 0, 1, 2))
+      
+      # ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_epigenes_tissue_grid_plot.png'), plot = p_grid, width = 10, height = 8)
+       ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_', interest_mcls[i],'_epigenes_tissue_grid_plot.png'), plot = p_grid, width = 10, height = 8)
+       
+       melted_grid_df$metacluster <- interest_mcls[i]
+       melted_grid_df
     }
     
+    nervous_spec_epigene_symbols <- na.omit(rows_meta$gene_symbol[match(nervous_spec_epigenes, rows_meta$ensembl_gene_id)])
+    # which(is.element(all_grid_dfs$gene, nervous_spec_epigene_symbols))
     
-    # subset grid_df for top 40 epigenes in a metacluster
-    # sorted_mcl_genes <- sort(mcl_gene_counts[[mcl_dirs[i]]], decreasing = TRUE)
-    # sorted_mcl_epigenes <- sorted_mcl_genes[which(is.element(names(sorted_mcl_genes),rownames(grid_df)))] 
-    # top_epigenes <- names(sorted_mcl_epigenes)[which(sorted_mcl_epigenes >= 4)]
+    # PBRM1 PHIP  MBTD1 KAT6B
     
-    matched_epigene_indices <- match(all_top_epigenes, rownames(grid_df))
-    sub_grid_df <- grid_df[matched_epigene_indices,]
-    # sub_grid_df <- sub_grid_df[1:50,]
-    
-    
-    # format grid_df for plotting
-    sub_grid_df$gene <- rows_meta$gene_symbol[match(rownames(sub_grid_df), rows_meta$ensembl_gene_id)] # use gene symbol instead of ensembl id
-    sub_grid_df$gene <- factor(sub_grid_df$gene, levels=sub_grid_df$gene)
-    melted_grid_df <- melt(sub_grid_df, id.vars = 'gene', value.name = 'is_expr')
-    # melted_grid_df$gene <- factor(melted_grid_df$gene, levels=melted_grid_df$gene)
-    
-    # custom_palette <- colorRampPalette(c("red", "white", "blue", "cyan"))(100)
-    custom_palette <- colorRampPalette(c("cyan4","cyan","white", "red3", "darkred","black"))(100)
-    # c("cyan4","cyan","lightcyan","white","white","pink", "red3", "darkred","black") [from leroy]
-    
-    # black as perfect match
-    # grid plot (heatmap using geom_tile)
-    p_grid <- ggplot(melted_grid_df, aes(variable, gene, fill=is_expr)) + 
+    group_grid <- ggplot(all_grid_dfs, aes(variable, gene, fill=is_expr)) + 
       geom_tile() + 
-      ggtitle(paste0(mcl_dirs[i], ' epigenes-tissue grid plot')) + 
+      facet_wrap(~metacluster) +
+      ggtitle(paste0(mcl_group_name,' epigenes-tissue grid plot')) + 
       labs(x = "tissue", y = "gene") + 
-      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-      scale_fill_gradientn(colors = custom_palette, limits = c(-1, 2), breaks = c(-1, 0, 1, 2), labels = c("-1", "0", "1", "2")) 
-      # scale_fill_gradientn(colours = c('red', 'white', 'blue', 'cyan'), values = c(-1, 0, 1, 2))
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), 
+            axis.text.y = element_text(face=c("bold","plain", "bold", "plain", "plain", "plain",
+                                              "bold", "plain", "plain", "plain", "plain",
+                                              "plain", "plain", "plain", "plain", "plain", "bold",
+                                              "plain", "plain", "plain", "plain", "plain",
+                                              "plain", "plain", "plain", "plain", "plain",
+                                              "plain", "plain", "plain", "plain", "plain",
+                                              "plain", "plain"))
+            ) +
+      scale_fill_gradientn(colors = c("cyan", "lightcyan","white" ,"white", "rosybrown1", "red3","black"),
+                           limits = c(-1, 2),
+                           values = scales::rescale(c(-1,-0.6,-0.3,0.3, 0.6,1, 2)) ) 
     
-    ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, mcl_dirs[i],'/', date, '_', mcl_dirs[i],'_epigenes_tissue_grid_plot.png'), plot = p_grid, width = 10, height = 8)
+    ggsave(paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, '_', mcl_group_name, '_epigenes_tissue_grid_plot.png'), plot = group_grid, width = 10, height = 8)
   }
   
   # calculate correlation of metaclusters
