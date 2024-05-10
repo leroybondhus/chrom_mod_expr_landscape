@@ -72,6 +72,9 @@ rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
 colnames(expression_mat) <- columns_meta$structure_name
 
+# load in leroy's specificity gene lists
+all_nervous_spec_genes <- read.csv(paste0(dirs$data, "all_nervous_spec.csv"))[,2]
+nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigenes.csv"))[,2]
 ```
 
 
@@ -385,6 +388,106 @@ all_genes_corr_gg <- ggplot(all_genes_corr_df, aes(x = variable, y = count)) +
 ggsave(paste0(dirs$results_embryo, date, "_", "all_genes_corr_summary_boxplots.png"), plot = all_genes_corr_gg, width = 10, height = 8)
   
 
+# partition corr based on neural specificity
+neural_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
+non_neural_spec_corr <- corr_matrix[which(!is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
+
+neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(neural_spec_corr, lower, upper),
+low_corr = count_corr(neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(neural_spec_corr, -1, -upper))
+
+non_neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(non_neural_spec_corr, lower, upper),
+low_corr = count_corr(non_neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(non_neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(non_neural_spec_corr, -1, -upper))
+
+neural_spec_corr_df <- melt(neural_spec_corr_summary_stats[,3:7], value.name = "count")
+non_neural_spec_corr_df <- melt(non_neural_spec_corr_summary_stats[,3:7], value.name = "count")
+
+neural_spec_corr_gg <- ggplot() + 
+  geom_boxplot(data=neural_spec_corr_df, aes(x = variable, y = count, color = 'neural_spec')) + 
+  geom_boxplot(data=non_neural_spec_corr_df, aes(x = variable, y = count, color = 'non_neural_spec')) + 
+  geom_point(data=neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'neural_spec')) +
+  geom_point(data=non_neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'non_neural_spec')) +
+  theme_bw() +
+  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+  ggtitle('neural specificity correlation summary counts') +
+  labs(x = "correlation cutoffs", y = "count")
+
+ggsave(paste0(dirs$results_embryo, date, "_", "neural_spec_corr_summary_boxplots.png"), plot = neural_spec_corr_gg, width = 10, height = 8)
+
+
+# partition epigenes corr based on neural specificity
+non_nervous_spec_epigenes <- chromatin_modifiers[which(!is.element(chromatin_modifiers, nervous_spec_epigenes))]
+
+nervous_spec_non_epigenes <- all_nervous_spec_genes[which(!is.element(all_nervous_spec_genes, chromatin_modifiers))]
+
+# "gold" -- all other non-epigenes
+not_nervous_spec_non_epigenes <- rows_meta$ensembl_gene_id[which(!is.element(rows_meta$ensembl_gene_id, c(all_nervous_spec_genes, chromatin_modifiers)))]
+
+not_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, not_nervous_spec_non_epigenes)), ]
+
+nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_non_epigenes)), ]
+
+epi_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_epigenes)), ]
+epi_non_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_nervous_spec_epigenes)), ]
+
+not_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(not_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(not_nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(not_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(not_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(not_nervous_spec_non_epi_corr, -1, -upper))
+
+nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(nervous_spec_non_epi_corr, -1, -upper))
+
+epi_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(epi_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(epi_nervous_spec_corr, lower, upper),
+low_corr = count_corr(epi_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(epi_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(epi_nervous_spec_corr, -1, -upper))
+
+epi_non_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(epi_non_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(epi_non_nervous_spec_corr, lower, upper),
+low_corr = count_corr(epi_non_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(epi_non_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(epi_non_nervous_spec_corr, -1, -upper))
+
+epi_nervous_spec_corr_df <- melt(epi_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_nervous_spec_corr), value.name = "count")
+
+epi_non_nervous_spec_corr_df <- melt(epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_non_nervous_spec_corr), value.name = "count")
+
+nervous_spec_non_epi_spec_corr_df <- melt(nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(nervous_spec_non_epi_corr), value.name = "count")
+
+not_nervous_spec_non_epi_corr_df <- melt(not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(not_nervous_spec_non_epi_corr), value.name = "count")
+
+epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
+epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
+nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
+not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
+
+epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
+not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
+
+epi_nervous_spec_corr_df$is_spec <- 'is_spec'
+epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
+nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
+not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+
+aggregate_corr_df = rbind(epi_nervous_spec_corr_df, epi_non_nervous_spec_corr_df, nervous_spec_non_epi_spec_corr_df, not_nervous_spec_non_epi_corr_df)
+
+all_corr_gg <- ggplot(aggregate_corr_df, aes(x=variable, y=count, fill=gene_type, )) + 
+  geom_boxplot() +
+  facet_grid( is_chrom ~ is_spec) +
+  scale_fill_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  theme_bw() +
+  ggtitle('correlation summary counts (neural specificity partitioning)') +
+  labs(x = "correlation cutoffs", y = "count proportion")
+
+old_all_corr_gg <- ggplot() + 
+  geom_boxplot(data=epi_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') + 
+  geom_boxplot(data=epi_non_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') + 
+  geom_point(data=epi_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') +
+  geom_point(data=epi_non_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') +
+  geom_boxplot(data=nervous_spec_non_epi_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') + 
+  geom_point(data=nervous_spec_non_epi_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') +
+  geom_boxplot(data=not_nervous_spec_non_epi_corr_df, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
+  geom_point(data=not_nervous_spec_non_epi_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
+  theme_bw() +
+  ggtitle('correlation summary counts (neural specificity partitioning)') +
+  labs(x = "correlation cutoffs", y = "count proportion")
+
+ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_boxplots.png"), plot = all_corr_gg, width = 10, height = 8)
 ```
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
@@ -1291,8 +1394,7 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   # interest_mcls <- c('metacluster4','metacluster31','metacluster17','metacluster1')
   
   mcl_groups <- list(cell_cycle=cell_cycle_mcls, synaptogenesis=synaptogenesis_mcls, angiogenesis=angio_mcls)
-  
-  nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigenes.csv"))[,2]
+
   
   # for (g in 1:length(mcl_groups)){
   for (g in 1:1){
@@ -1451,9 +1553,258 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
 proc.time() - ptm
 
 ```
+```{r, from AN_HumanProteinAtlas_Analyses}
+
+#(0) load libraries
+library(tidyverse)
+library(scales)
+
+#(1) read in 720 epigenes with chromatinopathy annotations:
+  epigenes<-read.csv(file="AN_curated_chromopathy_LB_mod.csv")
+
+#(2) read in subcellular location data + rename ensemble column for overlap:
+  #ref: https://community.rstudio.com/t/using-readrs-read-tsv-to-read-a-zip-compressed-tsv-file-from-a-url/26332
+
+  url <- "https://www.proteinatlas.org/download/subcellular_location.tsv.zip"
+  zip_file <- tempfile(fileext = ".zip")
+  download.file(url, zip_file, mode = "wb")
+  
+  subcell <- read_tsv(zip_file)
+  subcell <- data.frame(subcell)
+  subcell <- subcell%>%dplyr::rename(ensembl_gene_id=Gene)
+
+#(3) combine epigene list with subcellular location annotations:
+  epigenes<- dplyr::left_join(epigenes,subcell, by="ensembl_gene_id")
 
 
-```{r, test hpo enrichments}
+#(4) master DF = thing we care about, encodes epigene info into df
+  df<-subcell[,c("ensembl_gene_id","Gene.name","Main.location","Additional.location")]
+  df$is_epigene<-FALSE
+  df$is_epigene[is.element(df$ensembl_gene_id,epigenes$ensembl_gene_id)]<-TRUE
+
+#(5) location DF = unlist and find unique subcell then concatinate unique locations across main and additional
+  #then save as a vector called cell_locs
+cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$Additional.location,";"))))
+  
+#(6) empty df (initializing df) = making plotting DFs
+  df_gg<-data.frame(ensembl_gene_id=character(),
+                    Gene.name=character(),
+                    loc=character(),
+                    is_epigene=logical(),
+                    is_main_loc=logical())
+  
+#(7) filling df_gg with all genes all unnested subcellular locations (ready for plotting)
+  #singular= individual elements at current iteration of for look (for i)
+  #plural= what you're through
+  for(cell_loc in cell_locs){
+    which <- which(sapply(str_split(df$Main.location,";"),function(x){any(is.element(cell_loc,x))}))
+    if(length(which)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which],
+        Gene.name=df$Gene.name[which],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which],
+        is_main_loc=T)
+      df_gg <- rbind(df_gg ,temp_df)
+    }
+    
+    which_2 <-  which(sapply(str_split(df$Additional.location,";"),function(x){any(is.element(cell_loc,x))}))
+    which_2 <- setdiff(which_2, which)
+    if(length(which_2)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which_2],
+        Gene.name=df$Gene.name[which_2],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which_2],
+        is_main_loc=F)
+      df_gg <- rbind(df_gg, temp_df)
+    }
+  }
+  
+ #(8) Label all the genes in nucleus 
+  df_gg$loc_is_nucleus <- is.element(df_gg$loc,
+                                  c("Nuclear membrane",
+                                    "Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim",
+                                    "Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"
+                                    ))
+  
+ #(9) Label all the genes in cytoplasm 
+  df_gg$loc_is_cytoplasm <- is.element(df_gg$loc,
+                                  c("Actin filaments",
+                                    "Cleavage furrow",
+                                    "Focal adhesion sites",
+                                    "Centriolar satellite",
+                                    "Centrosome",
+                                    "Aggresome",
+                                    "Cytoplasmic bodies",
+                                    "Cytosol",
+                                    "Rods & Rings",
+                                    "Intermediate filaments",
+                                    "Cytokinetic bridge",
+                                    "Microtubule ends",
+                                    "Microtubules",
+                                    "Midbody",
+                                    "Midbody ring",
+                                    "Mitotic spindle",
+                                    "Mitochondria"
+                                    ))
+  
+
+  
+#(10) Label all the genes in the Endomembrane system
+  df_gg$loc_is_endoSys <- is.element(df_gg$loc,
+                                  c("Endoplasmic reticulum",
+                                    "Golgi apparatus",
+                                    "Cell Junctions",
+                                    "Plasma membrane",
+                                    "Endosomes",
+                                    "Lipid droplets",
+                                    "Lysosomes",
+                                    "Peroxisomes",
+                                    "Vesicles"
+                                    ))
+  
+
+#(11) create membership column to aggregate all info about subcell location
+  # Define the set of columns to search
+  columns_to_search <- c( "loc_is_nucleus","loc_is_cytoplasm","loc_is_endoSys")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership <- function(row) {
+    for (col in columns_to_search) {
+      if (row[col]) {
+        return(col)
+      }
+    }
+    return(NA)  # Return NA if no TRUE value is found in the specified columns
+  }
+  
+  # Apply the function row-wise to the dataframe
+  df_gg$membership <- apply(df_gg[columns_to_search], 1, find_membership)
+
+  
+  
+#(12) fix membership annotations and epigene column for legend
+df_gg$membership[df_gg$membership == "loc_is_endoSys"] <- "Endomembrane System"
+df_gg$membership[df_gg$membership == "loc_is_cytoplasm"] <- "Cytoplasm"
+df_gg$membership[df_gg$membership == "loc_is_nucleus"] <- "Nucleus"
+
+
+###
+
+
+#(13) Label all the genes in nucleur SUB compartments 
+  df_gg$loc_is_nucMem <- is.element(df_gg$loc,
+                                  c("Nuclear membrane"))
+
+  df_gg$loc_is_nucleoli <- is.element(df_gg$loc,
+                                  c("Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim"))
+
+  df_gg$loc_is_nucleoplasm <- is.element(df_gg$loc,
+                                  c("Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"))
+
+
+  
+  
+#(14) create membership2 column to aggregate all info about nucleus sub loc
+  # Define the set of columns to search
+  columns_to_search2 <- c( "loc_is_nucMem","loc_is_nucleoli","loc_is_nucleoplasm")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership2 <- function(row) {
+    if (all(!row[columns_to_search2])) {
+      return(NA)  # Return NA if all values in the row are FALSE
+    } else {
+      for (col in columns_to_search2) {
+        if (row[col]) {
+          return(col)
+        }
+      }
+      return(NA)  # Return NA if no TRUE value is found in the specified columns
+    }
+  }
+
+  # Apply the function row-wise to the dataframe
+  df_gg$membership2 <- apply(df_gg[columns_to_search2], 1, find_membership2)
+
+  
+  
+#(15) fix membership2 annotations and epigene column for legend
+df_gg$membership2[df_gg$membership2 == "loc_is_nucMem"] <- "Nuclear Membrane"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoli"] <- "Nucleoli"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoplasm"] <- "Nucleoplasm"
+
+
+
+  
+#(16) remove all rows with 'NA' in df_gg$loc
+  #Only rows where all values are complete (non-NA) will be retained.
+  #these are created when a gene has no alternative location.
+
+df_gg <- df_gg[complete.cases(df_gg$loc), ]
+
+
+
+
+#remove useless variables
+  rm(url,zip_file,df,temp_df)
+
+```
+
+```{r, barplots for metacluster subcellular membership}
+# for metaclusters 1 & 17 - cell_cycle_mcls
+
+main_df_gg <- df_gg[which(df_gg$is_main_loc == TRUE),] # filter for main_loc
+
+main_mcls_subcell_df <- NULL
+for (i in 1:length(cell_cycle_mcls)){
+  mcl <- strtoi(str_split(cell_cycle_mcls[i],'r')[[1]][2])
+  subcell_df <- data.frame(matrix(data = FALSE, nrow = length(mcl_gene_counts[[mcl]]), ncol = 4, dimnames = list(NULL, c('gene', 'is_epigene', 'subcell_comp', 'metacluster'))))
+  subcell_df$gene <- names(mcl_gene_counts[[mcl]])
+  subcell_df$metacluster <- cell_cycle_mcls[i]
+  
+  for (j in 1:nrow(subcell_df)){
+    gene_info <- main_df_gg[which(main_df_gg$ensembl_gene_id == subcell_df$gene[j]),]
+    if(nrow(gene_info)>0){ # if gene found in main_df_gg
+      subcell_df$subcell_comp[j] <- gene_info$membership
+      if (subcell_df$subcell_comp[j] == 'Nucleus'){
+        subcell_df$subcell_comp[j] <- gene_info$membership2
+      }
+      subcell_df$is_epigene[j] <- gene_info$is_epigene
+    }
+  }
+  
+  main_mcls_subcell_df <- rbind(mcls_subcell_df, subcell_df)
+}
+
+# filter out genes with no subcellular compartment info
+main_filtered_df <- main_mcls_subcell_df[which(main_mcls_subcell_df$subcell_comp != F),]
+
+main_loc_subcell_gg <- ggplot(main_filtered_df, aes(fill = is_epigene,x=subcell_comp)) +
+  # geom_bar(position = "fill", stat = "identity") +
+  geom_bar(position = 'fill') +
+  coord_flip() +
+  facet_wrap(~metacluster)+
+  ggtitle('main_loc subcell compartments') + 
+  labs(x = "subcellular compartment", y = "proportion")
+  
+
+```
+
+
+```{r, test hpo enrichments - didn't use - results similar to GO probably}
 ## for each HPO, test enrichment of chrom modifiers in set
 ## plot by signif and OR, add labels (padj by bonferroni)
 
@@ -1589,7 +1940,7 @@ write.csv(ontos$hpo$chrom_enrichments, file=filename)
 ```
 
 
-```{r, iagc_time_sim_mat_high}
+```{r, iagc_time_sim_mat_high - old code}
 # ptm <- proc.time()
 # iagc_time_sim_mat_high <- foreach(a = 1:length(unique_pairs_high), .combine = 'rbind') %:%
 #   foreach(b = 1:length(unique_pairs_high), .combine = 'c') %dopar% {
@@ -1668,7 +2019,7 @@ write.csv(ontos$hpo$chrom_enrichments, file=filename)
 ```
 
 
-```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix}
+```{r, inter-anatomic-gene-cluster-gene_set-similarity-matrix - old code}
 #define Jaccard Similarity function
 # jaccard <- function(a, b) {
 #     intersection = length(intersect(a, b))
@@ -1859,8 +2210,6 @@ for (i in 1:length(gene_list)){
 #   ggsave(paste0("./results/figures/20231101_gene_expr_plots/", gene, " expression plot.png"), plot = gg, width = 7, height = 5) 
 # }
 ```
-
-
 
 ```{r collected functions used, include=FALSE}
 ### slow with many samples ... prioritize for parallelization 
