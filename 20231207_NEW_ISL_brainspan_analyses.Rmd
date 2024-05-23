@@ -264,14 +264,15 @@ normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 ```
 
 ```{r, calculate gene expression correlation}
-# calculate gene expression for all genes for a given brain structure - based on log time
+# calculate gene expression correlation for all genes for a given brain structure
 calc_correlation <- function(cols_meta,expr_mat){
   corr <- vector("numeric", nrow(expr_mat))
   p_val <- vector("numeric", nrow(expr_mat))
   confidence_int_lower <- vector("numeric", nrow(expr_mat))
   confidence_int_upper <- vector("numeric", nrow(expr_mat))
   for(i in 1:nrow(expr_mat)){
-    output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
+    # output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
+    output = suppressWarnings(cor.test(cols_meta$age, expr_mat[i,]))
     corr[i] = output$estimate
     p_val[i] = output$p.value
     if (length(output$conf.int) > 0){
@@ -338,9 +339,9 @@ count_corr <- function(corr_mat, lower_bound, upper_bound){
 }
 
 # subset genes in corr_matrix that correspond to human chromatin modifer genes
-chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
-matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
-matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
+# chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+# matched_modifiers <- match(chromatin_modifiers, rows_meta$ensembl_gene_id)
+# matched_modifiers = matched_modifiers[!is.na(matched_modifiers)]
 # chrom_mod_corr <- corr_matrix[matched_modifiers,]
 
 # filter for tissues with at least 5 timepoints
@@ -362,30 +363,30 @@ write.csv(corr_summary_stats, paste0(dirs$results_embryo, date, "_all_genes_corr
 
 write.csv(epigenes_corr_summary_stats, paste0(dirs$results_embryo, date, "_epigenes_corr_summary_stats.csv"))
 
-epigenes_corr_df <- melt(epigenes_corr_summary_stats[,3:7], value.name = "count")
+# epigenes_corr_df <- melt(epigenes_corr_summary_stats[,3:7], value.name = "count")
 
-epigenes_corr_gg <- ggplot(epigenes_corr_df, aes(x = variable, y = count)) + 
-  geom_boxplot() + 
-  geom_point() +
-  theme_bw() +
-  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
-  ggtitle('epigenes correlation summary counts') +
-  labs(x = "correlation cutoffs", y = "count")
-
-ggsave(paste0(dirs$results_embryo, date, "_", "epigenes_corr_summary_boxplots.png"), plot = epigenes_corr_gg, width = 10, height = 8)
-
-
-all_genes_corr_df <- melt(corr_summary_stats[,3:7], value.name = "count")
-
-all_genes_corr_gg <- ggplot(all_genes_corr_df, aes(x = variable, y = count)) + 
-  geom_boxplot() + 
-  geom_point() +
-  theme_bw() +
-  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
-  ggtitle('all genes correlation summary counts') +
-  labs(x = "correlation cutoffs", y = "count")
-
-ggsave(paste0(dirs$results_embryo, date, "_", "all_genes_corr_summary_boxplots.png"), plot = all_genes_corr_gg, width = 10, height = 8)
+# epigenes_corr_gg <- ggplot(epigenes_corr_df, aes(x = variable, y = count)) + 
+#   geom_boxplot() + 
+#   geom_point() +
+#   theme_bw() +
+#   # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+#   ggtitle('epigenes correlation summary counts') +
+#   labs(x = "correlation cutoffs", y = "count")
+# 
+# ggsave(paste0(dirs$results_embryo, date, "_", "epigenes_corr_summary_boxplots.png"), plot = epigenes_corr_gg, width = 10, height = 8)
+# 
+# 
+# all_genes_corr_df <- melt(corr_summary_stats[,3:7], value.name = "count")
+# 
+# all_genes_corr_gg <- ggplot(all_genes_corr_df, aes(x = variable, y = count)) + 
+#   geom_boxplot() + 
+#   geom_point() +
+#   theme_bw() +
+#   # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+#   ggtitle('all genes correlation summary counts') +
+#   labs(x = "correlation cutoffs", y = "count")
+# 
+# ggsave(paste0(dirs$results_embryo, date, "_", "all_genes_corr_summary_boxplots.png"), plot = all_genes_corr_gg, width = 10, height = 8)
   
 
 # partition corr based on neural specificity
@@ -427,6 +428,7 @@ not_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_
 nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_non_epigenes)), ]
 
 epi_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_epigenes)), ]
+
 epi_non_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_nervous_spec_epigenes)), ]
 
 not_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(not_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(not_nervous_spec_non_epi_corr, lower, upper),
@@ -441,32 +443,32 @@ low_corr = count_corr(epi_nervous_spec_corr, -lower, lower), modest_neg_corr = c
 epi_non_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(epi_non_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(epi_non_nervous_spec_corr, lower, upper),
 low_corr = count_corr(epi_non_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(epi_non_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(epi_non_nervous_spec_corr, -1, -upper))
 
-epi_nervous_spec_corr_df <- melt(epi_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_nervous_spec_corr), value.name = "count")
+epi_nervous_spec_corr_counts_df <- melt(epi_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_nervous_spec_corr), value.name = "count")
 
-epi_non_nervous_spec_corr_df <- melt(epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_non_nervous_spec_corr), value.name = "count")
+epi_non_nervous_spec_corr_counts_df <- melt(epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_non_nervous_spec_corr), value.name = "count")
 
-nervous_spec_non_epi_spec_corr_df <- melt(nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(nervous_spec_non_epi_corr), value.name = "count")
+nervous_spec_non_epi_spec_corr_counts_df <- melt(nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(nervous_spec_non_epi_corr), value.name = "count")
 
-not_nervous_spec_non_epi_corr_df <- melt(not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(not_nervous_spec_non_epi_corr), value.name = "count")
+not_nervous_spec_non_epi_corr_counts_df <- melt(not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(not_nervous_spec_non_epi_corr), value.name = "count")
 
-epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
-epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
-nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
-not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
+epi_nervous_spec_corr_counts_df$gene_type <- 'all_neuro_specific_epigenes'
+epi_non_nervous_spec_corr_counts_df$gene_type <- 'all_other_epigenes'
+nervous_spec_non_epi_spec_corr_counts_df$gene_type <- 'all_neuro_specific_non_epigenes'
+not_nervous_spec_non_epi_corr_counts_df$gene_type <- 'all_other_non_epigenes'
 
-epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
-epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
-nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
-not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
+epi_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+epi_non_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+nervous_spec_non_epi_spec_corr_counts_df$is_chrom <- 'not_chrom'
+not_nervous_spec_non_epi_corr_counts_df$is_chrom <- 'not_chrom'
 
-epi_nervous_spec_corr_df$is_spec <- 'is_spec'
-epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
-nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
-not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+epi_nervous_spec_corr_counts_df$is_spec <- 'is_spec'
+epi_non_nervous_spec_corr_counts_df$is_spec <- 'not_spec'
+nervous_spec_non_epi_spec_corr_counts_df$is_spec <- 'is_spec'
+not_nervous_spec_non_epi_corr_counts_df$is_spec <- 'not_spec'
 
-aggregate_corr_df = rbind(epi_nervous_spec_corr_df, epi_non_nervous_spec_corr_df, nervous_spec_non_epi_spec_corr_df, not_nervous_spec_non_epi_corr_df)
+aggregate_corr_counts_df = rbind(epi_nervous_spec_corr_counts_df, epi_non_nervous_spec_corr_counts_df, nervous_spec_non_epi_spec_corr_counts_df, not_nervous_spec_non_epi_corr_counts_df)
 
-all_corr_gg <- ggplot(aggregate_corr_df, aes(x=variable, y=count, fill=gene_type, )) + 
+all_corr_gg <- ggplot(aggregate_corr_counts_df, aes(x=variable, y=count, fill=gene_type, )) + 
   geom_boxplot() +
   facet_grid( is_chrom ~ is_spec) +
   scale_fill_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
@@ -488,6 +490,49 @@ old_all_corr_gg <- ggplot() +
   labs(x = "correlation cutoffs", y = "count proportion")
 
 ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_boxplots.png"), plot = all_corr_gg, width = 10, height = 8)
+
+
+## DENSITY PLOT ##
+epi_nervous_spec_corr_df <- melt(epi_nervous_spec_corr)
+
+epi_non_nervous_spec_corr_df <- melt(epi_non_nervous_spec_corr)
+
+nervous_spec_non_epi_spec_corr_df <- melt(nervous_spec_non_epi_corr)
+
+not_nervous_spec_non_epi_corr_df <- melt(not_nervous_spec_non_epi_corr)
+
+epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
+epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
+nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
+not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
+
+epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
+not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
+
+epi_nervous_spec_corr_df$is_spec <- 'is_spec'
+epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
+nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
+not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+
+aggregate_corr_density_df = rbind(epi_nervous_spec_corr_df, epi_non_nervous_spec_corr_df, nervous_spec_non_epi_spec_corr_df, not_nervous_spec_non_epi_corr_df)
+
+all_corr_gg_density <- ggplot(aggregate_corr_density_df, aes(x=value, fill=gene_type, )) + 
+  geom_density() +
+  facet_grid( is_chrom ~ is_spec) +
+  scale_fill_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  theme_bw() +
+  ggtitle('correlation density plots (neural specificity partitioning)') +
+  labs(x = "correlation cutoffs", y = "count proportion")
+
+ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_density_plots.png"), plot = all_corr_gg_density, width = 10, height = 8)
+
+ggplot(melt(epi_nervous_spec_corr), aes(x=value)) +
+  geom_density() +
+  ggtitle('neural specificity epigenes correlation density plot') +
+  labs(x = "time correlation", y = "count") +
+  theme_bw()
 ```
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
@@ -989,6 +1034,16 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
   }
   
   write.csv(data.frame(mcl_tissues), paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_unique_tissues_per_metacluster.csv"))
+  
+
+  mcl_gene_counts_df <- foreach(n = 1:length(mcl_gene_counts), .combine = rbind) %dopar% {
+    genes_df <- data.frame(genes = names(mcl_gene_counts[[n]]), tissue_freq = mcl_gene_counts[[n]], metacluster = mcl_dirs[n])
+  }
+  
+  write.csv(mcl_gene_counts_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_mcl_gene_counts_df.csv"))
+  
+  # key_mcls <- c(cell_cycle_mcls, synaptogenesis_mcls, angio_mcls) # move defining code above later
+  
   
   # table 2. distribution of unique tissue count per gene
   mcl_gene_dist <- vector("list", max(mcl))
@@ -1763,7 +1818,7 @@ df_gg <- df_gg[complete.cases(df_gg$loc), ]
 
 ```
 
-```{r, barplots for metacluster subcellular membership}
+```{r, barplots for metacluster subcellular membership - by main location}
 # for metaclusters 1 & 17 - cell_cycle_mcls
 
 main_df_gg <- df_gg[which(df_gg$is_main_loc == TRUE),] # filter for main_loc
@@ -1786,7 +1841,7 @@ for (i in 1:length(cell_cycle_mcls)){
     }
   }
   
-  main_mcls_subcell_df <- rbind(mcls_subcell_df, subcell_df)
+  main_mcls_subcell_df <- rbind(main_mcls_subcell_df, subcell_df)
 }
 
 # filter out genes with no subcellular compartment info
@@ -1794,12 +1849,73 @@ main_filtered_df <- main_mcls_subcell_df[which(main_mcls_subcell_df$subcell_comp
 
 main_loc_subcell_gg <- ggplot(main_filtered_df, aes(fill = is_epigene,x=subcell_comp)) +
   # geom_bar(position = "fill", stat = "identity") +
-  geom_bar(position = 'fill') +
+  geom_bar(position = 'dodge') +
   coord_flip() +
   facet_wrap(~metacluster)+
   ggtitle('main_loc subcell compartments') + 
   labs(x = "subcellular compartment", y = "proportion")
+
+```
+
+```{r, barplots for metacluster subcellular membership - by all locations}
+# for metaclusters 1 & 17 - cell_cycle_mcls
+
+# main_df_gg <- df_gg[which(df_gg$is_main_loc == TRUE),] # filter for main_loc
+
+mcls_subcell_df <- NULL
+for (i in 1:length(cell_cycle_mcls)){
+  mcl <- strtoi(str_split(cell_cycle_mcls[i],'r')[[1]][2])
+  subcell_df <- data.frame(matrix(data = FALSE, nrow = length(mcl_gene_counts[[mcl]]), ncol = 4, dimnames = list(NULL, c('gene', 'is_epigene', 'subcell_comp', 'metacluster'))))
+  subcell_df$gene <- names(mcl_gene_counts[[mcl]])
+  subcell_df$metacluster <- cell_cycle_mcls[i]
   
+  for (j in 1:nrow(subcell_df)){
+    gene_info <- df_gg[which(df_gg$ensembl_gene_id == subcell_df$gene[j]),]
+    if(nrow(gene_info)==1){ # if gene found in df_gg
+      subcell_df$subcell_comp[j] <- gene_info$membership
+      if (subcell_df$subcell_comp[j] == 'Nucleus'){
+        subcell_df$subcell_comp[j] <- gene_info$membership2
+      }
+      subcell_df$is_epigene[j] <- gene_info$is_epigene
+    } else if(nrow(gene_info) > 1){
+      for (k in 1:nrow(gene_info)){
+        if (subcell_df$subcell_comp[j] == F){
+          subcell_df$subcell_comp[j] <- gene_info$membership[k]
+          if (subcell_df$subcell_comp[j] == 'Nucleus'){
+            subcell_df$subcell_comp[j] <- gene_info$membership2[k]
+          }
+          subcell_df$is_epigene[j] <- gene_info$is_epigene[k]
+        } else{
+          new_row <- list(gene=gene_info$ensembl_gene_id[k], is_epigene=gene_info$is_epigene[k], subcell_comp=gene_info$membership[k], metacluster=cell_cycle_mcls[i])
+          if (new_row$subcell_comp == 'Nucleus'){
+            new_row$subcell_comp <- gene_info$membership2[k]
+          }
+          subcell_df <- rbind(subcell_df, new_row)
+        }
+        
+      }
+    }
+    
+  }
+  
+  mcls_subcell_df <- rbind(mcls_subcell_df, subcell_df)
+}
+
+# filter out genes with no subcellular compartment info
+filtered_df <- mcls_subcell_df[which(mcls_subcell_df$subcell_comp != F),]
+
+filtered_df <- filtered_df %>%
+  group_by(metacluster, subcell_comp) %>%
+  mutate(Fraction_Epigenes = sum(is_epigene) / n())
+
+subcell_gg <- ggplot(filtered_df, aes(fill = is_epigene,x=subcell_comp)) +
+  # geom_bar(position = "fill", stat = "identity") +
+  geom_bar(position = 'dodge') +
+  coord_flip() +
+  facet_grid(~metacluster)+
+  ggtitle('cell cycle mcls subcell compartments') + 
+  labs(x = "subcellular compartment", y = "proportion") + 
+  scale_fill_discrete(name = "Epigene", labels = c("Not Epigene", "Epigene"))
 
 ```
 
