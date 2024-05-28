@@ -668,6 +668,118 @@ save.image("./setup_w_expr_dat_and_funcs.RData")
 
 ### Below belong in analysis section not setup section
 
+```{r}
+temp <- tempfile()
+temp_url <- "https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RSEMv1.3.0_transcript_tpm.gct.gz"
+download.file(temp_url,temp)
 
+dataset_list$TEXP_GTEX <- list()
+dataset_list$TEXP_GTEX$median_mat <- read.table( temp, skip=2, header = TRUE, sep = "\t")
+unlink(temp); rm(temp)
+
+
+dataset_list$TEXP_GTEX$median_mat_rowinfo <-  data.frame(transcript=dataset_list$TEXP_GTEX$median_mat$transcript_id,
+                                                         gene=dataset_list$TEXP_GTEX$median_mat$gene_id)
+rownames(dataset_list$TEXP_GTEX$median_mat) <- dataset_list$TEXP_GTEX$median_mat$transcript
+dataset_list$TEXP_GTEX$median_mat$transcript_id <- NULL
+dataset_list$TEXP_GTEX$median_mat$gene_id <- NULL
+
+temp <- tempfile()
+temp_url <- "https://storage.googleapis.com/adult-gtex/annotations/v8/metadata-files/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"
+download.file(temp_url,temp)
+temp <- read.csv( temp, skip=0, header = TRUE, sep = "\t")
+temp <- unique(data.frame(colname=temp$SMTSD,uberon_id=temp$SMUBRID, SAMPID=temp$SAMPID))
+#temp$sim_colname <- tolower(str_remove_all(temp$colname, "[ \\.\\-\\(\\)]"))
+temp$sim_idname <- str_replace_all(temp$SAMPID, "-","\\.")
+temp <- temp[match(colnames(dataset_list$TEXP_GTEX$median_mat), temp$sim_idname),]
+which <- which(!is.na(temp$colname))
+temp <- temp[which,]
+dataset_list$TEXP_GTEX$median_mat <- dataset_list$TEXP_GTEX$median_mat[,which]
+
+
+dataset_list$TEXP_GTEX$median_mat_colinfo <- temp
+dataset_list$TEXP_GTEX$median_mat_colinfo$sample_type <- dataset_list$TEXP_GTEX$median_mat_colinfo$colname
+dataset_list$TEXP_GTEX$median_mat_colinfo$colname <- make.unique(dataset_list$TEXP_GTEX$median_mat_colinfo$colname) 
+colnames(dataset_list$TEXP_GTEX$median_mat) <- dataset_list$TEXP_GTEX$median_mat_colinfo$colname
+
+which <- which(dataset_list$TEXP_GTEX$median_mat_colinfo$uberon_id == "0002190")
+temp1 <- rowMedians(as.matrix(dataset_list$TEXP_GTEX$median_mat[which,]))
+temp2 <- rowMeans(dataset_list$TEXP_GTEX$median_mat[which,])
+
+
+dataset_list$TEXP_GTEX$median_mat_colinfo__reduced <- unique(dataset_list$TEXP_GTEX$median_mat_colinfo[,c("sample_type","uberon_id")])
+temp_uberon_ids <- unique(dataset_list$TEXP_GTEX$median_mat_colinfo$uberon_id)
+temp_uberon_ids <- temp_uberon_ids[grep("EFO",temp_uberon_ids,invert = T)]
+dataset_list$TEXP_GTEX$median_mat_colinfo__reduced <- dataset_list$TEXP_GTEX$median_mat_colinfo__reduced[
+  match(temp_uberon_ids, dataset_list$TEXP_GTEX$median_mat_colinfo__reduced$uberon_id),
+]
+
+dataset_list$TEXP_GTEX$median_mat__reduced <- matrix(nrow = nrow(dataset_list$TEXP_GTEX$median_mat),
+                                                     ncol = length(temp_uberon_ids),
+                                                     dimnames = list(rownames(dataset_list$TEXP_GTEX$median_mat),
+                                                                     temp_uberon_ids))
+for(uberon_id in temp_uberon_ids){
+  print(uberon_id)
+  dataset_list$TEXP_GTEX$median_mat__reduced[,uberon_id] <- 
+    rowMedians(as.matrix(dataset_list$TEXP_GTEX$median_mat[,which(dataset_list$TEXP_GTEX$median_mat_colinfo$uberon_id == uberon_id)]))
+}
+# data_list <- foreach(i=1:nrow(query_table) , .errorhandling = "pass") %dopar% {
+#   
+# }
+dataset_list$TEXP_GTEX$median_mat <- dataset_list$TEXP_GTEX$median_mat__reduced
+dataset_list$TEXP_GTEX$median_mat_colinfo <- dataset_list$TEXP_GTEX$median_mat_colinfo__reduced
+gc()
+save.image()
+```
+
+```{r}
+temp <- tempfile()
+temp_url <- "https://storage.googleapis.com/adult-gtex/long-read-data/v9/long-read-RNA-seq/quantification_gencode.tpm.txt.gz"
+temp <- tempfile()
+download.file(temp_url,temp)
+
+dataset_list$LR_GTEX <- list()
+dataset_list$LR_GTEX$median_mat <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+dataset_list$LR_GTEX$median_mat_rowinfo <-  data.frame(transcript=dataset_list$LR_GTEX$median_mat$transcript)
+rownames(dataset_list$LR_GTEX$median_mat) <- dataset_list$LR_GTEX$median_mat$transcript
+dataset_list$LR_GTEX$median_mat$transcript <- NULL
+unlink(temp); rm(temp)
+
+
+
+temp <- tempfile() 
+temp_url <- "https://storage.googleapis.com/adult-gtex/annotations/v8/metadata-files/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"
+download.file(temp_url,temp)
+temp <- read.csv( temp, skip=0, header = TRUE, sep = "\t")
+temp <- unique(data.frame(colname=temp$SMTSD,uberon_id=temp$SMUBRID, SAMPID=temp$SAMPID))
+temp$sim_colname <- tolower(str_remove_all(temp$colname, "[ \\.\\-\\(\\)]"))
+temp$sim_idname <- str_remove(str_replace_all(temp$SAMPID, "-","\\."),"\\.SM\\..*")
+temp <- temp[match(str_remove(colnames(dataset_list$LR_GTEX$median_mat),"\\.SM\\..*"), temp$sim_idname),]
+which <- which(!is.na(temp$colname))
+temp <- temp[which,]
+dataset_list$LR_GTEX$median_mat <- dataset_list$LR_GTEX$median_mat[,which]
+temp$sim_idname <- temp
+
+dataset_list$LR_GTEX$median_mat_colinfo <- temp
+dataset_list$LR_GTEX$median_mat_colinfo$colname <- make.unique(dataset_list$LR_GTEX$median_mat_colinfo$colname) 
+colnames(dataset_list$LR_GTEX$median_mat) <- dataset_list$LR_GTEX$median_mat_colinfo$colname
+
+which_keep <- grep("EFO_",dataset_list$LR_GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$LR_GTEX$median_mat_colinfo <- dataset_list$LR_GTEX$median_mat_colinfo[which_keep,] 
+dataset_list$LR_GTEX$median_mat <- dataset_list$LR_GTEX$median_mat[,which_keep]
+which <- grep("UBERON:",dataset_list$LR_GTEX$median_mat_colinfo$uberon_id,invert = T)
+dataset_list$LR_GTEX$median_mat_colinfo$uberon_id[which] <- paste0("UBERON:",dataset_list$LR_GTEX$median_mat_colinfo$uberon_id[which])
+
+
+dataset_list$LR_GTEX$median_mat_rowinfo$gene_id <- gene_sets$genes_all_transcript_w_noncanon$ensembl_gene_id[
+  match(str_remove(dataset_list$LR_GTEX$median_mat_rowinfo$transcript,"\\..*"),
+        gene_sets$genes_all_transcript_w_noncanon$ensembl_transcript_id)]
+dataset_list$LR_GTEX$median_mat_rowinfo$gene_name <- gene_sets$genes_all_transcript_w_noncanon$external_gene_name[
+  match(str_remove(dataset_list$LR_GTEX$median_mat_rowinfo$transcript,"\\..*"),
+        gene_sets$genes_all_transcript_w_noncanon$ensembl_transcript_id)]
+which_keep <- which(!is.na(dataset_list$LR_GTEX$median_mat_rowinfo$gene_id))
+dataset_list$LR_GTEX$median_mat <- dataset_list$LR_GTEX$median_mat[which_keep,]
+dataset_list$LR_GTEX$median_mat_rowinfo <- dataset_list$LR_GTEX$median_mat_rowinfo[which_keep,]
+```
 
 
