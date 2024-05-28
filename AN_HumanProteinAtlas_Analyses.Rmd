@@ -9,7 +9,7 @@ output: html_document
 
 
 
-#Attempt1 - Plots of subcell distribution for all epigenes or just those that cause chromatinopathies.
+#Creating DF for ggplot2 - all genes labeled by epigene and subcell location
   #step1> pulling subcellular localization from HPA for all epigenes.
 ```{r}
 
@@ -35,101 +35,452 @@ library(scales)
   epigenes<- dplyr::left_join(epigenes,subcell, by="ensembl_gene_id")
 
 
-#(4) clean up to plot ALL unique epigenes: select columns needed only for visualization
-  PLOTall_eg<-epigenes%>%dplyr::select(ensembl_gene_id,
-                                             hgnc_symbol,
-                                             "Main.location",
-                                             "Additional.location",
-                                             "Extracellular.location")%>%unique()
-  PLOTall_eg<-PLOTall_eg%>%tidyr::replace_na(list("Main.location" = "No info available",
-                                                              "Additional.location" = "No info available",
-                                                              "Extracellular.location"="No info available"))
+#(4) master DF = thing we care about, encodes epigene info into df
+  df<-subcell[,c("ensembl_gene_id","Gene.name","Main.location","Additional.location")]
+  df$is_epigene<-FALSE
+  df$is_epigene[is.element(df$ensembl_gene_id,epigenes$ensembl_gene_id)]<-TRUE
+
+#(5) location DF = unlist and find unique subcell then concatinate unique locations across main and additional
+  #then save as a vector called cell_locs
+cell_locs<-unique(c(unlist(str_split(df$Main.location,";")),unlist(str_split(df$Additional.location,";"))))
   
+#(6) empty df (initializing df) = making plotting DFs
+  df_gg<-data.frame(ensembl_gene_id=character(),
+                    Gene.name=character(),
+                    loc=character(),
+                    is_epigene=logical(),
+                    is_main_loc=logical())
   
-  print(unique(PLOTall_eg$Main.location))
+#(7) filling df_gg with all genes all unnested subcellular locations (ready for plotting)
+  #singular= individual elements at current iteration of for look (for i)
+  #plural= what you're through
+  for(cell_loc in cell_locs){
+    which <- which(sapply(str_split(df$Main.location,";"),function(x){any(is.element(cell_loc,x))}))
+    if(length(which)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which],
+        Gene.name=df$Gene.name[which],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which],
+        is_main_loc=T)
+      df_gg <- rbind(df_gg ,temp_df)
+    }
+    
+    which_2 <-  which(sapply(str_split(df$Additional.location,";"),function(x){any(is.element(cell_loc,x))}))
+    which_2 <- setdiff(which_2, which)
+    if(length(which_2)!=0){
+      temp_df<-data.frame(
+        ensembl_gene_id=df$ensembl_gene_id[which_2],
+        Gene.name=df$Gene.name[which_2],
+        loc=cell_loc,
+        is_epigene=df$is_epigene[which_2],
+        is_main_loc=F)
+      df_gg <- rbind(df_gg, temp_df)
+    }
+  }
   
+ #(8) Label all the genes in nucleus 
+  df_gg$loc_is_nucleus <- is.element(df_gg$loc,
+                                  c("Nuclear membrane",
+                                    "Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim",
+                                    "Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"
+                                    ))
   
-#(5) clean up to plot ALL unique epigenes: collapse nucleus sub-compartments 
-  #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
-  #will collapse nucleus sub-compartments into "nucleus"
-  #ref https://www.r-bloggers.com/2022/07/how-to-replace-string-in-column-in-r/
+ #(9) Label all the genes in cytoplasm 
+  df_gg$loc_is_cytoplasm <- is.element(df_gg$loc,
+                                  c("Actin filaments",
+                                    "Cleavage furrow",
+                                    "Focal adhesion sites",
+                                    "Centriolar satellite",
+                                    "Centrosome",
+                                    "Aggresome",
+                                    "Cytoplasmic bodies",
+                                    "Cytosol",
+                                    "Rods & Rings",
+                                    "Intermediate filaments",
+                                    "Cytokinetic bridge",
+                                    "Microtubule ends",
+                                    "Microtubules",
+                                    "Midbody",
+                                    "Midbody ring",
+                                    "Mitotic spindle",
+                                    "Mitochondria"
+                                    ))
   
-  PLOTall_eg_nucleus<-PLOTall_eg
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Midbody;Nucleoplasm'] <- 'Midbody & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Vesicles'] <- 'Cytosol & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria'] <- 'Cytosol & Mitochondria' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Golgi apparatus'] <- 'Cytosol & Golgi apparatus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoplasm'] <- 'Mitochondria & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Vesicles'] <- 'Nucleus & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centriolar satellite;Nucleoplasm'] <- 'Centriolar satellite & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Actin filaments;Cytosol'] <- 'Actin filaments & Cytosol' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Vesicles'] <- 'Golgi apparatus & Vesicles' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nuclear bodies'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Microtubules;Nucleoli fibrillar center'] <- 'Microtubules & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Endoplasmic reticulum;Nucleoplasm'] <- 'Endoplasmic reticulum & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Nucleoplasm'] <- 'Golgi apparatus & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Plasma membrane'] <- 'Cytosol & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centrosome;Nucleoplasm'] <- 'Centrosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Kinetochore;Nuclear bodies'] <- 'Kinetochore & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cell Junctions;Nucleoplasm'] <- 'Cell Junctions & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli fibrillar center'] <- 'Mitotic chromosome & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm;Plasma membrane'] <- 'Cytosol, Nucleus, & Plasma membrane' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane;Nucleoplasm'] <- 'Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli;Nucleoplasm'] <- 'Cytosol & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoli'] <- 'Mitochondria & Nucleus'
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria;Nucleoplasm'] <- 'Cytosol, Mitochondria, & Nucleus' 
-  PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+
+  
+#(10) Label all the genes in the Endomembrane system
+  df_gg$loc_is_endoSys <- is.element(df_gg$loc,
+                                  c("Endoplasmic reticulum",
+                                    "Golgi apparatus",
+                                    "Cell Junctions",
+                                    "Plasma membrane",
+                                    "Endosomes",
+                                    "Lipid droplets",
+                                    "Lysosomes",
+                                    "Peroxisomes",
+                                    "Vesicles"
+                                    ))
+  
+
+#(11) create membership column to aggregate all info about subcell location
+  # Define the set of columns to search
+  columns_to_search <- c( "loc_is_nucleus","loc_is_cytoplasm","loc_is_endoSys")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership <- function(row) {
+    for (col in columns_to_search) {
+      if (row[col]) {
+        return(col)
+      }
+    }
+    return(NA)  # Return NA if no TRUE value is found in the specified columns
+  }
+  
+  # Apply the function row-wise to the dataframe
+  df_gg$membership <- apply(df_gg[columns_to_search], 1, find_membership)
 
   
   
-  print(unique(PLOTall_eg_nucleus$Main.location))
+#(12) fix membership annotations and epigene column for legend
+df_gg$membership[df_gg$membership == "loc_is_endoSys"] <- "Endomembrane System"
+df_gg$membership[df_gg$membership == "loc_is_cytoplasm"] <- "Cytoplasm"
+df_gg$membership[df_gg$membership == "loc_is_nucleus"] <- "Nucleus"
+
+
+###
+
+
+#(13) Label all the genes in nucleur SUB compartments 
+  df_gg$loc_is_nucMem <- is.element(df_gg$loc,
+                                  c("Nuclear membrane"))
+
+  df_gg$loc_is_nucleoli <- is.element(df_gg$loc,
+                                  c("Nucleoli",
+                                    "Nucleoli fibrillar center",
+                                    "Nucleoli rim"))
+
+  df_gg$loc_is_nucleoplasm <- is.element(df_gg$loc,
+                                  c("Kinetochore",
+                                    "Mitotic chromosome",
+                                    "Nuclear bodies",
+                                    "Nuclear speckles",
+                                    "Nucleoplasm"))
+
 
   
-#(6) plot location of ALL unique epigenes: collapse nucleus sub-compartments 
   
-barplot_subcell<-PLOTall_eg_nucleus %>% 
-    count(Main.location) %>% 
-    mutate(prop = n/sum(n)) %>% 
-    ggplot(aes(x = Main.location, y = prop)) +
-    geom_col(fill = "#FF7F24") +
-    geom_text(aes(label = percent(prop)), vjust = -1) +
-    coord_cartesian(clip = "off") +
-    scale_y_continuous(labels = percent_format()) +
-    coord_flip()+
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
-          axis.title = element_blank(),
-          plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+#(14) create membership2 column to aggregate all info about nucleus sub loc
+  # Define the set of columns to search
+  columns_to_search2 <- c( "loc_is_nucMem","loc_is_nucleoli","loc_is_nucleoplasm")
+  
+  # Define a function to search for TRUE values in the specified columns
+  find_membership2 <- function(row) {
+    if (all(!row[columns_to_search2])) {
+      return(NA)  # Return NA if all values in the row are FALSE
+    } else {
+      for (col in columns_to_search2) {
+        if (row[col]) {
+          return(col)
+        }
+      }
+      return(NA)  # Return NA if no TRUE value is found in the specified columns
+    }
+  }
+
+  # Apply the function row-wise to the dataframe
+  df_gg$membership2 <- apply(df_gg[columns_to_search2], 1, find_membership2)
 
   
-ggsave(  filename="TESTplot.jpeg",
-  plot = last_plot())
   
+#(15) fix membership2 annotations and epigene column for legend
+df_gg$membership2[df_gg$membership2 == "loc_is_nucMem"] <- "Nuclear Membrane"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoli"] <- "Nucleoli"
+df_gg$membership2[df_gg$membership2 == "loc_is_nucleoplasm"] <- "Nucleoplasm"
+
+
+
+  
+#(16) remove all rows with 'NA' in df_gg$loc
+  #Only rows where all values are complete (non-NA) will be retained.
+  #these are created when a gene has no alternative location.
+
+df_gg <- df_gg[complete.cases(df_gg$loc), ]
+
+
+
 
 #remove useless variables
-  rm(url,zip_file)
+  rm(url,zip_file,df,temp_df)
+  
+  
+  
+
+```
+
+
+#disordered domain plots 
+```{r}
+#(1)add disordered domain information to df_gg
+  dis_domain_stats<-read.csv(file="prot_dis_domain_stats.csv", row.names = 1)
+  dis_domain_stats<-dis_domain_stats%>%select("ensembl_gene_id", 
+                                              "Length",
+                                              "prop_disordered",
+                                              "max_disorder_length")
+  
+  df_gg_p<-dplyr::left_join(df_gg,dis_domain_stats,by="ensembl_gene_id")
+  df_gg_p<-unique(df_gg_p)
+  df_gg_p<-df_gg_p%>%drop_na(prop_disordered)
+
+###################################################################################
+##(2) Density plot 1: 1 plot per membership #########################
+
+plot_density1 <- function(data, membership) {
+  # Filter data based on membership
+  data <- data[data$membership == membership, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    geom_density(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("Density by epigene status & Membership:", membership))
+  
+  return(p)
+  
+}
+
+# Plot for "Endomembrane System" membership
+plot_density1(df_gg_p, "Endomembrane System")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Endomembrane.jpeg",
+    plot = last_plot())
+
+
+# Plot for "Cytoplasm" membership
+plot_density1(df_gg_p, "Cytoplasm")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Cytoplasm.jpeg",
+    plot = last_plot())
+
+# Plot for "Nucleus" membership
+plot_density1(df_gg_p, "Nucleus")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleus.jpeg",
+    plot = last_plot())
+
+###################################################################################
+##(3) Density plot2: 1 plot of all data #########################
+
+plot_density2 <- function(data) {
+  # Filter data for nuclear and epigene
+  nuclear_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == TRUE, ]
+  
+  # Filter data for nuclear and non-epigene
+  nuclear_non_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == FALSE, ]
+  
+  # Filter data for non-nuclear and epigene
+  non_nuclear_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == TRUE, ]
+  
+  # Filter data for non-nuclear and non-epigene
+  non_nuclear_non_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = nuclear_epigene, aes(x = prop_disordered, color = "Nuclear Epigene")) +
+    geom_density(data = nuclear_non_epigene, aes(x = prop_disordered, color = "Nuclear Non-Epigene")) +
+    geom_density(data = non_nuclear_epigene, aes(x = prop_disordered, color = "Non-Nuclear Epigene")) +
+    geom_density(data = non_nuclear_non_epigene, aes(x = prop_disordered, color = "Non-Nuclear Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Nuclear Epigene" = "#7b3294", 
+                                   "Nuclear Non-Epigene" = "#008837", 
+                                   "Non-Nuclear Epigene" = "#c2a5cf", 
+                                   "Non-Nuclear Non-Epigene" = "#a6dba0")) +
+    theme_minimal() +
+    ggtitle("Density Distributions by Location and Epigene Status")
+  
+  return(p)
+}
+
+# Plot density distributions
+plot_density2(df_gg_p)
+  ggsave(filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi X Nuc-v-nonNuc_disorder-prop.jpeg",
+    plot = last_plot())
+
+###################################################################################
+##(4) Density plot3: 1 plot per membership2 #########################
+
+plot_density3 <- function(data, membership2) {
+  # Filter data based on membership2
+  data <- data[data$membership2 == membership2, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    geom_density(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    geom_density(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Density") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("Density by epigene status & Membership:", membership2))
+  
+  return(p)
+  
+}
+
+# Plot for "Nuclear Membrane" membership2
+plot_density3(df_gg_p, "Nuclear Membrane")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_NuclearMembrane.jpeg",
+    plot = last_plot())
+
+
+# Plot for "Nucleoli" membership2
+plot_density3(df_gg_p, "Nucleoli")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleoli.jpeg",
+    plot = last_plot())
+
+# Plot for "Nucleoplasm" membership2
+plot_density3(df_gg_p, "Nucleoplasm")
+  ggsave(  filename="./_MyResults/240414_DENSITY_Epi-v-NonEpi_disorder-prop_Nucleoplasm.jpeg",
+    plot = last_plot())
+  
+  
+  
+###################################################################################
+##(5) ecdf plot1: 1 plot per membership #########################
+
+plot_ecdf1 <- function(data, membership) {
+  # Filter data based on membership
+  data <- data[data$membership == membership, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    stat_ecdf(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    stat_ecdf(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Cumulative Probability") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("ECDF by epigene status & Membership:", membership))
+  
+  return(p)
+  
+}
+
+# ECDF Plot for "Endomembrane System" membership
+plot_ecdf1(df_gg_p, "Endomembrane System")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Endomembrane.jpeg",
+    plot = last_plot())
+
+
+# ECDF Plot for "Cytoplasm" membership
+plot_ecdf1(df_gg_p, "Cytoplasm")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Cytoplasm.jpeg",
+    plot = last_plot())
+
+# ECDF Plot for "Nucleus" membership
+plot_ecdf1(df_gg_p, "Nucleus")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Nucleus.jpeg",
+    plot = last_plot())
+
+
+
+###################################################################################
+##(6) ECDF plot2: 1 plot of all data #########################
+
+plot_ecdf2 <- function(data) {
+  # Filter data for nuclear and epigene
+  nuclear_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == TRUE, ]
+  
+  # Filter data for nuclear and non-epigene
+  nuclear_non_epigene <- data[data$loc_is_nucleus == TRUE & data$is_epigene == FALSE, ]
+  
+  # Filter data for non-nuclear and epigene
+  non_nuclear_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == TRUE, ]
+  
+  # Filter data for non-nuclear and non-epigene
+  non_nuclear_non_epigene <- data[data$loc_is_nucleus == FALSE & data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    stat_ecdf(data = nuclear_epigene, aes(x = prop_disordered, color = "Nuclear Epigene")) +
+    stat_ecdf(data = nuclear_non_epigene, aes(x = prop_disordered, color = "Nuclear Non-Epigene")) +
+    stat_ecdf(data = non_nuclear_epigene, aes(x = prop_disordered, color = "Non-Nuclear Epigene")) +
+    stat_ecdf(data = non_nuclear_non_epigene, aes(x = prop_disordered, color = "Non-Nuclear Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Cumulative Probability") +
+    scale_color_manual(values = c("Nuclear Epigene" = "#7b3294", 
+                                   "Nuclear Non-Epigene" = "#008837", 
+                                   "Non-Nuclear Epigene" = "#c2a5cf", 
+                                   "Non-Nuclear Non-Epigene" = "#a6dba0")) +
+    theme_minimal() +
+    ggtitle("ECDF by Location and Epigene Status")
+  
+  return(p)
+}
+
+# ECDF Plot density distributions
+plot_ecdf2(df_gg_p)
+  ggsave(filename="./_MyResults/240414_ECDF_Epi-v-NonEpi X Nuc-v-nonNuc_disorder-prop.jpeg",
+    plot = last_plot())
+
+
+###################################################################################
+##(7) ecdf plot3: 1 plot per membership2 #########################
+
+plot_ecdf3 <- function(data, membership2) {
+  # Filter data based on membership2
+  data <- data[data$membership2 == membership2, ]
+  
+  # Filter data for TRUE and FALSE is_epigene values
+  true_data <- data[data$is_epigene == TRUE, ]
+  false_data <- data[data$is_epigene == FALSE, ]
+  
+  # Create ggplot object
+  p <- ggplot() +
+    stat_ecdf(data = true_data, aes(x = prop_disordered, color = "Epigene")) +
+    stat_ecdf(data = false_data, aes(x = prop_disordered, color = "Non-Epigene")) +
+    labs(x = "Proportion of Disordered", y = "Cumulative Probability") +
+    scale_color_manual(values = c("Epigene" = "#7b3294", "Non-Epigene" = "#008837")) +
+    theme_minimal() +
+    ggtitle(paste("ECDF by epigene status & Membership:", membership2))
+  
+  return(p)
+  
+}
+
+# ECDF Plot for "Nuclear Membrane" membership2
+plot_ecdf3(df_gg_p, "Nuclear Membrane")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_NuclearMembrane.jpeg",
+    plot = last_plot())
+
+
+# ECDF Plot for "Nucleoli" membership2
+plot_ecdf3(df_gg_p, "Nucleoli")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Nucleoli.jpeg",
+    plot = last_plot())
+
+# ECDF Plot for "Nucleoplasm" membership2
+plot_ecdf3(df_gg_p, "Nucleoplasm")
+  ggsave(  filename="./_MyResults/240414_ECDF_Epi-v-NonEpi_disorder-prop_Nucleoplasm.jpeg",
+    plot = last_plot())
+  
+  
+
 
 ```
 
@@ -137,43 +488,293 @@ ggsave(  filename="TESTplot.jpeg",
 
 
 
-#Attempt1 - pulling protein domains from HPA for all epigenes.
+######### Random NOTES ############## 
+#Bargraph of all genes vs epigenes across all locations
+```{r}
+# 
+# library(ggplot2)
+# library(dplyr)
+# library(tidyr)
+# library(scales)
+# 
+# # Convert logical to numeric (TRUE = 1, FALSE = 0)
+# df_gg$is_epigene <- as.numeric(df_gg$is_epigene)
+# 
+# # Calculate counts and proportions of epigenes and non-epigenes for each location
+# prop_df <- df_gg %>%
+#   group_by(loc) %>%
+#   summarise(Epigenes = sum(is_epigene == 1),
+#             Non_Epigenes = sum(is_epigene == 0)) %>%
+#   mutate(prop_Epigenes = Epigenes / sum(Epigenes),
+#          prop_Non_Epigenes = Non_Epigenes / sum(Non_Epigenes))
+# 
+# # Plot
+# barplot_subcell <- ggplot(prop_df, aes(x = loc)) +
+#   geom_col(aes(y = prop_Epigenes, fill = "Epigenes"), position = "dodge", width = 0.4) +
+#   geom_col(aes(y = prop_Non_Epigenes, fill = "Non-Epigenes"), position = "dodge", width = 0.4) +
+#   scale_fill_manual(values = c("Epigenes" = "#FF7F24", "Non-Epigenes" = "#3CB371")) +
+#   # geom_text(aes(y = prop_Epigenes, label = percent(prop_Epigenes), group = 1), vjust = -0.5, position = position_dodge(width = 0.4)) +
+#   # geom_text(aes(y = prop_Non_Epigenes, label = percent(prop_Non_Epigenes), group = 2), vjust = -0.5, position = position_dodge(width = 0.4)) +
+#   scale_y_continuous(labels = percent_format()) +
+#   coord_flip() +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+#         axis.title = element_blank(),
+#         plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+# 
+# barplot_subcell
+# 
+# 
+# ggsave(  filename="TESTplot2_all.jpeg",
+#   plot = last_plot())
+
+
+################################################################################
+#(1) all genes
+
+# barplot_subcell<-df_gg %>%
+#     count(loc) %>%
+#     mutate(prop = n/sum(n)) %>%
+#     ggplot(aes(x = loc, y = prop)) +
+#     geom_col(fill = "#FF7F24") +
+#     geom_text(aes(label = percent(prop)), vjust = -1) +
+#     coord_cartesian(clip = "off") +
+#     scale_y_continuous(labels = percent_format()) +
+#     coord_flip()+
+#     theme_minimal() +
+#     theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
+#           axis.title = element_blank(),
+#           plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+# barplot_subcell
+# 
+# ggsave(  filename="TESTplot.jpeg",
+#   plot = last_plot())
+#   
+
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene, is_main_loc) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count..),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# ggplot(df_gg, aes(y=loc,fill=paste0(is_epigene) ))+
+#   geom_bar(data=df_gg[df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg[!df_gg$is_epigene & df_gg$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ is_epigene, scales = "free")
+# 
+# 
+# df_gg2 <- merge(df_gg,prot_dis_domain_stats)
+# 
+# 
+# 
+# df_gg2$prop_disordered_gt_p3 <- df_gg2$max_disorder_length > 140
+# ggplot(df_gg2, aes(y=loc,fill=paste0(prop_disordered_gt_p3,is_epigene) ))+
+#   geom_bar(data=df_gg2[df_gg2$is_epigene & df_gg2$prop_disordered_gt_p3 & df_gg2$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   geom_bar(data=df_gg2[!df_gg2$is_epigene & df_gg2$prop_disordered_gt_p3 & df_gg2$loc_is_nucleus,], aes(x=..count../sum(..count..)),position = "dodge")+
+#   facet_grid(. ~ paste0(prop_disordered_gt_p3,is_epigene), scales = "free")
+
+
+
+
+
+```
+
+
+
+
+#key of subcell locations
 ```{r}
 
+##########  Nucleus  #################
+### Nuclear Membrane
+  ##"Nuclear membrane"
 
-# Install and load the required packages
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install("AnnotationHub")
-BiocManager::install("biomaRt")
+### Nucleoli
+  ##"Nucleoli"
+  ##"Nucleoli fibrillar center"
+  ##"Nucleoli rim"
 
-library(AnnotationHub)
-library(biomaRt)
+### Nucleoplasm
+  ##"Kinetochore"
+  ##"Mitotic chromosome"
+  ##"Nuclear bodies"
+  ##"Nuclear speckles"
+  ##"Nucleoplasm"
 
-# Use the appropriate Ensembl database for human genes
-ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+##########  cytoplasm  #################
+### Actin Filaments
+  ##"Actin filaments"
+  ##"Cleavage furrow"
+  ##"Focal adhesion sites"
 
-# Get the list of all protein-coding genes
-genes <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),
-               filters = "biotype",
-               values = "protein_coding",
-               mart = ensembl)
+### Centrosome
+  ##"Centriolar satellite"
+  ##"Centrosome"
 
-# Create an AnnotationHub object for Pfam annotations
-dir.create(path = "~/.AnnotationHub")
-options(AnnotationHub.cache = "~/.AnnotationHub")
+### Cytosol
+  ##"Aggresome"
+  ##"Cytoplasmic bodies"
+  ##"Cytosol"
+  ##"Rods & Rings"
 
-ahub <- AnnotationHub()
+### Intermediate Filaments
+  ##"Intermediate filaments"
 
-# Retrieve Pfam annotations
-pfam_key <- "AH73911"
-pfam_annotations <- query(ahub, keys = genes$ensembl_gene_id, columns = c("PFAM_ID", "GENEID"), keytype = "ENSEMBL")
-pfam_annotations <- merge(genes, pfam_annotations, by.x = "ensembl_gene_id", by.y = "QUERYID", all.x = TRUE)
+### Microtubules
+  ##"Cytokinetic bridge"
+  ##"Microtubule ends"
+  ##"Microtubules"
+  ##"Midbody"
+  ##"Midbody ring"
+  ##"Mitotic spindle"
 
-# View the resulting data frame
-print(pfam_annotations)
+### Mitochondria
+  ##"Mitochondria"
+
+##########  Endomembrane system   #################
+## Endoplasmic Reticulum
+  ##Endoplasmic reticulum
+
+## Golgi Apparatus
+  ##Golgi apparatus
+
+## Plasma Membrane
+  ##Cell Junctions
+  ##Plasma membrane
+
+## Vesicles
+  ##Endosomes
+  ##Lipid droplets
+  ##Lysosomes
+  ##Peroxisomes
+  ##Vesicles
+
+
 
 
 ```
+
+
+#random, 1st attempt, collapsed nuclei terms
+```{r}
+
+# #(4) clean up to plot ALL unique epigenes: select columns needed only for visualization
+#   PLOTall_eg<-epigenes%>%dplyr::select(ensembl_gene_id,
+#                                              hgnc_symbol,
+#                                              "Main.location",
+#                                              "Additional.location",
+#                                              "Extracellular.location")%>%unique()
+#   PLOTall_eg<-PLOTall_eg%>%tidyr::replace_na(list("Main.location" = "No info available",
+#                                                               "Additional.location" = "No info available",
+#                                                               "Extracellular.location"="No info available"))
+#   
+#   
+#   print(unique(PLOTall_eg$Main.location))
+#    
+# #(5) clean up to plot ALL unique epigenes: collapse nucleus sub-compartments 
+#   #57 unique main.locations are found in "PLOTall_eg", but a majority are related to nucleus subcompartments.
+#   #will collapse nucleus sub-compartments into "nucleus"
+#   #ref https://www.r-bloggers.com/2022/07/how-to-replace-string-in-column-in-r/
+#   
+#   PLOTall_eg_nucleus<-PLOTall_eg
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Midbody;Nucleoplasm'] <- 'Midbody & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Vesicles'] <- 'Cytosol & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria'] <- 'Cytosol & Mitochondria' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Golgi apparatus'] <- 'Cytosol & Golgi apparatus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoplasm'] <- 'Mitochondria & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Vesicles'] <- 'Nucleus & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centriolar satellite;Nucleoplasm'] <- 'Centriolar satellite & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Actin filaments;Cytosol'] <- 'Actin filaments & Cytosol' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli;Nucleoli rim'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Vesicles'] <- 'Golgi apparatus & Vesicles' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nuclear bodies'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Microtubules;Nucleoli fibrillar center'] <- 'Microtubules & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Endoplasmic reticulum;Nucleoplasm'] <- 'Endoplasmic reticulum & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli rim'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Golgi apparatus;Nucleoplasm'] <- 'Golgi apparatus & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Plasma membrane'] <- 'Cytosol & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli fibrillar center;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear speckles'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoplasm;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nucleoli'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Nucleoli;Nucleoli rim;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Centrosome;Nucleoplasm'] <- 'Centrosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Kinetochore;Nuclear bodies'] <- 'Kinetochore & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cell Junctions;Nucleoplasm'] <- 'Cell Junctions & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitotic chromosome;Nucleoli fibrillar center'] <- 'Mitotic chromosome & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoplasm;Plasma membrane'] <- 'Cytosol, Nucleus, & Plasma membrane' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear membrane;Nucleoplasm'] <- 'Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Nucleoli;Nucleoplasm'] <- 'Cytosol & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Mitochondria;Nucleoli'] <- 'Mitochondria & Nucleus'
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Cytosol;Mitochondria;Nucleoplasm'] <- 'Cytosol, Mitochondria, & Nucleus' 
+#   PLOTall_eg_nucleus$Main.location[PLOTall_eg_nucleus$Main.location == 'Nuclear bodies;Plasma membrane'] <- 'Nucleus & Plasma membrane' 
+# 
+#   
+#   
+#   print(unique(PLOTall_eg_nucleus$Main.location))
+
+#   
+# #(6) plot location of ALL unique epigenes: collapse nucleus sub-compartments 
+#   
+# barplot_subcell<-PLOTall_eg_nucleus %>% 
+#     count(Main.location) %>% 
+#     mutate(prop = n/sum(n)) %>% 
+#     ggplot(aes(x = Main.location, y = prop)) +
+#     geom_col(fill = "#FF7F24") +
+#     geom_text(aes(label = percent(prop)), vjust = -1) +
+#     coord_cartesian(clip = "off") +
+#     scale_y_continuous(labels = percent_format()) +
+#     coord_flip()+
+#     theme_minimal() +
+#     theme(axis.text.x = element_text(angle=45, hjust=1, vjust = 1),
+#           axis.title = element_blank(),
+#           plot.margin = margin(t = 20, r = 10, b = 10, l = 10))
+# 
+#   
+# ggsave(  filename="TESTplot.jpeg",
+#   plot = last_plot())
+  
+
+```
+
+
+
+
+
 
