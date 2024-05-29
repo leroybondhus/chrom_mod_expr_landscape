@@ -346,22 +346,31 @@ count_corr <- function(corr_mat, lower_bound, upper_bound){
 
 # filter for tissues with at least 5 timepoints
 # structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+
+gene_universe <- rows_meta$ensembl_gene_id # protein-coding genes in brainspan
+
+chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+matched_modifiers <- which(is.element(rows_meta$ensembl_gene_id, chromatin_modifiers))
+
 chrom_mod_corr <- corr_matrix[matched_modifiers, ]
 
-# filtered_timepoints <- num_struct_timepoints[which(is.element(colnames(corr_matrix), structure_names))]
+# find genes associated with GO term cell cycle - GO:0007049
+cell_cycle_GO <- c('GO:0007049',ontos$go$ont$descendants[[which(ontos$go$ont$id=='GO:0007049')]])
+cell_cycle_go_associated_genes <- unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, cell_cycle_GO))])
+brainspan_cell_cycle_genes <- rows_meta$ensembl_gene_id[which(is.element(rows_meta$ensembl_gene_id, cell_cycle_go_associated_genes))]
 
 # modify threshold cutoffs for correlation
 upper = 0.7
 lower = 0.3
 
-epigenes_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper),
-low_corr = count_corr(chrom_mod_corr, -lower, lower), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
-
-corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(corr_matrix, upper, 1.0), modest_pos_corr = count_corr(corr_matrix, lower, upper), low_corr = count_corr(corr_matrix, -lower, lower), modest_neg_corr = count_corr(corr_matrix, -upper, -lower), high_neg_corr = count_corr(corr_matrix, -1, -upper))
-
-write.csv(corr_summary_stats, paste0(dirs$results_embryo, date, "_all_genes_corr_summary_stats.csv"))
-
-write.csv(epigenes_corr_summary_stats, paste0(dirs$results_embryo, date, "_epigenes_corr_summary_stats.csv"))
+# epigenes_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(chrom_mod_corr, upper, 1.0), modest_pos_corr = count_corr(chrom_mod_corr, lower, upper),
+# low_corr = count_corr(chrom_mod_corr, -lower, lower), modest_neg_corr = count_corr(chrom_mod_corr, -upper, -lower), high_neg_corr = count_corr(chrom_mod_corr, -1, -upper))
+# 
+# corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(corr_matrix, upper, 1.0), modest_pos_corr = count_corr(corr_matrix, lower, upper), low_corr = count_corr(corr_matrix, -lower, lower), modest_neg_corr = count_corr(corr_matrix, -upper, -lower), high_neg_corr = count_corr(corr_matrix, -1, -upper))
+# 
+# write.csv(corr_summary_stats, paste0(dirs$results_embryo, date, "_all_genes_corr_summary_stats.csv"))
+# 
+# write.csv(epigenes_corr_summary_stats, paste0(dirs$results_embryo, date, "_epigenes_corr_summary_stats.csv"))
 
 # epigenes_corr_df <- melt(epigenes_corr_summary_stats[,3:7], value.name = "count")
 
@@ -389,84 +398,223 @@ write.csv(epigenes_corr_summary_stats, paste0(dirs$results_embryo, date, "_epige
 # ggsave(paste0(dirs$results_embryo, date, "_", "all_genes_corr_summary_boxplots.png"), plot = all_genes_corr_gg, width = 10, height = 8)
   
 
-# partition corr based on neural specificity
-neural_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
-non_neural_spec_corr <- corr_matrix[which(!is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
+# # partition corr based on neural specificity
+# neural_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
+# non_neural_spec_corr <- corr_matrix[which(!is.element(rows_meta$ensembl_gene_id, all_nervous_spec_genes)), ]
+# 
+# neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(neural_spec_corr, lower, upper),
+# low_corr = count_corr(neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(neural_spec_corr, -1, -upper))
+# 
+# non_neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(non_neural_spec_corr, lower, upper),
+# low_corr = count_corr(non_neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(non_neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(non_neural_spec_corr, -1, -upper))
+# 
+# neural_spec_corr_df <- melt(neural_spec_corr_summary_stats[,3:7], value.name = "count")
+# non_neural_spec_corr_df <- melt(non_neural_spec_corr_summary_stats[,3:7], value.name = "count")
+# 
+# neural_spec_corr_gg <- ggplot() + 
+#   geom_boxplot(data=neural_spec_corr_df, aes(x = variable, y = count, color = 'neural_spec')) + 
+#   geom_boxplot(data=non_neural_spec_corr_df, aes(x = variable, y = count, color = 'non_neural_spec')) + 
+#   geom_point(data=neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'neural_spec')) +
+#   geom_point(data=non_neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'non_neural_spec')) +
+#   theme_bw() +
+#   # geom_jitter(color="black", size=0.4, alpha=0.9) + 
+#   ggtitle('neural specificity correlation summary counts') +
+#   labs(x = "correlation cutoffs", y = "count")
+# 
+# ggsave(paste0(dirs$results_embryo, date, "_", "neural_spec_corr_summary_boxplots.png"), plot = neural_spec_corr_gg, width = 10, height = 8)
 
-neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(neural_spec_corr, lower, upper),
-low_corr = count_corr(neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(neural_spec_corr, -1, -upper))
 
-non_neural_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_neural_spec_corr, upper, 1.0), modest_pos_corr = count_corr(non_neural_spec_corr, lower, upper),
-low_corr = count_corr(non_neural_spec_corr, -lower, lower), modest_neg_corr = count_corr(non_neural_spec_corr, -upper, -lower), high_neg_corr = count_corr(non_neural_spec_corr, -1, -upper))
-
-neural_spec_corr_df <- melt(neural_spec_corr_summary_stats[,3:7], value.name = "count")
-non_neural_spec_corr_df <- melt(non_neural_spec_corr_summary_stats[,3:7], value.name = "count")
-
-neural_spec_corr_gg <- ggplot() + 
-  geom_boxplot(data=neural_spec_corr_df, aes(x = variable, y = count, color = 'neural_spec')) + 
-  geom_boxplot(data=non_neural_spec_corr_df, aes(x = variable, y = count, color = 'non_neural_spec')) + 
-  geom_point(data=neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'neural_spec')) +
-  geom_point(data=non_neural_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'non_neural_spec')) +
-  theme_bw() +
-  # geom_jitter(color="black", size=0.4, alpha=0.9) + 
-  ggtitle('neural specificity correlation summary counts') +
-  labs(x = "correlation cutoffs", y = "count")
-
-ggsave(paste0(dirs$results_embryo, date, "_", "neural_spec_corr_summary_boxplots.png"), plot = neural_spec_corr_gg, width = 10, height = 8)
-
-
-# partition epigenes corr based on neural specificity
+# partition epigenes corr based on neural specificity + cell cycle annotation
+# red -- all other epigenes
 non_nervous_spec_epigenes <- chromatin_modifiers[which(!is.element(chromatin_modifiers, nervous_spec_epigenes))]
 
+cell_cycle_non_nervous_spec_epigenes <- non_nervous_spec_epigenes[which(is.element(non_nervous_spec_epigenes, brainspan_cell_cycle_genes))]
+
+non_cell_cycle_non_nervous_spec_epigenes <- non_nervous_spec_epigenes[which(!is.element(non_nervous_spec_epigenes, brainspan_cell_cycle_genes))]
+
+# blue -- all neuro specific non-epigenes
 nervous_spec_non_epigenes <- all_nervous_spec_genes[which(!is.element(all_nervous_spec_genes, chromatin_modifiers))]
 
-# "gold" -- all other non-epigenes
+cell_cycle_nervous_spec_non_epigenes <- nervous_spec_non_epigenes[which(is.element(nervous_spec_non_epigenes, brainspan_cell_cycle_genes))]
+
+non_cell_cycle_nervous_spec_non_epigenes <- nervous_spec_non_epigenes[which(!is.element(nervous_spec_non_epigenes, brainspan_cell_cycle_genes))]
+
+# gold -- all other non-epigenes
 not_nervous_spec_non_epigenes <- rows_meta$ensembl_gene_id[which(!is.element(rows_meta$ensembl_gene_id, c(all_nervous_spec_genes, chromatin_modifiers)))]
 
+cell_cycle_not_nervous_spec_non_epigenes <- not_nervous_spec_non_epigenes[which(is.element(not_nervous_spec_non_epigenes, brainspan_cell_cycle_genes))]
+
+non_cell_cycle_not_nervous_spec_non_epigenes <- not_nervous_spec_non_epigenes[which(!is.element(not_nervous_spec_non_epigenes, brainspan_cell_cycle_genes))]
+
+# purple -- all neuro specific epigenes
+cell_cycle_nervous_spec_epigenes <- nervous_spec_epigenes[which(is.element(nervous_spec_epigenes, brainspan_cell_cycle_genes))]
+
+non_cell_cycle_nervous_spec_epigenes <- nervous_spec_epigenes[which(!is.element(nervous_spec_epigenes, brainspan_cell_cycle_genes))]
+
+
+# CORR MATRICES
 not_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, not_nervous_spec_non_epigenes)), ]
+
+cell_cycle_not_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, cell_cycle_not_nervous_spec_non_epigenes)), ]
+
+non_cell_cycle_not_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_cell_cycle_not_nervous_spec_non_epigenes)), ]
 
 nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_non_epigenes)), ]
 
+cell_cycle_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, cell_cycle_nervous_spec_non_epigenes)), ]
+
+non_cell_cycle_nervous_spec_non_epi_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_cell_cycle_nervous_spec_non_epigenes)), ]
+
 epi_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, nervous_spec_epigenes)), ]
+
+cell_cycle_epi_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, cell_cycle_nervous_spec_epigenes)), ]
+
+non_cell_cycle_epi_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_cell_cycle_nervous_spec_epigenes)), ]
 
 epi_non_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_nervous_spec_epigenes)), ]
 
+cell_cycle_epi_non_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, cell_cycle_non_nervous_spec_epigenes)), ]
+
+non_cell_cycle_epi_non_nervous_spec_corr <- corr_matrix[which(is.element(rows_meta$ensembl_gene_id, non_cell_cycle_non_nervous_spec_epigenes)), ]
+
+# SUMMARY STATS
 not_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(not_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(not_nervous_spec_non_epi_corr, lower, upper),
 low_corr = count_corr(not_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(not_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(not_nervous_spec_non_epi_corr, -1, -upper))
+
+cell_cycle_not_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(cell_cycle_not_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(cell_cycle_not_nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(cell_cycle_not_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(cell_cycle_not_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(cell_cycle_not_nervous_spec_non_epi_corr, -1, -upper))
+
+non_cell_cycle_not_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_cell_cycle_not_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(non_cell_cycle_not_nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(non_cell_cycle_not_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(non_cell_cycle_not_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(non_cell_cycle_not_nervous_spec_non_epi_corr, -1, -upper))
 
 nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(nervous_spec_non_epi_corr, lower, upper),
 low_corr = count_corr(nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(nervous_spec_non_epi_corr, -1, -upper))
 
+cell_cycle_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(cell_cycle_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(cell_cycle_nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(cell_cycle_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(cell_cycle_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(cell_cycle_nervous_spec_non_epi_corr, -1, -upper))
+
+non_cell_cycle_nervous_spec_non_epi_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_cell_cycle_nervous_spec_non_epi_corr, upper, 1.0), modest_pos_corr = count_corr(non_cell_cycle_nervous_spec_non_epi_corr, lower, upper),
+low_corr = count_corr(non_cell_cycle_nervous_spec_non_epi_corr, -lower, lower), modest_neg_corr = count_corr(non_cell_cycle_nervous_spec_non_epi_corr, -upper, -lower), high_neg_corr = count_corr(non_cell_cycle_nervous_spec_non_epi_corr, -1, -upper))
+
 epi_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(epi_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(epi_nervous_spec_corr, lower, upper),
 low_corr = count_corr(epi_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(epi_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(epi_nervous_spec_corr, -1, -upper))
+
+cell_cycle_epi_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(cell_cycle_epi_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(cell_cycle_epi_nervous_spec_corr, lower, upper),
+low_corr = count_corr(cell_cycle_epi_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(cell_cycle_epi_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(cell_cycle_epi_nervous_spec_corr, -1, -upper))
+
+non_cell_cycle_epi_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_cell_cycle_epi_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(non_cell_cycle_epi_nervous_spec_corr, lower, upper),
+low_corr = count_corr(non_cell_cycle_epi_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(non_cell_cycle_epi_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(non_cell_cycle_epi_nervous_spec_corr, -1, -upper))
 
 epi_non_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(epi_non_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(epi_non_nervous_spec_corr, lower, upper),
 low_corr = count_corr(epi_non_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(epi_non_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(epi_non_nervous_spec_corr, -1, -upper))
 
+cell_cycle_epi_non_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(cell_cycle_epi_non_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(cell_cycle_epi_non_nervous_spec_corr, lower, upper),
+low_corr = count_corr(cell_cycle_epi_non_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(cell_cycle_epi_non_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(cell_cycle_epi_non_nervous_spec_corr, -1, -upper))
+
+non_cell_cycle_epi_non_nervous_spec_corr_summary_stats <- data.frame(structure_names, num_struct_timepoints, high_pos_corr = count_corr(non_cell_cycle_epi_non_nervous_spec_corr, upper, 1.0), modest_pos_corr = count_corr(non_cell_cycle_epi_non_nervous_spec_corr, lower, upper),
+low_corr = count_corr(non_cell_cycle_epi_non_nervous_spec_corr, -lower, lower), modest_neg_corr = count_corr(non_cell_cycle_epi_non_nervous_spec_corr, -upper, -lower), high_neg_corr = count_corr(non_cell_cycle_epi_non_nervous_spec_corr, -1, -upper))
+
+
+# SUMMARY DATA FRAMES
 epi_nervous_spec_corr_counts_df <- melt(epi_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_nervous_spec_corr), value.name = "count")
+
+cell_cycle_epi_nervous_spec_corr_counts_df <- melt(cell_cycle_epi_nervous_spec_corr_summary_stats[,3:7]/nrow(cell_cycle_epi_nervous_spec_corr), value.name = "count")
+
+non_cell_cycle_epi_nervous_spec_corr_counts_df <- melt(non_cell_cycle_epi_nervous_spec_corr_summary_stats[,3:7]/nrow(non_cell_cycle_epi_nervous_spec_corr), value.name = "count")
 
 epi_non_nervous_spec_corr_counts_df <- melt(epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(epi_non_nervous_spec_corr), value.name = "count")
 
+cell_cycle_epi_non_nervous_spec_corr_counts_df <- melt(cell_cycle_epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(cell_cycle_epi_non_nervous_spec_corr), value.name = "count")
+
+non_cell_cycle_epi_non_nervous_spec_corr_counts_df <- melt(non_cell_cycle_epi_non_nervous_spec_corr_summary_stats[,3:7]/nrow(non_cell_cycle_epi_non_nervous_spec_corr), value.name = "count")
+
 nervous_spec_non_epi_spec_corr_counts_df <- melt(nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(nervous_spec_non_epi_corr), value.name = "count")
+
+cell_cycle_nervous_spec_non_epi_spec_corr_counts_df <- melt(cell_cycle_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(cell_cycle_nervous_spec_non_epi_corr), value.name = "count")
+
+non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df <- melt(non_cell_cycle_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(non_cell_cycle_nervous_spec_non_epi_corr), value.name = "count")
 
 not_nervous_spec_non_epi_corr_counts_df <- melt(not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(not_nervous_spec_non_epi_corr), value.name = "count")
 
+cell_cycle_not_nervous_spec_non_epi_corr_counts_df <- melt(cell_cycle_not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(cell_cycle_not_nervous_spec_non_epi_corr), value.name = "count")
+
+non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df <- melt(non_cell_cycle_not_nervous_spec_non_epi_corr_summary_stats[,3:7]/nrow(non_cell_cycle_not_nervous_spec_non_epi_corr), value.name = "count")
+
+# ANNOTATIONS FOR PLOTTING
 epi_nervous_spec_corr_counts_df$gene_type <- 'all_neuro_specific_epigenes'
+cell_cycle_epi_nervous_spec_corr_counts_df$gene_type <- 'all_neuro_specific_epigenes'
+non_cell_cycle_epi_nervous_spec_corr_counts_df$gene_type <- 'all_neuro_specific_epigenes'
+
 epi_non_nervous_spec_corr_counts_df$gene_type <- 'all_other_epigenes'
+cell_cycle_epi_non_nervous_spec_corr_counts_df$gene_type <- 'all_other_epigenes'
+non_cell_cycle_epi_non_nervous_spec_corr_counts_df$gene_type <- 'all_other_epigenes'
+
 nervous_spec_non_epi_spec_corr_counts_df$gene_type <- 'all_neuro_specific_non_epigenes'
+cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$gene_type <- 'all_neuro_specific_non_epigenes'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$gene_type <- 'all_neuro_specific_non_epigenes'
+
 not_nervous_spec_non_epi_corr_counts_df$gene_type <- 'all_other_non_epigenes'
+cell_cycle_not_nervous_spec_non_epi_corr_counts_df$gene_type <- 'all_other_non_epigenes'
+non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df$gene_type <- 'all_other_non_epigenes'
 
 epi_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+cell_cycle_epi_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+non_cell_cycle_epi_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+
 epi_non_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+cell_cycle_epi_non_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+non_cell_cycle_epi_non_nervous_spec_corr_counts_df$is_chrom <- 'is_chrom'
+
 nervous_spec_non_epi_spec_corr_counts_df$is_chrom <- 'not_chrom'
+cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_chrom <- 'not_chrom'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_chrom <- 'not_chrom'
+
 not_nervous_spec_non_epi_corr_counts_df$is_chrom <- 'not_chrom'
+cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_chrom <- 'not_chrom'
+non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_chrom <- 'not_chrom'
 
 epi_nervous_spec_corr_counts_df$is_spec <- 'is_spec'
-epi_non_nervous_spec_corr_counts_df$is_spec <- 'not_spec'
-nervous_spec_non_epi_spec_corr_counts_df$is_spec <- 'is_spec'
-not_nervous_spec_non_epi_corr_counts_df$is_spec <- 'not_spec'
+cell_cycle_epi_nervous_spec_corr_counts_df$is_spec <- 'is_spec'
+non_cell_cycle_epi_nervous_spec_corr_counts_df$is_spec <- 'is_spec'
 
+epi_non_nervous_spec_corr_counts_df$is_spec <- 'not_spec'
+cell_cycle_epi_non_nervous_spec_corr_counts_df$is_spec <- 'not_spec'
+non_cell_cycle_epi_non_nervous_spec_corr_counts_df$is_spec <- 'not_spec'
+
+nervous_spec_non_epi_spec_corr_counts_df$is_spec <- 'is_spec'
+cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_spec <- 'is_spec'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_spec <- 'is_spec'
+
+not_nervous_spec_non_epi_corr_counts_df$is_spec <- 'not_spec'
+cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_spec <- 'not_spec'
+non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_spec <- 'not_spec'
+
+cell_cycle_epi_nervous_spec_corr_counts_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_epi_nervous_spec_corr_counts_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_epi_non_nervous_spec_corr_counts_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_epi_non_nervous_spec_corr_counts_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df$is_cell_cycle <- 'not_cell_cycle'
+
+
+# COMBINE DATA FRAMES FOR PLOTTING
 aggregate_corr_counts_df = rbind(epi_nervous_spec_corr_counts_df, epi_non_nervous_spec_corr_counts_df, nervous_spec_non_epi_spec_corr_counts_df, not_nervous_spec_non_epi_corr_counts_df)
+
+cell_cycle_aggregate_corr_counts_df = rbind(cell_cycle_epi_nervous_spec_corr_counts_df, non_cell_cycle_epi_nervous_spec_corr_counts_df, cell_cycle_epi_non_nervous_spec_corr_counts_df, non_cell_cycle_epi_non_nervous_spec_corr_counts_df, cell_cycle_nervous_spec_non_epi_spec_corr_counts_df, non_cell_cycle_nervous_spec_non_epi_spec_corr_counts_df, cell_cycle_not_nervous_spec_non_epi_corr_counts_df, non_cell_cycle_not_nervous_spec_non_epi_corr_counts_df)
+
+cell_cycle_all_corr_gg <- ggplot(cell_cycle_aggregate_corr_counts_df, aes(x=variable, y=count, fill=gene_type, )) + 
+  geom_boxplot() +
+  facet_grid( is_chrom ~ is_spec + is_cell_cycle) +
+  scale_fill_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle('correlation summary counts (neural specificity + cell cycle partitioning)') +
+  labs(x = "correlation cutoffs", y = "count proportion")
 
 all_corr_gg <- ggplot(aggregate_corr_counts_df, aes(x=variable, y=count, fill=gene_type, )) + 
   geom_boxplot() +
@@ -476,47 +624,112 @@ all_corr_gg <- ggplot(aggregate_corr_counts_df, aes(x=variable, y=count, fill=ge
   ggtitle('correlation summary counts (neural specificity partitioning)') +
   labs(x = "correlation cutoffs", y = "count proportion")
 
-old_all_corr_gg <- ggplot() + 
-  geom_boxplot(data=epi_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') + 
-  geom_boxplot(data=epi_non_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') + 
-  geom_point(data=epi_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') +
-  geom_point(data=epi_non_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') +
-  geom_boxplot(data=nervous_spec_non_epi_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') + 
-  geom_point(data=nervous_spec_non_epi_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') +
-  geom_boxplot(data=not_nervous_spec_non_epi_corr_df, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
-  geom_point(data=not_nervous_spec_non_epi_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
-  theme_bw() +
-  ggtitle('correlation summary counts (neural specificity partitioning)') +
-  labs(x = "correlation cutoffs", y = "count proportion")
+# old_all_corr_gg <- ggplot() + 
+#   geom_boxplot(data=epi_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') + 
+#   geom_boxplot(data=epi_non_nervous_spec_corr_df, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') + 
+#   geom_point(data=epi_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific epigenes'), color = '#C77CFF') +
+#   geom_point(data=epi_non_nervous_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other epigenes'), color = '#F8766D') +
+#   geom_boxplot(data=nervous_spec_non_epi_spec_corr_df, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') + 
+#   geom_point(data=nervous_spec_non_epi_spec_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all neuro specific non-epigenes'), color = '#00BFC4') +
+#   geom_boxplot(data=not_nervous_spec_non_epi_corr_df, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
+#   geom_point(data=not_nervous_spec_non_epi_corr_df, alpha = 0.2, aes(x = variable, y = count, color = 'all other non-epigenes'), color = 'gold') +
+#   theme_bw() +
+#   ggtitle('correlation summary counts (neural specificity partitioning)') +
+#   labs(x = "correlation cutoffs", y = "count proportion")
 
 ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_boxplots.png"), plot = all_corr_gg, width = 10, height = 8)
+
+ggsave(paste0(dirs$results_embryo, date, "_", "cell_cycle_all_corr_summary_boxplots.png"), plot = cell_cycle_all_corr_gg, width = 10, height = 8)
 
 
 ## DENSITY PLOT ##
 epi_nervous_spec_corr_df <- melt(epi_nervous_spec_corr)
+cell_cycle_epi_nervous_spec_corr_df <- melt(cell_cycle_epi_nervous_spec_corr)
+non_cell_cycle_epi_nervous_spec_corr_df <- melt(epi_nervous_spec_corr)
 
 epi_non_nervous_spec_corr_df <- melt(epi_non_nervous_spec_corr)
+cell_cycle_epi_non_nervous_spec_corr_df <- melt(cell_cycle_epi_non_nervous_spec_corr)
+non_cell_cycle_epi_non_nervous_spec_corr_df <- melt(epi_non_nervous_spec_corr)
 
 nervous_spec_non_epi_spec_corr_df <- melt(nervous_spec_non_epi_corr)
+cell_cycle_nervous_spec_non_epi_spec_corr_df <- melt(cell_cycle_nervous_spec_non_epi_corr)
+non_cell_cycle_nervous_spec_non_epi_spec_corr_df <- melt(nervous_spec_non_epi_corr)
 
 not_nervous_spec_non_epi_corr_df <- melt(not_nervous_spec_non_epi_corr)
+cell_cycle_not_nervous_spec_non_epi_corr_df <- melt(cell_cycle_not_nervous_spec_non_epi_corr)
+non_cell_cycle_not_nervous_spec_non_epi_corr_df <- melt(not_nervous_spec_non_epi_corr)
 
 epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
+cell_cycle_epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
+non_cell_cycle_epi_nervous_spec_corr_df$gene_type <- 'all_neuro_specific_epigenes'
+
 epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
+cell_cycle_epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
+non_cell_cycle_epi_non_nervous_spec_corr_df$gene_type <- 'all_other_epigenes'
+
 nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
+cell_cycle_nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_df$gene_type <- 'all_neuro_specific_non_epigenes'
+
 not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
+cell_cycle_not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
+non_cell_cycle_not_nervous_spec_non_epi_corr_df$gene_type <- 'all_other_non_epigenes'
 
 epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+cell_cycle_epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+non_cell_cycle_epi_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+
 epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+cell_cycle_epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+non_cell_cycle_epi_non_nervous_spec_corr_df$is_chrom <- 'is_chrom'
+
 nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
+cell_cycle_nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_df$is_chrom <- 'not_chrom'
+
 not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
+cell_cycle_not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
+non_cell_cycle_not_nervous_spec_non_epi_corr_df$is_chrom <- 'not_chrom'
 
 epi_nervous_spec_corr_df$is_spec <- 'is_spec'
+cell_cycle_epi_nervous_spec_corr_df$is_spec <- 'is_spec'
+non_cell_cycle_epi_nervous_spec_corr_df$is_spec <- 'is_spec'
+
 epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
+cell_cycle_epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
+non_cell_cycle_epi_non_nervous_spec_corr_df$is_spec <- 'not_spec'
+
 nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
+cell_cycle_nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_df$is_spec <- 'is_spec'
+
 not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+cell_cycle_not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+non_cell_cycle_not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
+
+cell_cycle_epi_nervous_spec_corr_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_epi_nervous_spec_corr_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_epi_non_nervous_spec_corr_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_epi_non_nervous_spec_corr_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_nervous_spec_non_epi_spec_corr_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_nervous_spec_non_epi_spec_corr_df$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_not_nervous_spec_non_epi_corr_df$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_not_nervous_spec_non_epi_corr_df$is_cell_cycle <- 'not_cell_cycle'
 
 aggregate_corr_density_df = rbind(epi_nervous_spec_corr_df, epi_non_nervous_spec_corr_df, nervous_spec_non_epi_spec_corr_df, not_nervous_spec_non_epi_corr_df)
+
+cell_cycle_aggregate_corr_density_df = rbind(cell_cycle_epi_nervous_spec_corr_df, non_cell_cycle_epi_nervous_spec_corr_df, cell_cycle_epi_non_nervous_spec_corr_df, non_cell_cycle_epi_non_nervous_spec_corr_df, cell_cycle_nervous_spec_non_epi_spec_corr_df, non_cell_cycle_nervous_spec_non_epi_spec_corr_df, cell_cycle_not_nervous_spec_non_epi_corr_df, non_cell_cycle_not_nervous_spec_non_epi_corr_df)
+
+cell_cycle_all_corr_gg_density <- ggplot(cell_cycle_aggregate_corr_density_df, aes(x=value, color=gene_type, )) + 
+  geom_density() +
+  facet_grid( is_chrom ~ is_spec + is_cell_cycle) +
+  scale_color_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  theme_bw() +
+  ggtitle('correlation density plots (neural specificity + cell cycle partitioning)') +
+  labs(x = "time correlation cutoffs", y = "count")
 
 all_corr_gg_density <- ggplot(aggregate_corr_density_df, aes(x=value, color=gene_type, )) + 
   geom_density() +
@@ -527,6 +740,8 @@ all_corr_gg_density <- ggplot(aggregate_corr_density_df, aes(x=value, color=gene
   labs(x = "time correlation cutoffs", y = "count")
 
 ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_density_plots.png"), plot = all_corr_gg_density, width = 10, height = 8)
+
+ggsave(paste0(dirs$results_embryo, date, "_", "cell_cycle_all_corr_summary_density_plots.png"), plot = cell_cycle_all_corr_gg_density, width = 10, height = 8)
 ```
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
@@ -534,10 +749,10 @@ ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_density_plots.pn
 
 # protein_coding_genes <- gene_sets$genes_all[gene_sets$genes_all$gene_biotype=="protein_coding",][["ensembl_gene_id"]]
 
-gene_universe <- rows_meta$ensembl_gene_id # protein-coding genes in brainspan
-
-chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
-matched_modifiers <- which(is.element(rows_meta$ensembl_gene_id, chromatin_modifiers))
+# gene_universe <- rows_meta$ensembl_gene_id # protein-coding genes in brainspan
+# 
+# chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+# matched_modifiers <- which(is.element(rows_meta$ensembl_gene_id, chromatin_modifiers))
 
 brainspan_chrom_mod <- rows_meta$ensembl_gene_id[matched_modifiers]
 
