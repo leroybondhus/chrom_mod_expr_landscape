@@ -518,21 +518,15 @@ not_nervous_spec_non_epi_corr_df$is_spec <- 'not_spec'
 
 aggregate_corr_density_df = rbind(epi_nervous_spec_corr_df, epi_non_nervous_spec_corr_df, nervous_spec_non_epi_spec_corr_df, not_nervous_spec_non_epi_corr_df)
 
-all_corr_gg_density <- ggplot(aggregate_corr_density_df, aes(x=value, fill=gene_type, )) + 
+all_corr_gg_density <- ggplot(aggregate_corr_density_df, aes(x=value, color=gene_type, )) + 
   geom_density() +
-  facet_grid( is_chrom ~ is_spec) +
-  scale_fill_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  # facet_grid( is_chrom ~ is_spec) +
+  scale_color_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
   theme_bw() +
   ggtitle('correlation density plots (neural specificity partitioning)') +
-  labs(x = "correlation cutoffs", y = "count proportion")
+  labs(x = "time correlation cutoffs", y = "count")
 
 ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_density_plots.png"), plot = all_corr_gg_density, width = 10, height = 8)
-
-ggplot(melt(epi_nervous_spec_corr), aes(x=value)) +
-  geom_density() +
-  ggtitle('neural specificity epigenes correlation density plot') +
-  labs(x = "time correlation", y = "count") +
-  theme_bw()
 ```
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
@@ -1608,6 +1602,51 @@ for (z in 1:length(cutoffs)){ # CODE DOESNT WORK FOR Z=1 (cutoff=0.4) RIGHT NOW
 proc.time() - ptm
 
 ```
+
+```{r, GO category proportion plots}
+  # cell_cycle_mcls <- mcl_dirs[c(1,17)]
+  # synaptogenesis_mcls <- mcl_dirs[c(13,18,23)]
+  # angio_mcls <- mcl_dirs[c(4,31)]
+
+# test for metacluster 1
+mcl_epigenes <- chrom_mod_counts_df$gene_id[which(chrom_mod_counts_df$metacluster=='metacluster1')]
+mcl_go_terms <- all_mcl_GO_results$ID[which(all_mcl_GO_results$Metacluster=='metacluster1')]
+# test_go_term <- mcl_go_terms[1]
+# test_descendants <- ontos$go$ont$descendants[[which(ontos$go$ont$id==test_go_term)]]
+
+# get all GO terms + descendants for metacluster 1
+mcl_go_desc_terms <- vector('list', length(mcl_go_terms))
+names(mcl_go_desc_terms) <- mcl_go_terms
+for (i in 1:length(mcl_go_terms)){
+  mcl_go_desc_terms[[mcl_go_terms[i]]] <- c(mcl_go_terms[i],ontos$go$ont$descendants[[which(ontos$go$ont$id==mcl_go_terms[i])]])
+}
+
+epigenes_GO_terms_df <- data.frame(GO_term = mcl_go_terms, epigene_prop = NA, metacluster = 'metacluster1')
+
+# proportion of epigene GO terms in metacluster 1 associated w/ a GO term
+
+for (j in 1:length(mcl_go_terms)){
+  go_associated_genes <- unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, mcl_go_desc_terms[[j]]))])
+  
+  epigenes_GO_terms_df$epigene_prop[j] <- length(which(is.element(go_associated_genes, mcl_epigenes)))/length(mcl_epigenes)
+  
+  # epigene_go_terms <- gene_sets$genes_all_go$go_id[which(gene_sets$genes_all_go$ensembl_gene_id==mcl_epigenes[j])]
+  # epigene_go_terms <- epigene_go_terms[epigene_go_terms != ""]
+  # 
+  # matched_GO_terms <- match(epigene_go_terms, mcl_go_desc_terms)
+  # 
+  # epigenes_GO_prop_df$GO_prop[j] = length(which(!is.na(matched_GO_terms)))/length(matched_GO_terms)
+}
+
+write.csv(epigenes_GO_terms_df, paste0(cutoff_dir, analysis_dirs$metacluster_analysis, date, "_epigenes_GO_terms_df.csv"))
+
+# test GO:0007049
+cell_cycle_GO <- c('GO:0007049',ontos$go$ont$descendants[[which(ontos$go$ont$id=='GO:0007049')]])
+cell_cycle_go_associated_genes <- unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, cell_cycle_GO))])
+
+```
+
+
 ```{r, from AN_HumanProteinAtlas_Analyses}
 
 #(0) load libraries
