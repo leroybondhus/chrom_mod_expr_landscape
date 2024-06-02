@@ -1002,7 +1002,7 @@ gene_sets$genes_all <- getBM(attributes=c('ensembl_gene_id',"external_gene_name"
 for(chr in c(as.character(1:22),"X","Y","MT" )){
   print(chr)
   temp <- getBM(attributes=c('ensembl_gene_id',"external_gene_name",
-                             "ensembl_transcript_id","transcript_length",
+                             "ensembl_transcript_id","transcript_length","cds_length",
                              "chromosome_name", "exon_chrom_start","exon_chrom_end","rank"),
                 filters = "chromosome_name",
                 values = chr,

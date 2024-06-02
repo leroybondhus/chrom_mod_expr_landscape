@@ -1,0 +1,75 @@
+---
+title: "isoform_expr"
+author: "Leroy Bondhus"
+date: "2024-05-28"
+output: html_document
+---
+
+
+```{r}
+mat <- dataset_list$TEXP_GTEX$median_mat
+rowinfo <- dataset_list$TEXP_GTEX$median_mat_rowinfo
+colinfo <- dataset_list$TEXP_GTEX$median_mat_colinfo
+```
+
+
+```{r}
+
+dot_sim <- similarity_func(mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(mat))
+weighted_means <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+weighted_zscores <- calc_weighted_zscore_matrix(mat,weights)
+weighted_tau <- calc_weighted_tau(mat,weights)
+
+
+```
+
+
+
+```{r}
+
+gene_blocks <- split(unique(rowinfo$gene_id),sort(rep_len(1:getDoParWorkers(), length(unique(rowinfo$gene_id)))))
+gene_entropies <- foreach(gene_block=gene_blocks, .combine=rbind) %dopar% {
+  sub_rowinfo <- rowinfo[is.element(rowinfo$gene_id, gene_block),]
+  
+  sub_rowinfo$mean_intra_tissue_entropy <- 0
+  sub_rowinfo$mean_inter_tissue_entropy <- 0
+  sub_rowinfo$gene_transcript_count <- -1
+  
+  
+  for(gene in gene_block){
+    print(gene)
+    ## get transcripts of gene
+    which <- which(sub_rowinfo$gene_id==gene)
+    sub_rowinfo$gene_transcript_count[which] <- length(which)
+    if(length(which)==1){next}
+    
+    isoform_probs <- apply(mat[sub_rowinfo$transcript[which],],2,FUN=function(x){x/sum(x)})
+    tissue_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(-log2(x[x!=0])*x[x!=0])})
+    sub_rowinfo$mean_intra_tissue_entropy[which] <- weighted.mean(tissue_entropies,weights)
+    
+    agg_isoform_probs <- apply(isoform_probs,1,FUN=function(x){weighted.mean(x, weights)})
+    ## Kullback-Leibler divergence : sum(P(x)log(P(x)/Q(x)))
+    joint_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(log2(x[x!=0]/agg_isoform_probs[x!=0])*x[x!=0])})
+    #tissue_max_expressions <- apply(mat[sub_rowinfo$transcript[which],],2,max)
+    sub_rowinfo$mean_inter_tissue_entropy[which] <- weighted.mean(joint_entropies, weights)
+  }
+  sub_rowinfo
+}
+
+temp <- unique(sub_rowinfo[,c("gene_id","mean_inter_tissue_entropy","mean_intra_tissue_entropy","gene_transcript_count")])
+plot(temp$gene_transcript_count,temp$mean_inter_tissue_entropy)
+View(mat[rowinfo$transcript[which(rowinfo$gene_name=="KAT6B")],])
+temp <- t(mat[rowinfo$transcript[which(rowinfo$gene_name=="KAT6B")],])
+for(i in 1:ncol(temp)){
+  for(j in 1:ncol(temp)){
+   plot(temp[,i],temp[,j]) 
+  }
+}
+
+colnames(mat) <- colinfo$sample_type
+
+```

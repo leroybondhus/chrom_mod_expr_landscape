@@ -728,8 +728,26 @@ for(uberon_id in temp_uberon_ids){
 # }
 dataset_list$TEXP_GTEX$median_mat <- dataset_list$TEXP_GTEX$median_mat__reduced
 dataset_list$TEXP_GTEX$median_mat_colinfo <- dataset_list$TEXP_GTEX$median_mat_colinfo__reduced
+
+
+dataset_list$TEXP_GTEX$median_mat_rowinfo$gene_id <- str_remove(dataset_list$TEXP_GTEX$median_mat_rowinfo$gene,"\\..*")
+dataset_list$TEXP_GTEX$median_mat_rowinfo$gene_name <- gene_sets$genes_all_transcript_w_noncanon$external_gene_name[
+  match(dataset_list$TEXP_GTEX$median_mat_rowinfo$gene_id,
+        gene_sets$genes_all_transcript_w_noncanon$ensembl_gene_id)]
+which <- which(is.element(dataset_list$TEXP_GTEX$median_mat_rowinfo$gene_id,
+                          gene_sets$genes_all$ensembl_gene_id[gene_sets$genes_all$gene_biotype=="protein_coding"]) &
+                 !is.element(dataset_list$TEXP_GTEX$median_mat_rowinfo$gene_id,
+                          gene_sets$genes_all_transcript$ensembl_gene_id[gene_sets$genes_all_transcript$chromosome_name=="MT"])
+                 )
+dataset_list$TEXP_GTEX$median_mat_rowinfo <- dataset_list$TEXP_GTEX$median_mat_rowinfo[which,]
+dataset_list$TEXP_GTEX$median_mat <- dataset_list$TEXP_GTEX$median_mat[which,]
+
 gc()
 save.image()
+
+dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ x * 1e6 /sum(x) })
+dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ log10(x+1) })
+dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ x/median(x[which(x>1e-6)]) })
 ```
 
 ```{r}
