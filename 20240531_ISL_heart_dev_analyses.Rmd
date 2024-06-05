@@ -4,33 +4,56 @@ author: "Isabelle Liu"
 date: "2024-05-31"
 output: html_document
 ---
-
-```{r setup}
-# BiocManager::install("GEOquery")
-library(GEOquery)
-## change my_id to be the dataset that you want.
-my_id <- "GSE138799"
-gse <- getGEO(my_id)
-
-gse138799 <- getGEO('GSE138799',GSEMatrix=TRUE)
-show(gse138799)
-
-if (length(gse138799) > 1) idx <- grep("GPL138799", attr(gse138799, "names")) else idx <- 1  # Replace GPL#### if necessary
-gse138799 <- gse138799[[idx]]
-expression_data <- exprs(gse138799)
-
-# Check the data
-head(expression_data)
+```{r, set up environment}
+date <- format(Sys.time(),"%Y%m%d")
+registerDoParallel(detectCores()-2)
+getDoParWorkers()
 ```
 
 
-```{r, load in data}
-# Install the required package
-# if(!require("readr", quietly=T, character.only=T)){install.packages("readr")}
-# # Load the installed Package
-# library(readr)
+```{r, set up dir structure}
+# from shared_setup and added figure_cluster_analysis and table_cluster_analysis                 
+dirs <- list(data="./data/",
+             results = "./results/",
+             # tables = "./results/tables/",
+             # figures = "./results/figures/",
+             temp_data ="./temp_data/",
+             OMIM_data = "./data/omim_ra/",
+             results_cardiac = "./results_cardiac/")
+             # cardiac_cluster_analysis = "./results_cardiac/cluster_analysis")
+for(dir in dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+```
 
+
+```{r, cluster analysis directory setup}
+cutoff_dirs <- list(high_cutoff = paste0(dirs$results_cardiac, "high_res_cutoff_0.2/"),
+             modest_cutoff = paste0(dirs$results_cardiac, "modest_res_cutoff_0.4/"))
+for(dir in cutoff_dirs){
+  if(!dir.exists(dir)){dir.create(dir)}
+};rm(dir)
+
+# for cluster/metacluster cutoffs - keep same cutoff for both
+analysis_dirs <- list(cluster_analysis = "cluster_analysis/")
+             # metacluster_analysis = "metacluster_analysis/")
+for (dir in cutoff_dirs){
+  for(sub_dir in analysis_dirs){
+    if(!dir.exists(paste0(dir, sub_dir))){dir.create(paste0(dir, sub_dir))}
+  };rm(sub_dir)
+};rm(dir)
+```
+
+```{r, load in data}
+# download raw counts from this link: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138799
 mat <- read.table(paste0(dirs$data, "GSE138799_embryonic_heart_counts.tsv"), sep = '\t', header = T)
+
+# load in muscle specificity genes from leroy [NEED TO UPDATE TO CARDIAC SPECIFICITY]
+all_cardiac_spec_genes <- read.csv(paste0(dirs$data, "muscle_spec_genes.csv"), header=F)[,1]
+```
+
+
+```{r, preprocess heart dev data}
 all_expr_data <- mat[,2:length(mat)]
 all_heart_gene_ids <- mat[,1]
 
@@ -83,9 +106,6 @@ tpm <- t(t(rpk) / scaling_factor) * 1e6
 # Convert back to data frame for easier handling if needed
 tpm <- as.data.frame(tpm)
 
-# Check the TPM values
-head(tpm)
-
 median_normalize <- function(expr_mat_col) # from brainspan
 {
   median <- median(expr_mat_col[which(expr_mat_col > log10(2))])
@@ -103,58 +123,318 @@ sorted_normal_expr <- normal_expr[,order(cs_stages)]
 
 ```
 
-```{r, calculate gene expression correlation}
-# calculate gene expression correlation for all genes for a given brain structure
-calc_correlation <- function(cols_meta,expr_mat){
-  corr <- vector("numeric", nrow(expr_mat))
-  p_val <- vector("numeric", nrow(expr_mat))
-  confidence_int_lower <- vector("numeric", nrow(expr_mat))
-  confidence_int_upper <- vector("numeric", nrow(expr_mat))
-  for(i in 1:nrow(expr_mat)){
-    # output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
-    output = suppressWarnings(cor.test(cols_meta$age, expr_mat[i,]))
-    corr[i] = output$estimate
-    p_val[i] = output$p.value
-    if (length(output$conf.int) > 0){
-      confidence_int_lower[i] = output$conf.int[1]
-      confidence_int_upper[i] = output$conf.int[2]
+```{r, calculate gene expression correlation - adapted from brainspan}
+# calculate gene expression correlation for all genes
+row_corr <- suppressWarnings(apply(sorted_normal_expr, 1, function(row) cor(row, sort(cs_stages))))
+
+count_corr_vec <- function(corr_vec, lower_bound, upper_bound){
+  count <- sum((corr_vec > lower_bound) & (corr_vec < upper_bound), na.rm = T)
+  return (count)
+}
+
+heart_gene_universe <- heart_gene_ids # protein-coding genes in heart dev dataset
+
+chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+heart_matched_modifiers <- which(is.element(heart_gene_ids, chromatin_modifiers))
+
+# heart_chrom_mod_corr <- row_corr[heart_matched_modifiers]
+
+heart_dev_epigenes <- heart_gene_ids[heart_matched_modifiers]
+
+# # find genes associated with GO term cell cycle - GO:0007049
+cell_cycle_GO <- c('GO:0007049',ontos$go$ont$descendants[[which(ontos$go$ont$id=='GO:0007049')]])
+cell_cycle_go_associated_genes <- unique(gene_sets$genes_all_go$ensembl_gene_id[which(is.element(gene_sets$genes_all_go$go_id, cell_cycle_GO))])
+heart_cell_cycle_genes <- heart_gene_ids[which(is.element(heart_gene_ids, cell_cycle_go_associated_genes))]
+
+# modify threshold cutoffs for correlation
+upper = 0.7
+lower = 0.3
+
+row_corr_df <- as.data.frame(row_corr)
+
+# partition genes by cardiac specificity + cell_cycle GO annotation
+# CARDIAC SPECIFICITY EPIGENES - purple
+heart_spec_epigenes <- all_cardiac_spec_genes[which(is.element(all_cardiac_spec_genes, heart_dev_epigenes))]
+cell_cycle_heart_spec_epigenes <- heart_spec_epigenes[which(is.element(heart_spec_epigenes, heart_cell_cycle_genes))]
+non_cell_cycle_heart_spec_epigenes <- heart_spec_epigenes[which(!is.element(heart_spec_epigenes, heart_cell_cycle_genes))]
+
+cell_cycle_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, cell_cycle_heart_spec_epigenes))])
+non_cell_cycle_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, non_cell_cycle_heart_spec_epigenes))])
+
+# CARDIAC SPECIFICITY NON-EPIGENES - blue
+heart_spec_non_epigenes <- all_cardiac_spec_genes[which(!is.element(all_cardiac_spec_genes, heart_dev_epigenes))]
+cell_cycle_heart_spec_non_epigenes <- heart_spec_non_epigenes[which(is.element(heart_spec_non_epigenes, heart_cell_cycle_genes))]
+non_cell_cycle_heart_spec_non_epigenes <- heart_spec_non_epigenes[which(!is.element(heart_spec_non_epigenes, heart_cell_cycle_genes))]
+
+cell_cycle_heart_spec_non_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, cell_cycle_heart_spec_non_epigenes))])
+non_cell_cycle_heart_spec_non_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, non_cell_cycle_heart_spec_non_epigenes))])
+
+# NON-CARDIAC SPECIFICITY EPIGENES - coral
+non_heart_spec_epigenes <- heart_dev_epigenes[which(!is.element(heart_dev_epigenes, all_cardiac_spec_genes))]
+cell_cycle_non_heart_spec_epigenes <- non_heart_spec_epigenes[which(is.element(non_heart_spec_epigenes, heart_cell_cycle_genes))]
+non_cell_cycle_non_heart_spec_epigenes <- non_heart_spec_epigenes[which(!is.element(non_heart_spec_epigenes, heart_cell_cycle_genes))]
+
+cell_cycle_non_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, cell_cycle_non_heart_spec_epigenes))])
+non_cell_cycle_non_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, non_cell_cycle_non_heart_spec_epigenes))])
+
+# NON-CARDIAC SPECIFICITY NON-EPIGENES - yellow
+non_heart_spec_non_epigenes <- heart_gene_ids[which(!is.element(heart_gene_ids, c(all_cardiac_spec_genes, heart_dev_epigenes)))]
+cell_cycle_non_heart_spec_non_epigenes <- non_heart_spec_non_epigenes[which(is.element(non_heart_spec_non_epigenes, heart_cell_cycle_genes))]
+non_cell_cycle_non_heart_spec_non_epigenes <- non_heart_spec_non_epigenes[which(!is.element(non_heart_spec_non_epigenes, heart_cell_cycle_genes))]
+
+cell_cycle_non_heart_spec_non_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, cell_cycle_non_heart_spec_non_epigenes))])
+non_cell_cycle_non_heart_spec_non_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, non_cell_cycle_non_heart_spec_non_epigenes))])
+
+
+# data frame annotations for partitioning
+# GENE TYPE
+cell_cycle_heart_spec_epigenes_corr$gene_type <- 'all_cardiac_specific_epigenes'
+non_cell_cycle_heart_spec_epigenes_corr$gene_type <- 'all_cardiac_specific_epigenes'
+
+cell_cycle_heart_spec_non_epigenes_corr$gene_type <- 'all_cardiac_specific_non_epigenes'
+non_cell_cycle_heart_spec_non_epigenes_corr$gene_type <- 'all_cardiac_specific_non_epigenes'
+
+cell_cycle_non_heart_spec_epigenes_corr$gene_type <- 'all_other_epigenes'
+non_cell_cycle_non_heart_spec_epigenes_corr$gene_type <- 'all_other_epigenes'
+
+cell_cycle_non_heart_spec_non_epigenes_corr$gene_type <- 'all_other_non_epigenes'
+non_cell_cycle_non_heart_spec_non_epigenes_corr$gene_type <- 'all_other_non_epigenes'
+
+# IS EPIGENE?
+cell_cycle_heart_spec_epigenes_corr$is_chrom <- 'is_chrom'
+non_cell_cycle_heart_spec_epigenes_corr$is_chrom <- 'is_chrom'
+
+cell_cycle_heart_spec_non_epigenes_corr$is_chrom <- 'not_chrom'
+non_cell_cycle_heart_spec_non_epigenes_corr$is_chrom <- 'not_chrom'
+
+cell_cycle_non_heart_spec_epigenes_corr$is_chrom <- 'is_chrom'
+non_cell_cycle_non_heart_spec_epigenes_corr$is_chrom <- 'is_chrom'
+
+cell_cycle_non_heart_spec_non_epigenes_corr$is_chrom <- 'not_chrom'
+non_cell_cycle_non_heart_spec_non_epigenes_corr$is_chrom <- 'not_chrom'
+  
+# CARDIAC SPECIFICITY?
+cell_cycle_heart_spec_epigenes_corr$is_spec <- 'is_spec'
+non_cell_cycle_heart_spec_epigenes_corr$is_spec <- 'is_spec'
+
+cell_cycle_heart_spec_non_epigenes_corr$is_spec <- 'is_spec'
+non_cell_cycle_heart_spec_non_epigenes_corr$is_spec <- 'is_spec'
+
+cell_cycle_non_heart_spec_epigenes_corr$is_spec <- 'not_spec'
+non_cell_cycle_non_heart_spec_epigenes_corr$is_spec <- 'not_spec'
+
+cell_cycle_non_heart_spec_non_epigenes_corr$is_spec <- 'not_spec'
+non_cell_cycle_non_heart_spec_non_epigenes_corr$is_spec <- 'not_spec'
+
+# CELL CYCLE GO ANNOTATION?
+cell_cycle_heart_spec_epigenes_corr$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_heart_spec_epigenes_corr$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_heart_spec_non_epigenes_corr$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_heart_spec_non_epigenes_corr$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_non_heart_spec_epigenes_corr$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_non_heart_spec_epigenes_corr$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_non_heart_spec_non_epigenes_corr$is_cell_cycle <- 'is_cell_cycle'
+non_cell_cycle_non_heart_spec_non_epigenes_corr$is_cell_cycle <- 'not_cell_cycle'
+
+cell_cycle_heart_aggregate_corr_density_df = rbind(cell_cycle_heart_spec_epigenes_corr,
+                                                   non_cell_cycle_heart_spec_epigenes_corr,
+                                                   cell_cycle_heart_spec_non_epigenes_corr,
+                                                   non_cell_cycle_heart_spec_non_epigenes_corr,
+                                                   cell_cycle_non_heart_spec_epigenes_corr,
+                                                   non_cell_cycle_non_heart_spec_epigenes_corr,
+                                                   cell_cycle_non_heart_spec_non_epigenes_corr,
+                                                   non_cell_cycle_non_heart_spec_non_epigenes_corr)
+
+cell_cycle_heart_all_corr_gg_density <- ggplot(cell_cycle_heart_aggregate_corr_density_df, aes(x=corr, color=gene_type, )) + 
+  geom_density() +
+  facet_grid( is_chrom ~ is_spec + is_cell_cycle) +
+  scale_color_manual(values=c('#C77CFF', '#00BFC4', '#F8766D', 'gold')) +
+  theme_bw() +
+  ggtitle('correlation density plots (cardiac specificity + cell cycle partitioning)') +
+  labs(x = "time correlation cutoffs", y = "count")
+
+ggsave(paste0(dirs$results_cardiac, date, "_", "cell_cycle_heart_all_corr_density_plots.png"), plot = cell_cycle_heart_all_corr_gg_density, width = 12, height = 8)
+```
+
+
+```{r, chromatin modifier correlation clustering plotting - adapted from brainspan}
+# get list of brainpsan structure names in alphabetical order
+
+# protein_coding_genes <- gene_sets$genes_all[gene_sets$genes_all$gene_biotype=="protein_coding",][["ensembl_gene_id"]]
+
+# gene_universe <- rows_meta$ensembl_gene_id # protein-coding genes in brainspan
+# 
+# chromatin_modifiers <- unique(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+# matched_modifiers <- which(is.element(rows_meta$ensembl_gene_id, chromatin_modifiers))
+
+# brainspan_chrom_mod <- rows_meta$ensembl_gene_id[matched_modifiers]
+
+cutoffs <- list(modest_cutoff = 0.4,high_cutoff = 0.2)
+
+ptm <- proc.time()
+# structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+
+# structure_dirs <- paste0(str_replace_all(structure_names, "[ /]", "_"), "/")
+# for (dir in structure_dirs){
+#   if(!dir.exists(paste0(cutoff_dirs$high_cutoff, analysis_dirs$cluster_analysis, dir))){dir.create(paste0(cutoff_dirs$high_cutoff, analysis_dirs$cluster_analysis, dir))}
+#   if(!dir.exists(paste0(cutoff_dirs$modest_cutoff,analysis_dirs$cluster_analysis, dir))){dir.create(paste0(cutoff_dirs$modest_cutoff, analysis_dirs$cluster_analysis, dir))}
+# };rm(dir)
+
+cutoff_gene_lists <- list()
+
+
+for (a in 1:length(cutoffs)){
+  cutoff <- cutoffs[a]
+  cutoff_name <-  names(cutoffs)[a]
+  cutoff_dir <- cutoff_dirs[which(names(cutoff_dirs) == cutoff_name)]
+  # cutoff_gene_lists[[cutoff_name]] - SAVE AT END OF LOOP
+  
+  # STEP 1: subset gene expression matrix for one brain region and filter (cutoff = 0.5) for genes with a significant difference in expression level
+  row.names(sorted_normal_expr) <- heart_gene_ids
+  sub_matrix <- sorted_normal_expr[which(apply(sorted_normal_expr, 1, max)-apply(sorted_normal_expr, 1, min)>0.5),]
+  # mean (normalized to [0-1])  expression per time point for each gene - normalize to max expression instead (divide by max) - MODIFY DEPENDING ON CLUSTERING OVER DEV TIME/ALL TIME
+  normalized_expr_matrix <- t(apply(sub_matrix, 1, function(u) u/max(u))) # normalizes by row (gene)
+  all_genes_significant <- row.names(normalized_expr_matrix)
+     
+  chrom_mod_normalized_expr <- na.omit(normalized_expr_matrix[match(heart_dev_epigenes, row.names(normalized_expr_matrix)),])
+      
+  if(nrow(chrom_mod_normalized_expr) > 2){
+    # get list of genes that filtered out b/c low variation in expression
+    cluster0 <- row.names(sorted_normal_expr[which(apply(sorted_normal_expr, 1, max)-apply(sorted_normal_expr, 1, min)<=0.5),]) 
+    # cluster 0 denotes the genes that are filtered out for insignificant change in expression over time
+    write.csv(cluster0, paste0(cutoff_dir, analysis_dirs$cluster_analysis, date, "_cluster0.csv"))
+        
+  # STEP 2: create matrix of correlation btwn pairs of chromatin modifier genes & cluster
+    pcw <- sorted_cols$age[embryo_struct_index]
+    pcw_range <- c(pcw[1], pcw[length(pcw)])
+    window_size <- 10
+    pcw_weights <- vector("numeric", length = length(pcw))
+    i = pcw_range[1]
+    while(i <= pcw_range[2]){
+      pcw_weights[which(pcw < i+window_size & pcw >= i)] <- 1/length(pcw[which(pcw < i+window_size & pcw >= i)])
+      i = i + window_size
     }
+    gene_pairwise_corr <- -1*(cov.wt(t(chrom_mod_normalized_expr), wt = pcw_weights, cor = TRUE)$cor-1)
+        
+    # perform average clustering
+    hc <- hclust(as.dist(gene_pairwise_corr), "ave")
+        
+    # plot dendrogram with clusters based on cutoff height (cut)
+    png(filename = paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_clustering_dendrogram(cutoff=", cutoff, ").png"), width = 960, height = 480)
+    plot(hc, main = paste0("Cluster Dendrogram (cutoff = ", cutoff, ")"))
+    rect.hclust(hc, h=cutoff)
+    dev.off()
+
+        # STEP 4: cut dendrogram at cutoff height to get cluster/subcluster memberships
+        myhcl <- cutree(hc, h=cutoff)
+        n_clusters = max(myhcl)
+        # n_clusters_modest <- max(myhcl[,2]) # 51 (amyg)
+        # n_clusters_high <- max(myhcl[,1]) # 173 (amyg)
+        
+        # find subclusters for cutoff=0.4 clusters based on the cutoff=0.2 clusters
+        # myhcl <- as.data.frame(myhcl)
+        # colnames(myhcl)[1] = "high"
+        # colnames(myhcl)[2] = "modest"
+        # subcluster_names <- vector("character", length(myhcl$modest))
+        # for (i in 1:n_clusters_modest){
+        #   subclusters <- unique(myhcl$high[which(myhcl$modest == i)])
+        #   subcluster_indexes <- which(myhcl$modest == i)
+        #   n_sub_clusters <- length(unique(myhcl$high[subcluster_indexes]))
+        #   for (j in 1:n_sub_clusters){
+        #     subcluster_names[which(myhcl$high == subclusters[j])] = paste0(i,".",j)
+        #   }
+        # }
+        # myhcl$subcluster <- subcluster_names
+        
+        # STEP 5: create data frames with cluster mean expression for each time point
+        hcl_mean_expr <- vector("list", n_clusters)
+        for (i in 1:n_clusters){
+          # error in colMeans if only 1 gene in a cluster so check length
+          if(length(which(myhcl == i)) > 1){
+            hcl_mean_expr[[i]] = colMeans(chrom_mod_normalized_expr[which(myhcl == i),])
+          }
+          else{
+            hcl_mean_expr[[i]] = chrom_mod_normalized_expr[which(myhcl == i),]
+          }
+        }
+        
+        hcl_counts <- as.data.frame(table(myhcl))
+        hcl_df <- melt(hcl_mean_expr)
+        hcl_df$pcw <- sorted_cols$age[embryo_struct_index]
+        colnames(hcl_df)[1] = "expr"
+        colnames(hcl_df)[2] = "cluster"
+        hcl_df$freq <- hcl_counts$Freq[match(hcl_df$cluster, hcl_counts$myhcl)]
+        hcl_df$group_name <- paste0("cluster:",hcl_df$cluster, ",num_genes:", hcl_df$freq)
+        select_hcl_df <- hcl_df[which(hcl_df$freq >= 2),] # filter out clusters with 1 gene
+        
+        # STEP 6: facet plots for mean cluster expression over time for each cutoff
+        
+        ### ONLY DEVELOPMENTAL TIME - plot over non-log time
+        gg_dev_time <- ggplot(subset(select_hcl_df, pcw <= 40), aes(x = pcw, y = expr)) +
+          geom_point() + geom_line() +
+          facet_wrap(~group_name) +
+          theme(legend.position = "none", strip.text = element_text(size = 8)) +
+          ggtitle(paste0(struct, " gene expression over developmental time for each cluster (cutoff = ", cutoff,")")) +
+          labs(x = "pcw", y = "normalized expr")
+        
+        ggsave(paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_cluster_expression_over_developmental_time(cutoff=", cutoff,").png"), plot = gg_dev_time, width = 10, height = 8)        
+        # OVERLAY LOWER ALPHA EXPR FOR EACH GENE
+        
+        # gg_all_time <- ggplot(select_hcl_df, aes(x = log10(pcw), y = expr)) +
+        #       geom_point() + geom_line() +
+        #       facet_wrap(~group_name) +
+        # theme(legend.position = "none", strip.text = element_text(size = 8)) +
+        #       ggtitle(paste0(struct, " gene expression over log time for each cluster (cutoff = ", cutoff,")")) +
+        #       labs(x = "log10(pcw)", y = "normalized expr") +
+        #      geom_vline(xintercept = log10(40), color = "red") + geom_vline(xintercept = log10(52*15), color = "red") + geom_vline(xintercept = log10(52*10), color = "red")
+        # 
+        # ggsave(paste0(cutoff_dir, analysis_dirs$cluster_analysis, struct, "/", date, "_", struct, "_cluster_expression_over_time(cutoff=", cutoff,").png"), plot = gg_all_time, width = 10, height = 8)
+        
+        # create subdirectories in each structure results folder for plots for each cluster (num clusters varies across diff cutoffs and diff structures)
+        cluster_names <- paste0("cluster", 1:n_clusters)
+       
+        # STEP 7: get gene lists for coexpression for cluster cutoff
+        # create vector to store cluster assignments for each gene
+        struct_cluster_assignment <- vector("character", nrow(embryo_sub_matrix)) 
+  
+        for (i in 1:nrow(sub_matrix)){ # loop through all the genes
+          corr_vec <- vector("numeric", n_clusters) # vector to store correlation values for each structure
+          names(corr_vec) <- cluster_names
+          for (j in 1:n_clusters){
+            corr_vec[j] = cor(normalized_expr_matrix[i,],hcl_mean_expr[[j]])
+          }
+          index_max <- which.max(corr_vec)
+          if (corr_vec[index_max] >= 0.8){
+            struct_cluster_assignment[i] = names(corr_vec)[index_max]
+          }
+          
+        };rm(corr_vec)
+        
+        all_gene_lists <- vector("list", n_clusters)
+        names(all_gene_lists) <- cluster_names
+        for(i in 1:n_clusters){
+          all_gene_lists[[i]] = all_genes_significant[which(struct_cluster_assignment == cluster_names[i])]
+        }
+        
+        # all_gene_lists_high <- vector("list", n_clusters_high)
+        # names(all_gene_lists_high) <- high_cluster_names
+        # for(i in 1:n_clusters_high){
+        #   all_gene_lists_high[[i]] = all_genes_significant[which(struct_high_cluster_assignment == high_cluster_names[i])]
+        # }
+        # expr_dfs <- rbind(high_hcl_df, modest_hcl_df)
+        output <- list(all_gene_lists, hcl_df)
+        names(output) <- c(cutoff_name, "expr_df")
+        output
+      }
+    # }
   }
-  return(data.frame(corr, p_val, confidence_int_lower, confidence_int_upper))
+  
+  names(cutoff_gene_lists[[cutoff_name]]) <- structure_names
 }
-
-# first create matrix with columns for each brain structure and rows for the correlation of each gene
-# create list of matrices (time-correlation sum)
-# num_unique_structures <- length(unique(sorted_cols$structure_name))
-unique_structures <- unique(sorted_cols$structure_name)
-structure_names <- names(which(table(sorted_cols$structure_name)>=5))
-num_structs <- length(structure_names)
-
-corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
-p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
-confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
-confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
-
-# also create vector to store number of time points for each unique brainspan structure
-num_struct_timepoints <- vector("integer", num_structs)
-
-# index gene expression columns to obtain submatrices of each brain structure
-for(i in 1:num_structs){ # for each unique brain structure
-  struct <- structure_names[i]
-  temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
-  temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
-  # filter for only embryonic time
-  temp_mat <- temp_mat[,which(temp_cols$age <= 40)]
-  temp_cols <- temp_cols[which(temp_cols$age <= 40),]
-  num_struct_timepoints[i] = nrow(temp_cols)
-  if(nrow(temp_cols) > 2){
-    result = calc_correlation(temp_cols, temp_mat)
-    corr_matrix[,i] = result$corr
-    p_val_matrix[,i] = result$p_val
-    confidence_int_lower_matrix[,i] = result$confidence_int_lower
-    confidence_int_upper_matrix[,i] = result$confidence_int_upper
-  }
-}
+proc.time() - ptm
 ```
 
 
