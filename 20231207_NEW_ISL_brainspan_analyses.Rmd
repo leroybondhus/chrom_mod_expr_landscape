@@ -50,7 +50,7 @@ for(dir in dirs){
 
 ```{r, cluster analysis directory setup}
 cutoff_dirs <- list(high_cutoff = paste0(dirs$results_embryo, "high_res_cutoff_0.2/"),
-             modest_cutoff = paste0(dirs$results_embryo, "/modest_res_cutoff_0.4/"))
+             modest_cutoff = paste0(dirs$results_embryo, "modest_res_cutoff_0.4/"))
 for(dir in cutoff_dirs){
   if(!dir.exists(dir)){dir.create(dir)}
 };rm(dir)
@@ -66,7 +66,7 @@ for (dir in cutoff_dirs){
 ```
 
 
-```{r, load in brainspan files}
+```{r, load in brainspan + other files}
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
