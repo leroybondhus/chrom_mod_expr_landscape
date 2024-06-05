@@ -1,0 +1,161 @@
+---
+title: "20240531_ISL_heart_dev_analyses"
+author: "Isabelle Liu"
+date: "2024-05-31"
+output: html_document
+---
+
+```{r setup}
+# BiocManager::install("GEOquery")
+library(GEOquery)
+## change my_id to be the dataset that you want.
+my_id <- "GSE138799"
+gse <- getGEO(my_id)
+
+gse138799 <- getGEO('GSE138799',GSEMatrix=TRUE)
+show(gse138799)
+
+if (length(gse138799) > 1) idx <- grep("GPL138799", attr(gse138799, "names")) else idx <- 1  # Replace GPL#### if necessary
+gse138799 <- gse138799[[idx]]
+expression_data <- exprs(gse138799)
+
+# Check the data
+head(expression_data)
+```
+
+
+```{r, load in data}
+# Install the required package
+# if(!require("readr", quietly=T, character.only=T)){install.packages("readr")}
+# # Load the installed Package
+# library(readr)
+
+mat <- read.table(paste0(dirs$data, "GSE138799_embryonic_heart_counts.tsv"), sep = '\t', header = T)
+all_expr_data <- mat[,2:length(mat)]
+all_heart_gene_ids <- mat[,1]
+
+# colnames(expr_data)[1] <- 'ensembl_id'
+
+#filter for protein coding genes
+protein_coding_genes <- gene_sets$genes_all[gene_sets$genes_all$gene_biotype=="protein_coding",][["ensembl_gene_id"]] # copied code from brainspan
+
+gene_indices <- which(is.element(all_heart_gene_ids, protein_coding_genes))
+
+old_expr_data <- all_expr_data[gene_indices,]
+
+old_heart_gene_ids <- all_heart_gene_ids[gene_indices]
+
+# remove duplicate rows (second entry of gene raw counts is all zeroes)
+heart_gene_ids <- old_heart_gene_ids[!duplicated(old_heart_gene_ids)]
+expr_data <- old_expr_data[!duplicated(old_heart_gene_ids),]
+
+# convert raw counts to TPM using biomaRt
+# Connect to Ensembl
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+# Retrieve gene lengths (use your gene IDs as filter values, e.g., ENSEMBL IDs)
+gene_info <- getBM(attributes = c("ensembl_gene_id", "start_position", "end_position"),
+                   filters = "ensembl_gene_id",
+                   values = heart_gene_ids,
+                   mart = mart)
+
+# Calculate gene lengths
+gene_info <- gene_info %>%
+    mutate(gene_length = end_position - start_position + 1) %>%
+    dplyr::select(ensembl_gene_id, gene_length)
+
+# Ensure the order matches the expr_data
+gene_info <- gene_info[match(heart_gene_ids, gene_info$ensembl_gene_id), ]
+
+# Convert raw counts to TPM
+expr_data <- as.matrix(expr_data)  # Ensure it's a matrix
+gene_lengths <- gene_info$gene_length
+
+# Normalize for gene length
+rpk <- expr_data / gene_lengths
+
+# Calculate scaling factor (sum of RPKs per sample)
+scaling_factor <- colSums(rpk)
+
+# Convert to TPM
+tpm <- t(t(rpk) / scaling_factor) * 1e6
+
+# Convert back to data frame for easier handling if needed
+tpm <- as.data.frame(tpm)
+
+# Check the TPM values
+head(tpm)
+
+median_normalize <- function(expr_mat_col) # from brainspan
+{
+  median <- median(expr_mat_col[which(expr_mat_col > log10(2))])
+  # print(median)
+  expr_mat_col = expr_mat_col/median
+}
+
+# log transform expression data & median normalize (from brainspan)
+normal_expr <- apply(log10(tpm+1), 2, median_normalize)
+
+# SORT COLUMNS + CONVERT COLUMNS TO PCW - no direct conversion
+cs_stages <- c(13,13,12,16,16,16,17,17,17,18,18,18,19,19,19,20,20,20,21,21,21,23,23,23)
+
+sorted_normal_expr <- normal_expr[,order(cs_stages)]
+
+```
+
+```{r, calculate gene expression correlation}
+# calculate gene expression correlation for all genes for a given brain structure
+calc_correlation <- function(cols_meta,expr_mat){
+  corr <- vector("numeric", nrow(expr_mat))
+  p_val <- vector("numeric", nrow(expr_mat))
+  confidence_int_lower <- vector("numeric", nrow(expr_mat))
+  confidence_int_upper <- vector("numeric", nrow(expr_mat))
+  for(i in 1:nrow(expr_mat)){
+    # output = suppressWarnings(cor.test(log10(cols_meta$age), expr_mat[i,]))
+    output = suppressWarnings(cor.test(cols_meta$age, expr_mat[i,]))
+    corr[i] = output$estimate
+    p_val[i] = output$p.value
+    if (length(output$conf.int) > 0){
+      confidence_int_lower[i] = output$conf.int[1]
+      confidence_int_upper[i] = output$conf.int[2]
+    }
+  }
+  return(data.frame(corr, p_val, confidence_int_lower, confidence_int_upper))
+}
+
+# first create matrix with columns for each brain structure and rows for the correlation of each gene
+# create list of matrices (time-correlation sum)
+# num_unique_structures <- length(unique(sorted_cols$structure_name))
+unique_structures <- unique(sorted_cols$structure_name)
+structure_names <- names(which(table(sorted_cols$structure_name)>=5))
+num_structs <- length(structure_names)
+
+corr_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+p_val_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+confidence_int_lower_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+confidence_int_upper_matrix <- matrix(data = NA, nrow=nrow(expression_mat), ncol=num_structs, dimnames = list(NULL, structure_names))
+
+# also create vector to store number of time points for each unique brainspan structure
+num_struct_timepoints <- vector("integer", num_structs)
+
+# index gene expression columns to obtain submatrices of each brain structure
+for(i in 1:num_structs){ # for each unique brain structure
+  struct <- structure_names[i]
+  temp_mat <- normal_expr[,grep(struct, sorted_cols$structure_name, fixed = T)]
+  temp_cols <- sorted_cols[grep(struct, sorted_cols$structure_name, fixed = T),]
+  # filter for only embryonic time
+  temp_mat <- temp_mat[,which(temp_cols$age <= 40)]
+  temp_cols <- temp_cols[which(temp_cols$age <= 40),]
+  num_struct_timepoints[i] = nrow(temp_cols)
+  if(nrow(temp_cols) > 2){
+    result = calc_correlation(temp_cols, temp_mat)
+    corr_matrix[,i] = result$corr
+    p_val_matrix[,i] = result$p_val
+    confidence_int_lower_matrix[,i] = result$confidence_int_lower
+    confidence_int_upper_matrix[,i] = result$confidence_int_upper
+  }
+}
+```
+
+
+
