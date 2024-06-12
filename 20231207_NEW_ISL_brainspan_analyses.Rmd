@@ -916,13 +916,7 @@ for (a in 1:length(cutoffs)){
         for(i in 1:n_clusters){
           all_gene_lists[[i]] = all_genes_significant[which(struct_cluster_assignment == cluster_names[i])]
         }
-        
-        # all_gene_lists_high <- vector("list", n_clusters_high)
-        # names(all_gene_lists_high) <- high_cluster_names
-        # for(i in 1:n_clusters_high){
-        #   all_gene_lists_high[[i]] = all_genes_significant[which(struct_high_cluster_assignment == high_cluster_names[i])]
-        # }
-        # expr_dfs <- rbind(high_hcl_df, modest_hcl_df)
+
         output <- list(all_gene_lists, hcl_df)
         names(output) <- c(cutoff_name, "expr_df")
         output

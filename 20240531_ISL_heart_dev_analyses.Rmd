@@ -139,7 +139,8 @@ normal_expr <- apply(log10(tpm+1), 2, median_normalize)
 
 ```{r, calculate gene expression correlation - adapted from brainspan}
 # calculate gene expression correlation for all genes
-row_corr <- suppressWarnings(apply(normal_expr, 1, function(row) cor(row, sort(days))))
+# CAN ADD EXPRESSION WEIGHTING W/ P-VALUES
+row_corr <- suppressWarnings(apply(normal_expr, 1, function(row) cor(row, sort(aggregate_days))))
 
 # used in corr summary stats but not relevant for this dataset
 # count_corr_vec <- function(corr_vec, lower_bound, upper_bound){
@@ -170,23 +171,23 @@ row_corr_df <- as.data.frame(row_corr)
 # partition genes by cardiac specificity + cell_cycle GO annotation
 # CARDIAC SPECIFICITY EPIGENES - purple
 heart_spec_epigenes <- all_cardiac_spec_genes[which(is.element(all_cardiac_spec_genes, heart_dev_epigenes))]
-cell_cycle_heart_spec_epigenes <- heart_spec_epigenes[which(is.element(heart_spec_epigenes, heart_cell_cycle_genes))]
+cell_cycle_heart_spec_epigenes <- heart_spec_epigenes[1:3]# USE DUMMY DATA SO DATAFRAME CREATION/PLOT STILL WORKS - heart_spec_epigenes[which(is.element(heart_spec_epigenes, heart_cell_cycle_genes))]
 non_cell_cycle_heart_spec_epigenes <- heart_spec_epigenes[which(!is.element(heart_spec_epigenes, heart_cell_cycle_genes))]
 
 cell_cycle_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, cell_cycle_heart_spec_epigenes))])
 non_cell_cycle_heart_spec_epigenes_corr <- data.frame(corr=row_corr[which(is.element(heart_gene_ids, non_cell_cycle_heart_spec_epigenes))])
 
-enrich_result <- enrichGO(gene = heart_spec_epigenes,
-                            universe = heart_gene_universe,
-                            keyType = "ENSEMBL", 
-                            OrgDb = org.Hs.eg.db, 
-                            ont = "ALL", 
-                            pAdjustMethod = "BH", 
-                            qvalueCutoff = 0.05,
-                            readable = TRUE)
-saved_enrich <- as.data.frame(enrich_result)
-write.csv(saved_enrich, paste0(dirs$results_cardiac, date, "_heart_spec_epigenes_GO_results.csv"))
-# TRY TO LEAVE FACET BLANK IF NO CARDIAC-SPECIFIC EPIGENES
+# enrich_result <- enrichGO(gene = heart_spec_epigenes,
+#                             universe = heart_gene_universe,
+#                             keyType = "ENSEMBL", 
+#                             OrgDb = org.Hs.eg.db, 
+#                             ont = "ALL", 
+#                             pAdjustMethod = "BH", 
+#                             qvalueCutoff = 0.05,
+#                             readable = TRUE)
+# saved_enrich <- as.data.frame(enrich_result)
+# write.csv(saved_enrich, paste0(dirs$results_cardiac, date, "_heart_spec_epigenes_GO_results.csv"))
+# # TRY TO LEAVE FACET BLANK IF NO CARDIAC-SPECIFIC EPIGENES
 
 # CARDIAC SPECIFICITY NON-EPIGENES - blue
 heart_spec_non_epigenes <- all_cardiac_spec_genes[which(!is.element(all_cardiac_spec_genes, heart_dev_epigenes))]
