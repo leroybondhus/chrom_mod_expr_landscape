@@ -1,0 +1,154 @@
+---
+title: "L1000_LINCS_download"
+author: "Leroy Bondhus"
+date: "2024-06-25"
+output: html_document
+---
+
+```{r}
+
+gctx_file_L5 <- "/u/scratch/l/leroybon/l1000/GSE92742_Broad_LINCS_Level5_COMPZ.MODZ_n473647x12328.gctx"
+if(!file.exists(gctx_file_L5)){
+  system("wget --content-on-error \"https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5FLevel3%5FINF%5Fmlr12k%5Fn1319138x12328%2Egctx%2Egz\" -P /u/scratch/l/leroybon/l1000" )
+  system("gunzip /u/scratch/l/leroybon/l1000/*.gz")
+}
+gctx_file_L3 <- "/u/scratch/l/leroybon/l1000/index.html?acc=GSE92742&format=file&file=GSE92742_Broad_LINCS_Level3_INF_mlr12k_n1319138x12328.gctx"
+if(!file.exists(gctx_file_L3)){
+
+  system("wget --content-on-error \"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE92nnn/GSE92742/suppl/GSE92742%5FBroad%5FLINCS%5FLevel5%5FCOMPZ%2EMODZ%5Fn473647x12328%2Egctx%2Egz\" -P /u/scratch/l/leroybon/l1000" )
+  system("gunzip /u/scratch/l/leroybon/l1000/*.gz")
+}
+
+
+## (gene) rowinfo - matches rid in my_ds
+#temp_url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE70138&format=file&file=GSE70138%5FBroad%5FLINCS%5Fgene%5Finfo%5F2017%2D03%2D06%2Etxt%2Egz"
+temp_url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Fgene%5Finfo%2Etxt%2Egz"
+temp <- tempfile()
+download.file(temp_url,temp)
+rowdata <- read.table( temp, skip=0, header = TRUE, sep = "\t", quote = "")
+unlink(temp); rm(temp)
+row_meta <- read_gctx_meta(gctx_file_L3, dim="row")
+rowdata <- rowdata[match(row_meta$id, rowdata$pr_gene_id),]
+
+#https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Fpert%5Finfo%2Etxt%2Egz
+ temp_url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Finst%5Finfo%2Etxt%2Egz"
+ temp <- tempfile()
+ download.file(temp_url,temp)
+ coldata <- read.table( temp, skip=0, header = TRUE, sep = "\t", quote = "",fill=T)
+ unlink(temp); rm(temp)
+col_meta <- read_gctx_meta(gctx_file_L3, dim="col")
+coldata <- coldata[match(col_meta$id, coldata$inst_id),]
+# coldata <- str_split_fixed(col_meta$id,":",3)
+# coldata <- as.data.frame(cbind(str_split_fixed(coldata[,1],"_",3),coldata[,2:3]))
+# colnames(coldata) <- c("pert_type","cell_id","pert_time","pert_iname","num")
+
+
+
+
+
+##
+```
+
+
+```{r}
+## drug - concentration, control, cell, gene - chromatin modifier and other
+
+## which epigenes are sensative + in what context
+## are epigenes as a class sensative ? are subclasses of epigenes sensative ? ## perturbogen classes
+## 
+
+
+## for each perturbogen
+#     id all genes with above_cutoff differential expression ()
+#     (TEST: does higher concentration subsume lower concentration? Expect yes )
+## for each epigene
+#     id shRNA perturbation 
+#     get profile (given cell_line wo shRNA v same cell_line w CGS for shRNA)
+#         CGS: 
+#     upreg/downreg gene set -> GO and/or KEGG
+#     
+# in matched cell_type, match epigene affecting perturbagenes with epigene consensus shRNA
+# in matched cell_type, match similar perturbagen profiles with epigene consensus profile
+# test subsumption relation between both.  
+
+
+```
+
+```{r}
+## 
+
+## match rnaPlate for deviation measure
+cell_id <- "NPC"
+gene_name <- "KAT6A"
+# result_list <- data.frame(target_gene_name=NA,
+#                  cell_type=NA,
+#                  consensus_target_gene = data.frame(gene,id,cell,l2fc,pval,qval)
+#                  )
+for(cell_id in unique(coldata$cell_id)){
+  ## CHECK TARGET EXPRESSION - IF LOW IN CELL TYPE CONSIDER SKIPPING
+  which <- which(coldata$pert_iname==gene_name & coldata$cell_id == cell_id) 
+  if(length(which)==0){next}
+  ## in cell - per sh - match to plate get delta value 3rep x (plt_cntrl-plt_sh) delta(log10tpm) values
+  ##         - between sh - weighted delta(l10tpm) or median dl10tpm -- only if delta target is consistent
+  
+  # sh_id plate_id median(delta)
+  pert_id <- unique(coldata$pert_id[which])[1]
+  l2fc_list <- list()
+  z_list <- list()
+  which_is_target <- which(rowdata$pr_gene_symbol == gene_name )
+  for(pert_id in unique(coldata$pert_id[which])){
+    which2 <- which(coldata$pert_iname == gene_name &
+                     coldata$cell_id == cell_id &
+                     coldata$pert_id == pert_id )
+    my_ds <- parse_gctx(gctx_file_L3,cid=which2)
+    
+    which2_mcontrol <- which(coldata$cell_id == cell_id &
+                               is.element(coldata$rna_plate, coldata$rna_plate[which2]) &
+                               grepl("ctl",coldata$pert_type))
+    my_ds_mcontrol <- parse_gctx(gctx_file_L3,cid=which2_mcontrol)
+    
+    
+    ## estimate q-value via random sampling of controls 
+    l2fc_mat <- as.data.frame(my_ds@mat)
+    z_mat <- as.data.frame(my_ds@mat)
+    min_mat <- as.data.frame(my_ds@mat)
+    for(i in 1:ncol(my_ds@mat)){
+      temp_ctrl_mat <- my_ds_mcontrol@mat[,is.element(coldata$rna_plate[which2_mcontrol],
+                                                      coldata$rna_plate[which2[i]])]
+      temp_sd <- apply(temp_ctrl_mat,1,sd)
+      l2fc_mat[,i] <- my_ds@mat[,i] - rowMeans(temp_ctrl_mat)
+      z_mat[,i] <- (my_ds@mat[,i] - rowMeans(temp_ctrl_mat)) / temp_sd
+      min_mat[,i] <- pmin(my_ds@mat[,i],rowMeans(temp_ctrl_mat))
+    }
+    # give max weight to rep with max perturbation of target
+    temp_weights <- -z_mat[which_is_target,] / max(-z_mat[which_is_target,])
+    z_mat <- apply(z_mat, 1, weighted.mean,temp_weights)
+    l2fc_mat <- apply(l2fc_mat, 1, weighted.mean,temp_weights)
+    
+    l2fc_list[[pert_id]] <- l2fc_mat
+    z_list[[pert_id]] <- z_mat
+    ### test whether target is knocked down or 
+  }
+  z_mat <- data.frame(matrix(unlist(z_list), ncol=length(z_list)))
+  l2fc_mat <- data.frame(matrix(unlist(l2fc_list), ncol=length(l2fc_list)))
+  rownames(z_mat) <- rownames(l2fc_mat) <- rowdata$pr_gene_symbol[match(names(l2fc_list[[1]]),rowdata$pr_gene_id)]
+  colnames(z_mat) <- colnames(l2fc_mat) <- names(l2fc_list)
+  
+  temp_weights <- -z_mat[which_is_target,]/max(-z_mat[which_is_target,])
+  ## |wmean(log2fc)| > log2(1.5) & |median(lo2fc)| > log2(1.5)
+  ## |wmean(z)| > 1 & |median(z)| > 1
+  
+  temp <- apply(z_mat,1,weighted.mean, temp_weights)
+  temp2 <- (data.frame(gene=rownames(z_mat),z=temp,z_median=rowMedians(as.matrix(z_mat))))
+  temp2$l2fc <- apply(l2fc_mat,1,weighted.mean, temp_weights)
+  temp2$l2fc_median <- rowMedians(as.matrix(l2fc_mat))
+  #coldata$rna_plate == coldata$rna_plate 
+  
+  
+  which_paired_controls <- 2
+  
+  
+  
+}
+
+```

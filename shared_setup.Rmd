@@ -45,13 +45,12 @@ rm(OMIM_genemap2_URL)
 
 ```{r, load libraries}
 
-
 req_packages <- list(
   standard = c("BiocManager","doParallel","ggplot2","stringr", "reshape2", "XML",
                "ggiraph","ggraph","igraph","collapsibleTree","webshot","remotes","devtools",
                "dendextend","factoextra","cowplot","httr","jsonlite", "circlize","UpSetR","tidyverse"),
   biocmanager = c("Gviz","biomaRt","ComplexHeatmap","DOSE","pathview","clusterProfiler",
-                  "org.Hs.eg.db","topGO","enrichplot")
+                  "org.Hs.eg.db","topGO","enrichplot","cmapR")
 )
 for(std_package in req_packages$standard ){
   if(!require(std_package, quietly=T, character.only=T)){install.packages(std_package)}
