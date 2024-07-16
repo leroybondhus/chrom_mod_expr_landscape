@@ -13,10 +13,9 @@ getDoParWorkers()
 
 
 ```{r, setup libraries}
-# packages to add to shared_setup
+# packages to add to shared_setup @LEROY
 library(dendextend) # - already added
 library(scales) # for rescale function to normalize values btwn 0 and 1
-library(ggforce) # use for facet_wrap_paginate() function
 # from aileen's clusterprofiler
 library(clusterProfiler) #enrichment testing
 library(org.Hs.eg.db) #genomewide annotation for humans
@@ -24,15 +23,11 @@ library(enrichplot) #plot enrichment results
 library(ggnewscale)
 library(DOSE) # for GO visualization - need enrichplot
 library(gridExtra) # for multiple plots in one page
-# library(wCorr) # don't need
-
-# BiocManager::install("DOSE") # for GO visualization
-# install.packages("wCorr") # don't need
 ```
 
 
 ```{r, set up dir structure}
-# from shared_setup and added figure_cluster_analysis and table_cluster_analysis                 
+# modified from shared_setup              
 dirs <- list(data="./data/",
              results = "./results/",
              # tables = "./results/tables/",
@@ -50,7 +45,7 @@ for(dir in dirs){
 
 ```{r, cluster analysis directory setup}
 cutoff_dirs <- list(high_cutoff = paste0(dirs$results_embryo, "high_res_cutoff_0.2/"),
-             modest_cutoff = paste0(dirs$results_embryo, "/modest_res_cutoff_0.4/"))
+             modest_cutoff = paste0(dirs$results_embryo, "modest_res_cutoff_0.4/"))
 for(dir in cutoff_dirs){
   if(!dir.exists(dir)){dir.create(dir)}
 };rm(dir)
@@ -66,7 +61,7 @@ for (dir in cutoff_dirs){
 ```
 
 
-```{r, load in brainspan files}
+```{r, load in brainspan + other files}
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
@@ -78,7 +73,7 @@ nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigene
 ```
 
 
-```{r, Uberon ontology term matching}
+```{r, Uberon ontology term matching - DON'T NEED}
 # unique_structures <- unique(columns_meta$structure_name)
 # 
 # uberon_names <- ontos$uberon$ont$name
@@ -123,7 +118,7 @@ nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigene
 
 ```
 
-```{r, add_annotation function for ontology}
+```{r, add_annotation function for ontology - DON'T NEED}
 
 # # modeled off expr_data_setup code
 # # note that onto <- ontos$uberon$ont line also in main or phenotype_summary_analyses
@@ -156,7 +151,7 @@ nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigene
 
 ```
 
-```{r, Uberon onto summary statistics}
+```{r, Uberon onto summary statistics - DON'T NEED}
 # histogram to show avg number of terms per brainspan column
 # brainspan_terms <- sapply(onto$brainspan_cols,function(x){length(x[[1]])}) # need to fix to get length of list
 # brainspan_terms <- sapply(onto$brainspan_cols,length) 
@@ -178,8 +173,8 @@ nervous_spec_epigenes <- read.csv(paste0(dirs$data, "nervous_system_spec_epigene
 # rowMeans(expression_mat[,onto$brainspan_cols[24][[1]]])
 ```
 
-```{r, convert ages to weeks, normalize + sort expression matrix by brain structure and development time}
-
+```{r, data preprocessing}
+# convert ages to weeks, normalize + sort expression matrix by brain structure and development time
 # filter out rows in rows_meta so only have protein coding genes
 protein_coding_genes <- gene_sets$genes_all[gene_sets$genes_all$gene_biotype=="protein_coding",][["ensembl_gene_id"]]
 
@@ -253,7 +248,7 @@ normal_expr <- apply(log10(TPM_expression+1), 2, median_normalize)
 
 ```
 
-```{r, heat maps for gene expression over time for each structure}
+```{r, heat maps for gene expression over time for each structure - DON'T NEED}
 # heatmap of "amygdaloid complex"
 
 # note that need to determine method to subset genes of interest b/c vector allocation issues - just need to select smaller set of genes of interest
@@ -321,11 +316,6 @@ for(i in 1:num_structs){ # for each unique brain structure
 # using cor.test brainspan structures with only two samples also lead to error - corr values will be NA
 
 # can perform exploratory heat map analysis (ComplexHeatMap or base heatmap) by taking certain sets of genes
-
-```
-
-```{r, summary stats for p-values for correlation}
-# save for future
 
 ```
 
@@ -916,13 +906,7 @@ for (a in 1:length(cutoffs)){
         for(i in 1:n_clusters){
           all_gene_lists[[i]] = all_genes_significant[which(struct_cluster_assignment == cluster_names[i])]
         }
-        
-        # all_gene_lists_high <- vector("list", n_clusters_high)
-        # names(all_gene_lists_high) <- high_cluster_names
-        # for(i in 1:n_clusters_high){
-        #   all_gene_lists_high[[i]] = all_genes_significant[which(struct_high_cluster_assignment == high_cluster_names[i])]
-        # }
-        # expr_dfs <- rbind(high_hcl_df, modest_hcl_df)
+
         output <- list(all_gene_lists, hcl_df)
         names(output) <- c(cutoff_name, "expr_df")
         output
