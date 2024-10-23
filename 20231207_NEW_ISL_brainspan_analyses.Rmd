@@ -62,6 +62,7 @@ for (dir in cutoff_dirs){
 
 
 ```{r, load in brainspan + other files}
+# download data from here: https://www.brainspan.org/api/v2/well_known_file_download/267666525
 columns_meta <- read.csv(paste0(dirs$data, "brainspan/columns_metadata.csv"))
 rows_meta <- read.csv(paste0(dirs$data, "brainspan/rows_metadata.csv"))
 expression_mat <- read.csv(paste0(dirs$data, "brainspan/expression_matrix.csv"), header = FALSE, row.names = 1)
@@ -733,6 +734,18 @@ ggsave(paste0(dirs$results_embryo, date, "_", "all_corr_summary_density_plots.pn
 
 ggsave(paste0(dirs$results_embryo, date, "_", "cell_cycle_all_corr_summary_density_plots.png"), plot = cell_cycle_all_corr_gg_density, width = 10, height = 8)
 ```
+
+```{r, epigene expression threshold}
+brainspan_chrom_mod <- rows_meta$ensembl_gene_id[matched_modifiers]
+epigenes_norm_expr <- normal_expr[matched_modifiers,]
+
+# find epigenes with at least 1 TPM in at least 1 tissue
+tpm_threshold <- log10(1+1)
+# Filter epigenes that have at least 1 TPM in at least 1 tissue
+epigenes_with_tpm <- epigenes_norm_expr[rowSums(epigenes_norm_expr >= tpm_threshold) > 0, ]
+nrow(epigenes_with_tpm) # 693 epigenes in at least 1 TPM in at least 1 tissue
+```
+
 
 ```{r, chromatin modifier correlation clustering plotting + aggregating gene lists}
 # get list of brainpsan structure names in alphabetical order
