@@ -18,6 +18,8 @@ dirs <- list(data="./data/",
              sra="/u/scratch/l/leroybon/chrom_mod_proj_data/sra/",
              sra_metadata="./data/sra_metadata/",
              scratch="/u/scratch/l/leroybon/")
+scripts <- list(sra_processessing = "/u/project/arboleda/leroybon/PROJECTS/chrom_mod_expr_landscape/download_scripts/sra_processing.sh",
+                qsub = "/u/systems/UGE8.6.4/bin/lx-amd64/qsub")
 date <- format(Sys.time(),"%Y%m%d")
 ## Note may want to read in old log if planning to only run failed runs
 ## NOTE: LEROY code this up to read in previous run log
@@ -79,7 +81,7 @@ for(srp in files$srps ){
 }
 
 
-sra_metadata <- sra_metadata[which(sra_metadata$taxon_id == "10090"),]
+sra_metadata <- sra_metadata_full[which(sra_metadata_full$taxon_id == "10090"),]
 
 ## fasterq-dump -> fastq -> bam -> featureCount
 
@@ -108,6 +110,7 @@ while(any(sra_metadata$status==not_yet_run )){
     space_avail <- space_avail - sra_metadata$file_space_req[which_next] 
     ### SUBMIT SCRIPT TO RUN
     # SCRIPT SUBMISSION sra_metadata$srr_id[which_next]
+    system(paste0("qsub ",scripts$sra_processessing, " ", sra_metadata$srr_id[which_next]), wait = F)
     ### 
     sra_metadata$status[which_next] <- "running" ## success and fail status must be assigned at end of external SCRIPT
     ## UPDATE SYSTEM LOG FILE

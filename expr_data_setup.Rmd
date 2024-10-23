@@ -743,11 +743,12 @@ dataset_list$TEXP_GTEX$median_mat_rowinfo <- dataset_list$TEXP_GTEX$median_mat_r
 dataset_list$TEXP_GTEX$median_mat <- dataset_list$TEXP_GTEX$median_mat[which,]
 
 gc()
-save.image()
 
 dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ x * 1e6 /sum(x) })
+dataset_list$TEXP_GTEX$tpm_median_mat <- dataset_list$TEXP_GTEX$median_mat
 dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ log10(x+1) })
 dataset_list$TEXP_GTEX$median_mat <- apply(dataset_list$TEXP_GTEX$median_mat, 2, FUN=function(x){ x/median(x[which(x>1e-6)]) })
+save.image()
 ```
 
 ```{r}
@@ -762,6 +763,19 @@ dataset_list$LR_GTEX$median_mat_rowinfo <-  data.frame(transcript=dataset_list$L
 rownames(dataset_list$LR_GTEX$median_mat) <- dataset_list$LR_GTEX$median_mat$transcript
 dataset_list$LR_GTEX$median_mat$transcript <- NULL
 unlink(temp); rm(temp)
+
+
+temp <- tempfile()
+temp_url <- "https://storage.googleapis.com/adult-gtex/long-read-data/v9/long-read-RNA-seq/quantification_gencode.counts.txt.gz"
+temp <- tempfile()
+download.file(temp_url,temp)
+
+dataset_list$LR_GTEX$raw_reads_mat <- read.table( temp, skip=0, header = TRUE, sep = "\t")
+rownames(dataset_list$LR_GTEX$raw_reads_mat) <- dataset_list$LR_GTEX$raw_reads_mat$transcript
+dataset_list$LR_GTEX$raw_reads_mat$transcript <- NULL
+unlink(temp); rm(temp)
+
+View(dataset_list$LR_GTEX$raw_reads_mat[dataset_list$LR_GTEX$median_mat_rowinfo$transcript[dataset_list$LR_GTEX$median_mat_rowinfo$gene_name=="KAT6A"],])
 
 
 
@@ -798,6 +812,14 @@ dataset_list$LR_GTEX$median_mat_rowinfo$gene_name <- gene_sets$genes_all_transcr
 which_keep <- which(!is.na(dataset_list$LR_GTEX$median_mat_rowinfo$gene_id))
 dataset_list$LR_GTEX$median_mat <- dataset_list$LR_GTEX$median_mat[which_keep,]
 dataset_list$LR_GTEX$median_mat_rowinfo <- dataset_list$LR_GTEX$median_mat_rowinfo[which_keep,]
+
+
+
+dataset_list$LR_GTEX$median_mat <- apply(dataset_list$LR_GTEX$median_mat, 2, FUN=function(x){ x * 1e6 /sum(x) })
+dataset_list$LR_GTEX$tpm_median_mat <- dataset_list$LR_GTEX$median_mat
+dataset_list$LR_GTEX$median_mat <- apply(dataset_list$LR_GTEX$median_mat, 2, FUN=function(x){ log10(x+1) })
+dataset_list$LR_GTEX$median_mat <- apply(dataset_list$LR_GTEX$median_mat, 2, FUN=function(x){ x/median(x[which(x>1e-6)]) })
+save.image()
 ```
 
 

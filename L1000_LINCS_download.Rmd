@@ -25,10 +25,10 @@ if(!file.exists(gctx_file_L3)){
 temp_url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Fgene%5Finfo%2Etxt%2Egz"
 temp <- tempfile()
 download.file(temp_url,temp)
-rowdata <- read.table( temp, skip=0, header = TRUE, sep = "\t", quote = "")
+rowdata_l3 <- read.table( temp, skip=0, header = TRUE, sep = "\t", quote = "")
 unlink(temp); rm(temp)
-row_meta <- read_gctx_meta(gctx_file_L3, dim="row")
-rowdata <- rowdata[match(row_meta$id, rowdata$pr_gene_id),]
+row_meta_l3 <- read_gctx_meta(gctx_file_L3, dim="row")
+rowdata_l3 <- rowdata[match(row_meta_l3$id, rowdata_l3$pr_gene_id),]
 
 #https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Fpert%5Finfo%2Etxt%2Egz
  temp_url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE92742&format=file&file=GSE92742%5FBroad%5FLINCS%5Finst%5Finfo%2Etxt%2Egz"
@@ -36,8 +36,8 @@ rowdata <- rowdata[match(row_meta$id, rowdata$pr_gene_id),]
  download.file(temp_url,temp)
  coldata <- read.table( temp, skip=0, header = TRUE, sep = "\t", quote = "",fill=T)
  unlink(temp); rm(temp)
-col_meta <- read_gctx_meta(gctx_file_L3, dim="col")
-coldata <- coldata[match(col_meta$id, coldata$inst_id),]
+col_meta_l3 <- read_gctx_meta(gctx_file_L3, dim="col")
+coldata_l3 <- coldata[match(col_meta_l3$id, coldata$inst_id),]
 # coldata <- str_split_fixed(col_meta$id,":",3)
 # coldata <- as.data.frame(cbind(str_split_fixed(coldata[,1],"_",3),coldata[,2:3]))
 # colnames(coldata) <- c("pert_type","cell_id","pert_time","pert_iname","num")
@@ -74,9 +74,292 @@ coldata <- coldata[match(col_meta$id, coldata$inst_id),]
 
 ```
 
-```{r}
-## 
+```{r, perturbogen analysis}
+cell_id <- "NPC"
+gene_name <- "KAT6A"
 
+col_meta_l5 <- read_gctx_meta(gctx_file_L5, dim="col")
+coldata_l5 <- str_split_fixed(col_meta_l5$id,":",3)
+coldata_l5 <- as.data.frame(cbind(str_split_fixed(coldata_l5[,1],"_",3),
+                                  str_extract(coldata_l5[,2],"[0-9a-zA-Z_]*[-]*[0-9a-zA-Z_]*"),
+                                  coldata_l5[,2:3]))
+colnames(coldata_l5) <- c("label_unknown","cell_id","pert_time","pert_id","pert_info","num")
+coldata_l5$pert_type <- coldata$pert_type[match(coldata_l5$pert_id,coldata$pert_id)]
+coldata_l5$pert_iname <- coldata$pert_iname[match(coldata_l5$pert_id,coldata$pert_id)]
+
+for(cell_id in c("NPC")){
+  which <- which(coldata_l5$cell_id==cell_id &
+                   is.element(coldata_l5$pert_id, coldata$pert_id) &
+                   coldata_l5$pert_type == "trt_cp"
+                )
+  #my_ds <- parse_gctx(gctx_file_L5,rid="7994",cid=which)
+  my_ds <- parse_gctx(gctx_file_L5,cid=which)
+  rownames(my_ds@mat) <- rowdata$pr_gene_symbol
+  gene_names <- gene_sets$genes_all$external_gene_name[match(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+                                                             gene_sets$genes_all$ensembl_gene_id)]
+  out_df <- data.frame(pert=character(),
+                       num_genes_up_3sd=numeric(),
+                       num_genes_down_3sd=numeric(),
+                       query_target=character(),
+                       query_effect=numeric(),
+                       pert_id=character(),
+                       pert_iname = character(),
+                       dose = character()
+                       )
+  gene_blocks <- split(gene_names,sort(rep_len(1:getDoParWorkers(), length(gene_names))))
+  cat("start\n",file=files$temp_log,append = F)
+  out_df <- foreach(gene_block=gene_blocks, .combine=rbind) %dopar% {
+    for(gene_name in gene_block){
+      cat(paste0(gene_block[1]," block: gene ",gene_name,"\n"), file=files$temp_log,append = T)
+      if(!is.element(gene_name,rownames(my_ds@mat))){next}
+      ### which drugs are most specific to each gene 
+      which_down <- which[which(my_ds@mat[gene_name,] < -3 )]
+      which_up <- which[which(my_ds@mat[gene_name,] > 3 )]
+      
+      df <- out_df[0,]
+      if(length(which_down)>0){
+        my_ds_down <- parse_gctx(gctx_file_L5,cid=which_down)
+        rownames(my_ds_down@mat) <- rowdata$pr_gene_symbol
+        df <- rbind(df, data.frame(pert = colnames(my_ds_down@mat),
+                         num_genes_up_3sd = apply(my_ds_down@mat,2,FUN=function(x){sum(x > 3) }),
+                         num_genes_down_3sd = apply(my_ds_down@mat,2,FUN=function(x){sum(x < -3) }),
+                         query_target = gene_name,
+                         query_effect = my_ds_down@mat[gene_name,],
+                         pert_id = NA, pert_iname = NA, dose = NA
+        ))
+      }
+      if(length(which_up)>0){
+        my_ds_up <- parse_gctx(gctx_file_L5,cid=which_up)
+        rownames(my_ds_up@mat) <- rowdata$pr_gene_symbol
+        df <- rbind(df, data.frame(pert = colnames(my_ds_up@mat),
+                         num_genes_up_3sd = apply(my_ds_up@mat,2,FUN=function(x){sum(x > 3) }),
+                         num_genes_down_3sd = apply(my_ds_up@mat,2,FUN=function(x){sum(x < -3) }),
+                         query_target = gene_name,
+                         query_effect = my_ds_up@mat[gene_name,],
+                         pert_id = NA, pert_iname = NA, dose = NA
+        ))
+      }
+      if(nrow(df) > 0){
+        df$pert_id <- str_extract(str_remove_all(str_extract(df$pert,":.*:"),":"),"[0-9a-zA-Z_]*[-]*[0-9a-zA-Z_]*")
+        df$pert_iname <- coldata_l5$pert_iname[match(df$pert_id, coldata_l5$pert_id)]
+        df$dose <- coldata_l5$num[match(df$pert_id, coldata_l5$pert_id)]
+        out_df <- rbind(out_df,df)
+      }
+    }
+    out_df
+  }
+}
+out_df$dose <- NULL
+filename <- paste(dirs$tables,"L1000_NPC_epigene_drug_gt3sd.csv")
+write.csv(out_df, file = filename, row.names = F)
+save.image()
+```
+
+```{r}
+median_expr <- data.frame(gene=character(),exp_median=numeric(),cell_id=character())
+for(cell_id in "NPC"){
+  which <- which(coldata_l3$cell_id==cell_id &
+                   grepl("ctl_vehicle|ctl_untrt",coldata_l3$pert_type)
+                )
+  #my_ds <- parse_gctx(gctx_file_L5,rid="7994",cid=which)
+  my_ds <- parse_gctx(gctx_file_L3,cid=which)
+  median_expr <- rbind(median_expr,
+                       data.frame(gene = rowdata$pr_gene_symbol,
+                                  exp_median= rowMedians(my_ds@mat),
+                                  cell_id=cell_id))
+}
+```
+
+
+```{r, for each perturbogene number of genes and number of epigenes}
+
+df <- unique(out_df[,c("pert","pert_id","pert_iname","num_genes_up_3sd","num_genes_down_3sd")])
+df$num_genes_effected <- df$num_genes_up_3sd + df$num_genes_down_3sd
+temp_df <- data.frame(table(out_df$pert[out_df$query_effect < 0]))
+df$epi_down <- temp_df$Freq[match(df$pert,temp_df$Var1)]
+temp_df <- data.frame(table(out_df$pert[out_df$query_effect > 0]))
+df$epi_up <- temp_df$Freq[match(df$pert,temp_df$Var1)]
+temp_df <- data.frame(table(out_df$pert))
+df$epi_effected <- temp_df$Freq[match(df$pert,temp_df$Var1)]
+
+temp_num_epi <- sum(is.element(rowdata$pr_gene_symbol,
+                               gene_sets$human_chromatin_modifiers$AN_curated_set$hgnc_symbol))
+temp_num_genes <- nrow(rowdata)
+
+write.csv(df, file = paste0(dirs$tables,"L1000_NPC_drugs_effectCounts.csv"),row.names = F )
+
+#### proportion of each drug's gene effects that are in epigene
+plot(log10(df$num_genes_effected),df$epi_effected/(df$num_genes_effected) ); abline(h=temp_num_epi/temp_num_genes)
+
+ggplot(df, aes(x=log10(num_genes_effected), y = epi_effected/num_genes_effected))+
+  geom_point(alpha=0.1)+
+  geom_hline(yintercept = temp_num_epi/temp_num_genes, linetype="dashed",color="red")+
+  scale_y_continuous(breaks = seq(0,1,by=0.1))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+  geom_vline(xintercept =  log10(1:10),color="grey75", linewidth=0.1)+
+  geom_vline(xintercept =  log10(seq(10,100,by=10)),color="grey75", linewidth=0.1)+
+  geom_vline(xintercept =  log10(seq(100,1000,by=100)),color="grey75", linewidth=0.1)+
+  geom_vline(xintercept =  log10(seq(1000,10000,by=1000)),color="grey75", linewidth=0.1)
+filename <- paste0(dirs$figures,"L1000_NPC_proportionAffectedEpigenes_v_numGenesEffeced.png")
+ggsave(filename,height = 6,width=6)
+```
+
+
+```{r, for each gene number of perturbogenes with an effect}
+
+df <- data.frame(gene=unique(out_df$query_target))
+temp_df <- data.frame(table(out_df$query_target[out_df$query_effect > 0]))
+df$num_pert_up <- temp_df$Freq[match(df$gene,temp_df$Var1)]
+temp_df <- data.frame(table(out_df$query_target[out_df$query_effect < 0]))
+df$num_pert_down <- temp_df$Freq[match(df$gene,temp_df$Var1)]
+temp_df <- data.frame(table(out_df$query_target))
+df$num_pert <- temp_df$Freq[match(df$gene,temp_df$Var1)]
+df$num_pert_up[is.na(df$num_pert_up)] <- 0
+df$num_pert_down[is.na(df$num_pert_down)] <- 0
+df$num_pert[is.na(df$num_pert)] <- 0
+
+
+
+## from expression analysis
+temp_spec <- global_taus
+names(temp_spec) <- gene_sets$genes_all$external_gene_name[match(names(temp_spec),gene_sets$genes_all$ensembl_gene_id)]
+df$tau <- temp_spec[match(df$gene,names(temp_spec))]
+df$log2_expr_npc <- median_expr$exp_median[match(df$gene,median_expr$gene)]
+
+write.csv(df, file = paste0(dirs$tables,"L1000_NPC_genes_effectDrugCounts.csv"),row.names = F )
+
+
+temp_map <- unique(onto_maps$OMIM_GENE$map[,c("Ensembl_Gene_ID","inheritance_mode")])
+temp_map$gene <- gene_sets$genes_all$external_gene_name[match(temp_map$Ensembl_Gene_ID,gene_sets$genes_all$ensembl_gene_id)]
+temp_map <- temp_map[grepl("[dD]ominant",temp_map$inheritance_mode) & 
+                       !grepl("[sS]omatic",temp_map$inheritance_mode),]
+
+temp_df <- rbind(data.frame(gene=df$gene,tau=df$tau,pert=df$num_pert_up,dir="1pert_up"),
+                 data.frame(gene=df$gene,tau=df$tau,pert=df$num_pert_down,dir="2pert_down"))
+temp_df$median_expr <- median_expr$exp_median[match(temp_df$gene,median_expr$gene)]
+temp_df$is_dom_mendelian <- is.element(temp_df$gene, temp_map$gene)
+
+temp_df$log10pert <- log10(temp_df$pert+1)
+temp_df$log10pert[temp_df$dir=="2pert_down"] <- -temp_df$log10pert[temp_df$dir=="2pert_down"]
+
+ggplot(temp_df[temp_df$is_dom_mendelian,],aes(x=tau,y=log10(1+pert), #shape=dir ))+
+                                              color=median_expr,fill=median_expr,shape=dir ))+
+  geom_smooth(method="lm",fill=NA,aes(linetype=dir),color="black")+
+  geom_hline(yintercept =  log10(1:10),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  log10(seq(10,100,by=10)),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  log10(seq(100,1000,by=100)),color="grey75", linewidth=0.1)+
+  geom_point(alpha=0.8)+#,fill="black")+ #,shape=21)+
+  scale_x_continuous(breaks = seq(0,1,by=0.1))+
+#  scale_fill_manual(values=c("red","grey20","red"))+
+# scale_fill_gradientn(colours = c("blue","white","grey20","black"))+
+  scale_shape_manual(values = c(24,25))+#6))+
+   scale_color_gradientn(colours = c("black","skyblue3","lightgreen","yellow"))+
+   scale_fill_gradientn(colours = c("black","skyblue3","lightgreen","yellow"))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+  
+  #scale_size(range = c(1,3))+
+  facet_grid(dir ~ .)
+
+
+
+filename <- paste0(dirs$figures,"L1000_NPC_numPerturbogenes_UpDownReg3sd_Epigenes_log10.png")
+ggsave(filename,height = 6,width=6)
+
+
+
+gg1 <- ggplot(temp_df[temp_df$is_dom_mendelian & 
+                        temp_df$dir=="1pert_up",],aes(x=tau,y=log10pert,shape=dir ))+
+  geom_smooth(method="lm",fill=NA,aes(linetype=dir),color="black")+
+  geom_hline(yintercept =  log10(1:10),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  log10(seq(10,100,by=10)),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  log10(seq(100,1000,by=100)),color="grey75", linewidth=0.1)+
+  geom_point(alpha=0.8,fill="black")+ #,shape=21)+
+  scale_x_continuous(breaks = seq(0,1,by=0.1))+
+  scale_shape_manual(values = c(24,6))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank())
+gg2 <- ggplot(temp_df[temp_df$is_dom_mendelian & 
+                        temp_df$dir=="2pert_down",],aes(x=tau,y=log10pert,shape=dir ))+
+  geom_smooth(method="lm",fill=NA,linetype="dashed",color="black")+
+  geom_hline(yintercept =  -log10(1:10),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  -log10(seq(10,100,by=10)),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  -log10(seq(100,1000,by=100)),color="grey75", linewidth=0.1)+
+  geom_point(alpha=0.8,fill="black")+ #,shape=21)+
+  scale_x_continuous(breaks = seq(0,1,by=0.1))+
+  scale_shape_manual(values = c(6))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())
+
+
+
+filename <- paste0(dirs$figures,"L1000_NPC_numPerturbogenes_UpDownReg3sd_Epigenes_log10_flippedDown.png")
+ggsave(filename,gridExtra::grid.arrange(gg1,gg2,nrow=2)
+,height = 6,width=6)
+```
+
+
+```{r}
+  # gene : number drugs up 3sd, down 3sd, max down specificity, max down specificity drug, max up specificity, max up specificity drug
+  # temp_which_up <- which(df$query_effect > 0)
+  # temp_which_up_min <- min(df$num_genes_up_3sd[temp_which_up] + df$num_genes_down_3sd[temp_which_up])
+  # temp_which_up_min_index <- temp_which_up[which.min(df$num_genes_up_3sd[temp_which_up] + df$num_genes_down_3sd[temp_which_up])]
+  # temp_which_up_min_pertname_dose <- paste0(df$pert_iname[temp_which_up_min_index],":",df$dose[temp_which_up_min_index])
+  # 
+  # temp_which_down<- which(df$query_effect < 0)
+  # temp_which_down_min <- min(df$num_genes_up_3sd[temp_which_down] + df$num_genes_down_3sd[temp_which_down])
+  # temp_which_down_min_index <- temp_which_down[which.min(df$num_genes_up_3sd[temp_which_down] + df$num_genes_down_3sd[temp_which_down])]
+  # temp_which_down_min_pertname_dose <- paste0(df$pert_iname[temp_which_down_min_index],":",df$dose[temp_which_down_min_index])
+  # 
+  # out_df <- data.frame(query_target = "KAT6A",
+  #                      num_pert_query_up = sum(df$query_effect > 0),
+  #                      num_pert_query_down = sum(df$query_effect < 0),
+  #                      min_codiff_genes_query_up = temp_which_up_min,
+  #                      min_codiff_genes_pert_query_up = temp_which_up_min_pertname_dose,
+  #                      min_codiff_genes_query_down = temp_which_down_min,
+  #                      min_codiff_genes_pert_query_down = temp_which_down_min_pertname_dose
+  #                      
+  #                      )
+  
+  
+  ## identify consensus gene signature
+  # temp <- data.frame(
+  #   gene=rownames(my_ds@mat),
+  #   gt2 = apply(my_ds@mat,1,FUN = function(x){sum(x > 2) }),
+  #   ltn2 = apply(my_ds@mat,1,FUN = function(x){sum(x < -2)})
+  # ) 
+  # 
+  # 
+  
+
+  ## identify consensus gene signature
+
+  
+#   
+#   ## id disregulated genes shared by >50% 
+#   temp2 <- data.frame(
+#     gene=rownames(my_ds_up@mat),
+#     target_down__prop_up=apply(my_ds_down@mat,1,FUN=function(x){sum(x > 2 ) } ),
+#     target_down__prop_down=apply(my_ds_down@mat,1,FUN=function(x){sum(x < -2 ) } ),
+#     target_up__prop_up=apply(my_ds_up@mat,1,FUN=function(x){sum(x > 2 ) } ),
+#     target_up__prop_down=apply(my_ds_up@mat,1,FUN=function(x){sum(x < -2 ) } )
+#   )
+#   temp3 <- merge(temp,temp2)
+#   View(data.frame(gene=names(temp),prop=temp))
+#   temp <- apply(my_ds_up@mat,1,FUN=function(x){sum(abs(x) > 2 ) / length(x)} )
+#   View(data.frame(gene=names(temp),prop=temp))
+# }
+
+
+```
+
+
+```{r, shRNA analysis}
+## 
+### MPC1 MPC2
 ## match rnaPlate for deviation measure
 cell_id <- "NPC"
 gene_name <- "KAT6A"
@@ -84,27 +367,30 @@ gene_name <- "KAT6A"
 #                  cell_type=NA,
 #                  consensus_target_gene = data.frame(gene,id,cell,l2fc,pval,qval)
 #                  )
-for(cell_id in unique(coldata$cell_id)){
+temp_result <- list()
+for(j  in 1564:1583){
+  print(j)
+  gene_name <- unique(coldata_l3$pert_iname[which(coldata_l3$pert_type=="trt_sh")])[j]
   ## CHECK TARGET EXPRESSION - IF LOW IN CELL TYPE CONSIDER SKIPPING
-  which <- which(coldata$pert_iname==gene_name & coldata$cell_id == cell_id) 
+  which <- which(coldata_l3$pert_iname==gene_name & coldata_l3$cell_id == cell_id) 
   if(length(which)==0){next}
   ## in cell - per sh - match to plate get delta value 3rep x (plt_cntrl-plt_sh) delta(log10tpm) values
   ##         - between sh - weighted delta(l10tpm) or median dl10tpm -- only if delta target is consistent
   
   # sh_id plate_id median(delta)
-  pert_id <- unique(coldata$pert_id[which])[1]
+  pert_id <- unique(coldata_l3$pert_id[which])[1]
   l2fc_list <- list()
   z_list <- list()
   which_is_target <- which(rowdata$pr_gene_symbol == gene_name )
-  for(pert_id in unique(coldata$pert_id[which])){
-    which2 <- which(coldata$pert_iname == gene_name &
-                     coldata$cell_id == cell_id &
-                     coldata$pert_id == pert_id )
+  for(pert_id in unique(coldata_l3$pert_id[which])){
+    which2 <- which(coldata_l3$pert_iname == gene_name &
+                     coldata_l3$cell_id == cell_id &
+                     coldata_l3$pert_id == pert_id )
     my_ds <- parse_gctx(gctx_file_L3,cid=which2)
     
-    which2_mcontrol <- which(coldata$cell_id == cell_id &
-                               is.element(coldata$rna_plate, coldata$rna_plate[which2]) &
-                               grepl("ctl",coldata$pert_type))
+    which2_mcontrol <- which(coldata_l3$cell_id == cell_id &
+                               is.element(coldata_l3$rna_plate, coldata_l3$rna_plate[which2]) &
+                               grepl("ctl",coldata_l3$pert_type))
     my_ds_mcontrol <- parse_gctx(gctx_file_L3,cid=which2_mcontrol)
     
     
@@ -113,8 +399,8 @@ for(cell_id in unique(coldata$cell_id)){
     z_mat <- as.data.frame(my_ds@mat)
     min_mat <- as.data.frame(my_ds@mat)
     for(i in 1:ncol(my_ds@mat)){
-      temp_ctrl_mat <- my_ds_mcontrol@mat[,is.element(coldata$rna_plate[which2_mcontrol],
-                                                      coldata$rna_plate[which2[i]])]
+      temp_ctrl_mat <- my_ds_mcontrol@mat[,is.element(coldata_l3$rna_plate[which2_mcontrol],
+                                                      coldata_l3$rna_plate[which2[i]])]
       temp_sd <- apply(temp_ctrl_mat,1,sd)
       l2fc_mat[,i] <- my_ds@mat[,i] - rowMeans(temp_ctrl_mat)
       z_mat[,i] <- (my_ds@mat[,i] - rowMeans(temp_ctrl_mat)) / temp_sd
@@ -142,13 +428,18 @@ for(cell_id in unique(coldata$cell_id)){
   temp2 <- (data.frame(gene=rownames(z_mat),z=temp,z_median=rowMedians(as.matrix(z_mat))))
   temp2$l2fc <- apply(l2fc_mat,1,weighted.mean, temp_weights)
   temp2$l2fc_median <- rowMedians(as.matrix(l2fc_mat))
+  temp2$above_cutoff <- abs(temp2$l2fc) > log2(1.5) &
+    abs(temp2$l2fc_median) > log2(1.5) &
+    abs(temp2$z) > 1 &
+    abs(temp2$z_median) > 1
   #coldata$rna_plate == coldata$rna_plate 
   
   
-  which_paired_controls <- 2
   
-  
+  temp_result[[paste0("up:",gene_name)]] <- temp2$gene[which(temp2$above_cutoff & temp2$z > 0)]
+  temp_result[[paste0("down:",gene_name)]] <- temp2$gene[which(temp2$above_cutoff & temp2$z < 0)]
+  if(j %% 7 == 0){save.image()}
   
 }
-
+save.image()
 ```

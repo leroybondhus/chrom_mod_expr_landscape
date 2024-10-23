@@ -7,6 +7,7 @@ output: html_document
 
 
 ```{r}
+raw_mat <- dataset_list$TEXP_GTEX$tpm_median_mat
 mat <- dataset_list$TEXP_GTEX$median_mat
 rowinfo <- dataset_list$TEXP_GTEX$median_mat_rowinfo
 colinfo <- dataset_list$TEXP_GTEX$median_mat_colinfo
@@ -38,7 +39,7 @@ gene_entropies <- foreach(gene_block=gene_blocks, .combine=rbind) %dopar% {
   sub_rowinfo$mean_intra_tissue_entropy <- 0
   sub_rowinfo$mean_inter_tissue_entropy <- 0
   sub_rowinfo$gene_transcript_count <- -1
-  
+  sub_rowinfo$num_tissues_gt10prcnt_max_expr <- 1
   
   for(gene in gene_block){
     print(gene)
@@ -47,29 +48,564 @@ gene_entropies <- foreach(gene_block=gene_blocks, .combine=rbind) %dopar% {
     sub_rowinfo$gene_transcript_count[which] <- length(which)
     if(length(which)==1){next}
     
+    
+    # log10(colSums(raw_mat[sub_rowinfo$transcript[which],])+1)
+    # expr_weights <- 1/(1+exp(-1*(x-x0)))
+    ## weight by expression level - low expression contexts should count less 
+    expr_weights <- colSums(mat[sub_rowinfo$transcript[which],])/max(colSums(mat[sub_rowinfo$transcript[which],]))
+    
     isoform_probs <- apply(mat[sub_rowinfo$transcript[which],],2,FUN=function(x){x/sum(x)})
     tissue_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(-log2(x[x!=0])*x[x!=0])})
-    sub_rowinfo$mean_intra_tissue_entropy[which] <- weighted.mean(tissue_entropies,weights)
+    sub_rowinfo$mean_intra_tissue_entropy[which] <- weighted.mean(tissue_entropies,weights*expr_weights)
     
-    agg_isoform_probs <- apply(isoform_probs,1,FUN=function(x){weighted.mean(x, weights)})
+    agg_isoform_probs <- apply(isoform_probs,1,FUN=function(x){weighted.mean(x, weights*expr_weights)})
     ## Kullback-Leibler divergence : sum(P(x)log(P(x)/Q(x)))
     joint_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(log2(x[x!=0]/agg_isoform_probs[x!=0])*x[x!=0])})
     #tissue_max_expressions <- apply(mat[sub_rowinfo$transcript[which],],2,max)
-    sub_rowinfo$mean_inter_tissue_entropy[which] <- weighted.mean(joint_entropies, weights)
+    sub_rowinfo$mean_inter_tissue_entropy[which] <- weighted.mean(joint_entropies, weights*expr_weights)
+    
+    sub_rowinfo$num_tissues_gt10prcnt_max_expr[which] <- sum(expr_weights > 0.5)
   }
   sub_rowinfo
 }
 
-temp <- unique(sub_rowinfo[,c("gene_id","mean_inter_tissue_entropy","mean_intra_tissue_entropy","gene_transcript_count")])
-plot(temp$gene_transcript_count,temp$mean_inter_tissue_entropy)
-View(mat[rowinfo$transcript[which(rowinfo$gene_name=="KAT6B")],])
-temp <- t(mat[rowinfo$transcript[which(rowinfo$gene_name=="KAT6B")],])
-for(i in 1:ncol(temp)){
-  for(j in 1:ncol(temp)){
-   plot(temp[,i],temp[,j]) 
-  }
-}
-
-colnames(mat) <- colinfo$sample_type
 
 ```
+
+
+```{r}
+onto <- ontos$uberon$ont
+mat <- dataset_list$ENCODE_GTEX_COMB$mat
+coldata <- dataset_list$ENCODE_GTEX_COMB$coldata
+
+num_features <- nrow(mat)
+
+which_cols <- onto$ehh[[which(onto$name=="anatomical entity")]]
+
+temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] )
+temp_mat <- mat[,temp_which_cols,drop=F]
+temp_coldata <- coldata[temp_which_cols,,drop=F]
+
+dot_sim <- similarity_func(temp_mat)
+rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat)
+sim_tree <- cluster_func(dot_sim)
+weights <- get_weights(sim_tree, colnames(temp_mat))
+weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)})
+weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)})
+weighted_zscores <- calc_weighted_zscore_matrix(temp_mat,weights)
+weighted_tau <- calc_weighted_tau(temp_mat,weights)
+
+names(weighted_tau) <- rownames(mat)
+
+gene_entropies$tau <- NA
+gene_entropies$tau <- weighted_tau[match(gene_entropies$gene_id,names(weighted_tau))]
+gene_entropies$tau[gene_entropies$gene_id]
+```
+
+
+```{r}
+
+gene_entropies <- unique(gene_entropies[,which(colnames(gene_entropies) != "transcript")])
+gene_entropies$is_chrom <- is.element(gene_entropies$gene_id,gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+df <- gene_entropies[which(gene_entropies$gene_transcript_count > 1),]
+
+## exon count
+temp_df <- gene_sets$genes_all_transcript
+temp_df <- temp_df[which(is.element(temp_df$ensembl_gene_id,df$gene_id )),]
+temp_df <- unique(temp_df)
+
+temp_df_2 <- as.data.frame(table(temp_df$ensembl_transcript_id))
+colnames(temp_df_2)[1] <- "ensembl_transcript_id"
+colnames(temp_df_2)[2] <- "exon_count"
+temp_df <- merge(temp_df, temp_df_2, sort=FALSE)
+temp_df <- unique(temp_df[,c("ensembl_gene_id","exon_count")])
+df <- merge(df,temp_df,by.x="gene_id",by.y="ensembl_gene_id")
+df$log2_isoform_count <- log2(df$gene_transcript_count)
+df$log2_exon_count <- log2(df$exon_count)
+
+for(w_axis_info in c(T,F)){
+  ggl <- list()
+  for(y_col in c("log2_exon_count","log2_isoform_count","mean_intra_tissue_entropy", "mean_inter_tissue_entropy")){
+    for(x_col in c("log2_exon_count","log2_isoform_count","mean_intra_tissue_entropy", "mean_inter_tissue_entropy")){
+       ## variable column name## !!sym(temp)
+      if(x_col==y_col){
+        #density plot on diagonal 
+        gg <-ggplot(df, aes(x=!!sym(x_col), color=is_chrom))+
+          scale_color_manual(values=c("steelblue3","purple"))+
+          theme_bw()+
+          geom_vline(xintercept=mean(df[df$is_chrom,x_col],na.rm=T),color="purple",linetype="dashed")+
+          geom_vline(xintercept=mean(df[!df$is_chrom,x_col],na.rm=T),color="steelblue3",linetype="dashed")+
+          geom_density()+theme(legend.position = "none")
+        if(!w_axis_info){
+          gg <- gg + theme(axis.title = element_blank(),
+                           axis.text = element_blank(),
+                           panel.grid.minor = element_blank())
+        }
+        if(grepl("log2",x_col)){gg <- gg + geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)}
+      } else {
+        gg <-ggplot(df, aes(x=!!sym(x_col), y=!!sym(y_col), color=is_chrom))+
+          scale_color_manual(values=c("steelblue3","purple"))+
+          theme_bw()
+        jitter_height <- jitter_width <- 0
+        if(grepl("log2",x_col)){
+          gg <- gg + geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)
+          jitter_width <- 0.05
+        }
+        if(grepl("log2",y_col)){
+          gg <- gg + geom_hline(yintercept =  log2(1:32),color="grey75", linewidth=0.1)
+          jitter_height <- 0.05
+        }
+        gg <- gg + 
+          geom_jitter(width=jitter_width, height=jitter_height, data=df[!df$is_chrom,],color="#00BFC4", size=0.2, alpha=0.2)+
+          geom_jitter(width=jitter_width, height=jitter_height, data=df[df$is_chrom,],color="#C77CFF", size=0.3, alpha=0.6)+
+          stat_smooth(method=lm)+theme(legend.position = "none",
+                                       panel.grid.minor = element_blank())
+        if(!w_axis_info){
+          gg <- gg + theme(legend.position = "none",
+                           axis.title = element_blank(),
+                           axis.text = element_blank(),
+                           panel.grid.minor = element_blank())
+          }
+      }
+      ggl[[paste0(x_col,"__",y_col)]] <- gg
+    }
+  }
+  
+  gg <- gridExtra::grid.arrange(grobs=ggl,nrow=4)
+  filename <- paste0(dirs$figures,"exon_isoform_entropy_corrplots", ifelse(w_axis_info,"__axislabels_",""), ".png")
+  
+  ggsave(gg, filename = filename, width=ifelse(w_axis_info,10,6), height = ifelse(w_axis_info,10,6))
+}
+```
+
+```{r}
+
+gg1 <- ggplot(df, aes(x=log2(exon_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  theme_bw()+
+  geom_density()+theme(legend.position = "none",
+                       axis.title.x = element_blank(),
+                       axis.text.x = element_blank(),
+                       panel.grid.minor = element_blank())
+gg2 <- ggplot(df, aes(x=log2(gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  theme_bw()+
+  geom_density()+coord_flip()+theme(legend.position = "none",
+                       axis.title.y = element_blank(),
+                       axis.text.y = element_blank(),
+                       panel.grid.minor = element_blank())
+gg3 <- ggplot(df, aes(x=log2(exon_count),y=log2(gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  geom_hline(yintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  geom_jitter(width=0.05, height=0.05, data=df[!df$is_chrom,],color="#00BFC4", size=0.4, alpha=0.2)+
+  geom_jitter(width=0.05, height=0.05, data=df[df$is_chrom,],color="#C77CFF", size=0.6, alpha=0.6)+
+  theme_bw()+
+  stat_smooth(method=lm)+theme(legend.position = "none",
+                       panel.grid.minor = element_blank())
+
+gg <- gridExtra::grid.arrange(gg1,gg2,gg3,heights=c(1,3),widths=c(3,1),layout_matrix=rbind(c(1,NA),c(3,2)) )
+filename <- paste0(dirs$figures,"exon_v_isoform.png")
+ggsave(gg, filename = filename, height = 4, width=4)
+
+
+
+gg1 <- ggplot(df, aes(x=log2(gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  theme_bw()+
+  geom_density()+theme(legend.position = "none",
+                       axis.title.x = element_blank(),
+                       axis.text.x = element_blank(),
+                       panel.grid.minor = element_blank()
+                       )
+gg2 <- ggplot(df, aes(x=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  theme_bw()+
+  geom_density()+coord_flip()+theme(legend.position = "none",
+                       axis.title.y = element_blank(),
+                       axis.text.y = element_blank(),
+                       panel.grid.minor = element_blank())
+gg3 <- ggplot(df, aes(x=log2(gene_transcript_count),y=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  geom_jitter(width=0.05, data=df[!df$is_chrom,],color="#00BFC4", size=0.4, alpha=0.2)+
+  geom_jitter(width=0.05, data=df[df$is_chrom,],color="#C77CFF", size=0.6, alpha=0.6)+
+  theme_bw()+
+  stat_smooth(method=lm)+theme(legend.position = "none",
+                       panel.grid.minor = element_blank())
+
+gg <- gridExtra::grid.arrange(gg1,gg2,gg3,heights=c(1,3),widths=c(3,1),layout_matrix=rbind(c(1,NA),c(3,2)) )
+filename <- paste0(dirs$figures,"isoform_v_intratissue_entropy.png")
+ggsave(gg, filename = filename, height = 4, width=4)
+
+gg2 <- ggplot(df, aes(x=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  theme_bw()+
+  geom_density()+coord_flip()+theme(legend.position = "none",
+                       axis.title.y = element_blank(),
+                       axis.text.y = element_blank(),
+                       panel.grid.minor = element_blank())
+gg3 <- ggplot(df, aes(x=log2(gene_transcript_count),y=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log2(1:32),color="grey75", linewidth=0.1)+
+  geom_jitter(width=0.05, data=df[!df$is_chrom,],color="#00BFC4", size=0.4, alpha=0.2)+
+  geom_jitter(width=0.05, data=df[df$is_chrom,],color="#C77CFF", size=0.6, alpha=0.6)+
+  theme_bw()+
+  stat_smooth(method=lm)+theme(legend.position = "none",
+                       panel.grid.minor = element_blank())
+
+gg <- gridExtra::grid.arrange(gg1,gg2,gg3,heights=c(1,3),widths=c(3,1),layout_matrix=rbind(c(1,NA),c(3,2)) )
+filename <- paste0(dirs$figures,"isoform_v_intertissue_entropy.png")
+ggsave(gg, filename = filename, height = 4, width=4)
+
+# 
+# 
+# 
+# ggplot(df, aes(x=tau,y=log2(gene_transcript_count), color=is_chrom))+
+#   scale_color_manual(values=c("steelblue3","purple"))+
+#   geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+#   geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+#   stat_smooth(method=lm)
+# ggplot(df, aes(x=tau,y=mean_intra_tissue_entropy, color=is_chrom))+
+#   scale_color_manual(values=c("steelblue3","purple"))+
+#   geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+#   geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+#   stat_smooth(method=lm)
+# ggplot(df, aes(x=tau,y=mean_inter_tissue_entropy, color=is_chrom))+
+#   scale_color_manual(values=c("steelblue3","purple"))+
+#   geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+#   geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+#   stat_smooth(method=lm)
+# 
+# ggplot(df, aes(x=tau,y=log2(gene_transcript_count), color=is_chrom))+
+#   scale_color_manual(values=c("steelblue3","purple"))+
+#   geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+#   geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+#   stat_smooth(method=lm)
+
+```
+
+```{r}
+gene_entropies <- unique(gene_entropies[,which(colnames(gene_entropies) != "transcript")])
+gene_entropies$is_chrom <- is.element(gene_entropies$gene_id,gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
+df <- gene_entropies[which(gene_entropies$gene_transcript_count > 1),]
+
+df$intra_tissue_entropy__sigmoid <- 1 / (1 + exp(-2*(df$mean_intra_tissue_entropy-quantile(df$mean_intra_tissue_entropy,0.5,na.rm=TRUE)) ))
+df$inter_tissue_entropy__sigmoid <- 1 / (1 + exp(-10*(df$mean_inter_tissue_entropy-quantile(df$mean_inter_tissue_entropy,0.75,na.rm=TRUE)) ))
+ggplot(df, aes(x=mean_inter_tissue_entropy,y=inter_tissue_entropy__sigmoid, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  geom_vline( aes(xintercept=quantile(df$mean_inter_tissue_entropy,0.75,na.rm=TRUE) ))
+ggplot(df, aes(x=inter_tissue_entropy__sigmoid, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_density()
+
+df$max_sigmoid_entropy <- pmax(df$intra_tissue_entropy__sigmoid,df$inter_tissue_entropy__sigmoid)  
+
+ggplot(df, aes(x=intra_tissue_entropy__sigmoid,y=max_sigmoid_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)
+ggplot(df, aes(x=inter_tissue_entropy__sigmoid,y=max_sigmoid_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)
+ggplot(df, aes(x=inter_tissue_entropy__sigmoid,y=intra_tissue_entropy__sigmoid, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  geom_abline(intercept=0,slope=1)
+
+ggplot(df, aes(x=mean_intra_tissue_entropy,y=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+
+ggplot(df, aes(x=tau,y=max_sigmoid_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method="lm")
+
+model <- lm(tau ~ mean_intra_tissue_entropy + mean_inter_tissue_entropy + is_chrom,
+            data = df)
+summary(model)
+
+
+ggplot(df, aes(x=log2(df$gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_density()
+ggplot(df, aes(x=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_density()
+ggplot(df, aes(x=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_density()
+
+ggplot(df, aes(x=log2(df$gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_step(aes(y=..y..),stat="ecdf")
+ggplot(df, aes(x=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_step(aes(y=..y..),stat="ecdf")
+ggplot(df, aes(x=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_step(aes(y=..y..),stat="ecdf")
+
+
+
+
+
+ggplot(df, aes(x=tau,y=log2(gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+ggplot(df, aes(x=tau,y=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+ggplot(df, aes(x=tau,y=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+
+
+
+
+
+
+cor(df$mean_intra_tissue_entropy, df$mean_inter_tissue_entropy,use="complete.obs")
+
+
+model <- lm(mean_intra_tissue_entropy ~ tau + is_chrom,
+            data = df)
+summary(model)
+
+
+ggplot(df[df$tau < 0.5,], aes(x=tau,y=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom & df$tau < 0.5,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom & df$tau < 0.5,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+
+
+ggplot(df, aes(x=tau,y=log2(gene_transcript_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+ggplot(df, aes(x=log2(gene_transcript_count),y=mean_inter_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_point(data=df[!df$is_chrom,],color="#00BFC4",alpha=0.2)+
+  geom_point(data=df[df$is_chrom,],color="#C77CFF",alpha=0.7)+
+  stat_smooth(method=lm)
+ggplot(df, aes(x=log2(gene_transcript_count),y=mean_intra_tissue_entropy, color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_jitter(data=df[!df$is_chrom,],color="#00BFC4",width = 0.05,alpha=0.1)+
+  geom_jitter(data=df[df$is_chrom,],color="#C77CFF",width = 0.05,alpha=0.7)+
+  stat_smooth(method=lm)
+
+
+model <- lm(mean_intra_tissue_entropy ~ log2(gene_transcript_count) + is_chrom,
+            data = df)
+summary(model)
+
+cor(df$mean_intra_tissue_entropy,log2(df$gene_transcript_count), use="complete.obs")
+which <- which(df$is_chrom)
+cor(df$mean_intra_tissue_entropy[which],log2(df$gene_transcript_count[which]), use="complete.obs")
+which <- which(!df$is_chrom)
+cor(df$mean_intra_tissue_entropy[which],log2(df$gene_transcript_count[which]), use="complete.obs")
+```
+
+
+
+<!-- ### long read data -->
+
+
+<!-- ```{r} -->
+<!-- raw_mat <- dataset_list$LR_GTEX$tpm_median_mat -->
+<!-- mat <- dataset_list$LR_GTEX$median_mat -->
+<!-- rowinfo <- dataset_list$LR_GTEX$median_mat_rowinfo -->
+<!-- colinfo <- dataset_list$LR_GTEX$median_mat_colinfo -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+
+<!-- dot_sim <- similarity_func(mat) -->
+<!-- rownames(dot_sim) <- colnames(dot_sim) <- colnames(mat) -->
+<!-- sim_tree <- cluster_func(dot_sim) -->
+<!-- weights <- get_weights(sim_tree, colnames(mat)) -->
+<!-- weighted_means <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
+<!-- weighted_sds <- apply(mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
+<!-- weighted_zscores <- calc_weighted_zscore_matrix(mat,weights) -->
+<!-- weighted_tau <- calc_weighted_tau(mat,weights) -->
+
+
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+
+<!-- gene_blocks <- split(unique(rowinfo$gene_id),sort(rep_len(1:getDoParWorkers(), length(unique(rowinfo$gene_id))))) -->
+<!-- gene_entropies <- foreach(gene_block=gene_blocks, .combine=rbind) %dopar% { -->
+<!--   sub_rowinfo <- rowinfo[is.element(rowinfo$gene_id, gene_block),] -->
+
+<!--   sub_rowinfo$mean_intra_tissue_entropy <- 0 -->
+<!--   sub_rowinfo$mean_inter_tissue_entropy <- 0 -->
+<!--   sub_rowinfo$gene_transcript_count <- -1 -->
+<!--   sub_rowinfo$num_tissues_gt10prcnt_max_expr <- 1 -->
+
+<!--   for(gene in gene_block){ -->
+<!--     print(gene) -->
+<!--     ## get transcripts of gene -->
+<!--     which <- which(sub_rowinfo$gene_id==gene) -->
+<!--     sub_rowinfo$gene_transcript_count[which] <- length(which) -->
+<!--     if(length(which)==1){next} -->
+
+
+<!--     # log10(colSums(raw_mat[sub_rowinfo$transcript[which],])+1) -->
+<!--     # expr_weights <- 1/(1+exp(-1*(x-x0))) -->
+<!--     ## weight by expression level - low expression contexts should count less  -->
+<!--     expr_weights <- colSums(mat[sub_rowinfo$transcript[which],])/max(colSums(mat[sub_rowinfo$transcript[which],])) -->
+
+<!--     isoform_probs <- apply(mat[sub_rowinfo$transcript[which],],2,FUN=function(x){x/sum(x)}) -->
+<!--     tissue_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(-log2(x[x!=0])*x[x!=0])}) -->
+<!--     sub_rowinfo$mean_intra_tissue_entropy[which] <- weighted.mean(tissue_entropies,weights*expr_weights) -->
+
+<!--     agg_isoform_probs <- apply(isoform_probs,1,FUN=function(x){weighted.mean(x, weights*expr_weights)}) -->
+<!--     ## Kullback-Leibler divergence : sum(P(x)log(P(x)/Q(x))) -->
+<!--     joint_entropies <- apply(isoform_probs, 2, FUN=function(x){sum(log2(x[x!=0]/agg_isoform_probs[x!=0])*x[x!=0])}) -->
+<!--     #tissue_max_expressions <- apply(mat[sub_rowinfo$transcript[which],],2,max) -->
+<!--     sub_rowinfo$mean_inter_tissue_entropy[which] <- weighted.mean(joint_entropies, weights*expr_weights) -->
+
+<!--     sub_rowinfo$num_tissues_gt10prcnt_max_expr[which] <- sum(expr_weights > 0.5) -->
+<!--   } -->
+<!--   sub_rowinfo -->
+<!-- } -->
+
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- onto <- ontos$uberon$ont -->
+<!-- mat <- dataset_list$ENCODE_GTEX_COMB$mat -->
+<!-- coldata <- dataset_list$ENCODE_GTEX_COMB$coldata -->
+
+<!-- num_features <- nrow(mat) -->
+
+<!-- which_cols <- onto$ehh[[which(onto$name=="anatomical entity")]] -->
+
+<!-- temp_which_cols <- intersect(which_cols, onto$ehh[[which(onto$name=="anatomical entity")]] ) -->
+<!-- temp_mat <- mat[,temp_which_cols,drop=F] -->
+<!-- temp_coldata <- coldata[temp_which_cols,,drop=F] -->
+
+<!-- dot_sim <- similarity_func(temp_mat) -->
+<!-- rownames(dot_sim) <- colnames(dot_sim) <- colnames(temp_mat) -->
+<!-- sim_tree <- cluster_func(dot_sim) -->
+<!-- weights <- get_weights(sim_tree, colnames(temp_mat)) -->
+<!-- weighted_means <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.mean(x, weights=weights)}) -->
+<!-- weighted_sds <- apply(temp_mat, MARGIN = 1, FUN = function(x){Hmisc::wtd.var(x, weights=weights)}) -->
+<!-- weighted_zscores <- calc_weighted_zscore_matrix(temp_mat,weights) -->
+<!-- weighted_tau <- calc_weighted_tau(temp_mat,weights) -->
+
+<!-- names(weighted_tau) <- rownames(mat) -->
+
+<!-- gene_entropies$tau <- NA -->
+<!-- gene_entropies$tau <- weighted_tau[match(gene_entropies$gene_id,names(weighted_tau))] -->
+<!-- gene_entropies$tau[gene_entropies$gene_id] -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gene_entropies <- unique(gene_entropies[,which(colnames(gene_entropies) != "transcript")]) -->
+<!-- gene_entropies$is_chrom <- is.element(gene_entropies$gene_id,gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers) -->
+<!-- #gene_entropies <- gene_entropies[which(gene_entropies$gene_transcript_count > 1),] -->
+<!-- ggplot(gene_entropies, aes(x=mean_inter_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_density() -->
+<!-- ggplot(gene_entropies, aes(x=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_density() -->
+<!-- ggplot(gene_entropies, aes(x=mean_inter_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_step(aes(y=..y..),stat="ecdf") -->
+<!-- ggplot(gene_entropies, aes(x=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_step(aes(y=..y..),stat="ecdf") -->
+
+
+
+<!-- ggplot(gene_entropies, aes(x=tau,y=mean_inter_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+<!-- ggplot(gene_entropies, aes(x=tau,y=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+
+
+<!-- ggplot(gene_entropies, aes(x=mean_inter_tissue_entropy,y=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+<!-- ggplot(gene_entropies, aes(y=mean_inter_tissue_entropy,x=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+
+
+
+
+<!-- model <- lm(mean_intra_tissue_entropy ~ tau + is_chrom, -->
+<!--             data = gene_entropies) -->
+<!-- summary(model) -->
+
+
+<!-- ggplot(gene_entropies[gene_entropies$tau < 0.5,], aes(x=tau,y=mean_inter_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom & gene_entropies$tau < 0.5,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom & gene_entropies$tau < 0.5,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+
+
+<!-- ggplot(gene_entropies, aes(x=tau,y=log2(gene_transcript_count), color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+<!-- ggplot(gene_entropies, aes(x=log2(gene_transcript_count),y=mean_inter_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+<!-- ggplot(gene_entropies, aes(x=log2(gene_transcript_count),y=mean_intra_tissue_entropy, color=is_chrom))+ -->
+<!--   scale_color_manual(values=c("steelblue3","purple"))+ -->
+<!--   geom_point(data=gene_entropies[!gene_entropies$is_chrom,],color="#00BFC4",alpha=0.2)+ -->
+<!--   geom_point(data=gene_entropies[gene_entropies$is_chrom,],color="#C77CFF",alpha=0.7)+ -->
+<!--   stat_smooth(method=lm) -->
+
+<!-- model <- lm(mean_inter_tissue_entropy ~ tau + is_chrom, -->
+<!--             data = gene_entropies[gene_entropies$tau < 0.5,]) -->
+<!-- summary(model) -->
+
+
+<!-- ``` -->
+
+
+

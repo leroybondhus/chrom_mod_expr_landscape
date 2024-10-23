@@ -322,7 +322,7 @@ result_df <- result_df[which(result_df$id != "root"),]
 
 ### manual cleanup of result df NOT GENERAL
 #result_df <- result_df[-c(85:92,93:96,112:117,130:135,146:165,183:232,244:245,253:254,256:257,277:340,350:434),] # no tau cut
-result_df <- backup_result_df
+backup_result_df <- result_df 
 result_df$row <- 1:nrow(result_df)
 result_df <- result_df[-c(2,4,62:70,77:87,92:95,102:105,123:147,164:172,177:207,256:347,349:387),]
 
@@ -599,7 +599,8 @@ for(i in 1:nrow(temp_df)){
 gene_sets$spec_onto_all <- list("immune system"=c(),
                                 "nervous system"=c(),
                                 "intestine"=c(),
-                                "musculature"=c())
+                                "musculature"=c(),
+                                "heart"=c())
 temp_descs <- gene_sets$spec_onto_all
 for(i in 1:length(temp_descs)){
   which <- which(ontos$uberon$ont$name==names(temp_descs)[i])
@@ -886,7 +887,7 @@ ggsave(filename = filename,
 ### matched gene set  to phenotype set
 ### perform GO and phenotype analysis on gene sets. 
 
-temp_onto_names <- c("immune system", "nervous system", "intestine", "musculature")
+temp_onto_names <- c("immune system", "nervous system", "intestine", "musculature","heart")
 gene_sets$spec_onto <- setNames(vector(mode="list",length=4),temp_onto_names)
 for(i in 1:length(gene_sets$spec_onto)){
   temp_onto_id <- onto$id[match(names(gene_sets$spec_onto)[i], onto$name)]
@@ -1157,6 +1158,8 @@ for(i in 1:length(temp_names)){
   ggsave( filename,
           gridExtra::grid.arrange(gg1,gridExtra::grid.arrange(gg3,gg2,nrow=3,heights=c(1,1,0.05)), ncol=2, widths=c(1,1.7)),
           width=ifelse(all(grepl("ubiq",temp_df$chrom_subset_name)),5,3),height=5)
+  filename <- paste0(dirs$figures,"sysinhert_proponly_",temp_names[i],".png")
+  ggsave( filename, gg1, width=ifelse(all(grepl("ubiq",temp_df$chrom_subset_name)),1.6,1.2),height=5)
   
 }
 
@@ -1271,7 +1274,8 @@ temp <- aggregate(ensembl_gene_id ~ major_systems_affected + chrom_subset_name +
                   data=df,FUN=function(x){length(unique(x))})
 colnames(temp)[which(colnames(temp)=="ensembl_gene_id")] <- "num_genes_w_sys_affected"
 
-temp$chrom_subset_name <- factor(temp$chrom_subset_name, levels=names(temp_list))
+#temp$chrom_subset_name <- factor(temp$chrom_subset_name, levels=names(temp_list))
+temp$chrom_subset_name <- factor(temp$chrom_subset_name, levels=rev(names(temp_list)))
 or_df$contrast_w <- factor(or_df$contrast_w, levels=names(temp_list))
 for(i in 1:length(temp_onto_names)){
   
@@ -1279,25 +1283,27 @@ for(i in 1:length(temp_onto_names)){
                        is.element(colnames(df),c("ensembl_gene_id","complexity_gene","chrom_subset_name","num_genes_w_syndrome") )])
   temp_df$is_chrom_set <- !grepl("ALL",temp_df$chrom_subset_name)
   temp_df$chrom_subset_name <- paste0(temp_df$chrom_subset_name, "\nn=",temp_df$num_genes_w_syndrome)
-  temp_df$chrom_subset_name <- factor(temp_df$chrom_subset_name, levels=rev(levels(factor(temp_df$chrom_subset_name))))
+  #temp_df$chrom_subset_name <- factor(temp_df$chrom_subset_name, levels=rev(levels(factor(temp_df$chrom_subset_name))))
+  temp_df$chrom_subset_name <- factor(temp_df$chrom_subset_name)
   temp_test <- t.test(temp_df$complexity_gene[temp_df$is_chrom_set],temp_df$complexity_gene[!temp_df$is_chrom_set],
                            alternative = "greater")
-  gg1 <- ggplot(temp_df, aes(y=chrom_subset_name,x=complexity_gene,color=is_chrom_set))+
+  gg1 <- ggplot(temp_df, aes(x=chrom_subset_name,y=complexity_gene,color=is_chrom_set))+
+    #ggplot(temp_df, aes(y=chrom_subset_name,x=complexity_gene,color=is_chrom_set))+
     ggtitle(paste0("Gene complexity: genes with ",temp_onto_names[i], " specific expression,p=",format(signif(temp_test$p.value,2),scientific=T) ))+
     geom_boxplot()+
     #geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge",dotsize=0.05,alpha=0.4)+
     stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
     scale_color_manual(values=c("#00BFC4","#C77CFF"))+
     #scale_y_continuous(breaks=0:max(temp_df$complexity_gene))+
-    scale_x_continuous(breaks=0:max(temp_df$complexity_gene))+
+    scale_y_continuous(breaks=0:max(temp_df$complexity_gene))+
     theme_bw(base_size = 8)+
     theme(plot.title = element_text(size=5),
-          axis.text.x = element_text(angle=90),
+          #axis.text.x = element_text(angle=90),
           axis.title = element_blank(),
           panel.grid.minor = element_blank(),
           legend.text = element_blank(), legend.title = element_blank(),
           legend.key.size = unit(0.5,"line"),
-          legend.position = "right")
+          ) #legend.position = "right")
   
   gg2 <- ggplot(or_df[temp_onto_names[i]==or_df$chrom_subset_name &
                  !grepl("all_|_chrom",or_df$contrast_w) &
@@ -1326,19 +1332,21 @@ for(i in 1:length(temp_onto_names)){
   gg3 <- ggplot(temp[which((temp$chrom_subset_name==temp_onto_names[i] | 
                       grepl(paste0("^all$|^chrom$|",temp_onto_names[i]),temp$chrom_subset_name)) & 
                       temp$major_systems_affected != ""),],
-         aes(x=major_systems_affected, y=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name,
+         #aes(x=major_systems_affected, y=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name,
+         aes(y=major_systems_affected, x=num_genes_w_sys_affected/num_genes_w_syndrome, fill=chrom_subset_name,
              label=num_genes_w_sys_affected))+
     ggtitle(temp_onto_names[i])+
     geom_col(position="dodge",width = 0.8)+
-    scale_fill_manual(values=c("#C77CFF","#00BFC4","#F8766D","gold"))+
+    scale_fill_manual(values=rev(c("#C77CFF","#00BFC4","#F8766D","gold")))+
     #geom_vline(xintercept = 1)+
-    geom_hline(yintercept = 1, color="grey60")+
+    #geom_hline(yintercept = 1, color="grey60")+
+    geom_vline(xintercept = 1, color="grey60")+
     # geom_hline(linetype="dashed", color="grey30",
     #            yintercept = (0.5+0:(-1+length(unique(temp$major_systems_affected))) ))+
-    #geom_text(size=1.8, hjust=1.5, position=position_dodge(0.8))+
-    geom_text(size=1.8, vjust=0.5,hjust=-.2, position=position_dodge(0.8),angle=90)+
-    #scale_x_continuous(breaks = seq(0,1,by=0.1)) +
-    scale_y_continuous(breaks = seq(0,1,by=0.1)) +
+    geom_text(size=1.8, hjust=-0.5, position=position_dodge(0.8))+
+    #geom_text(size=1.8, vjust=0.5,hjust=-.2, position=position_dodge(0.8),angle=90)+
+    scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+    #scale_y_continuous(breaks = seq(0,1,by=0.1)) +
     theme_bw(base_size = 8)+
     theme(plot.title = element_text(size=5),
           strip.text.y = element_text(angle = 0),
@@ -1351,12 +1359,18 @@ for(i in 1:length(temp_onto_names)){
   
   
 
-
-  filename <- paste0(dirs$figures,"sysphen_prop_w_or_",temp_onto_names[i],".png")
+# 
+#   filename <- paste0(dirs$figures,"sysphen_prop_w_or_",temp_onto_names[i],".png")
+#   ggsave( filename,
+#           gridExtra::grid.arrange(gg1, gg2, gg3,
+#                                   #ncol=3, widths=c(2.5,2.5,1)),width=8,height=4)
+#                                   nrow=3, heights=c(1.1,1.8,4)),width=3.7,height=5.5)
+#   
+  filename <- paste0(dirs$figures,"sysphen_prop_",temp_onto_names[i],".png")
   ggsave( filename,
-          gridExtra::grid.arrange(gg1, gg2, gg3,
+          gridExtra::grid.arrange(gg1, gg3,
                                   #ncol=3, widths=c(2.5,2.5,1)),width=8,height=4)
-                                  nrow=3, heights=c(1.1,1.8,4)),width=3.7,height=5.5)
+                                  ncol=2, widths=c(1.8,4.2)),width=5,height=5)
   
   # grid.newpage()
   # grid.draw(cbind(ggplotGrob(gg1),ggplotGrob(gg2) ))
@@ -1490,6 +1504,53 @@ ggsave( filename, gridExtra::grid.arrange(gg1, gg2, gg3,
 #   print(plot_list[[i]]);print(unique(temp_df$chrom_subset_name)[i])
 #   dev.off()
 # }
+
+temp_df <- unique(df[is.element(df$chrom_subset_name,c("chrom","all")),
+                     is.element(colnames(df),c("ensembl_gene_id","complexity_gene","chrom_subset_name","num_genes_w_syndrome") )])
+temp_df$is_chrom_set <- grepl("chrom",temp_df$chrom_subset_name)
+temp_df$chrom_subset_name <- factor(temp_df$chrom_subset_name, levels=rev(levels(factor(temp_df$chrom_subset_name))))
+gg1 <- ggplot(temp_df, aes(x=chrom_subset_name,y=complexity_gene,color=chrom_subset_name ))+
+  geom_boxplot()+
+  #geom_dotplot(binaxis = "y", stackdir = "center", position = "dodge",dotsize=0.05,alpha=0.4)+
+  stat_summary(fun.y=mean, geom="point", shape=23, size=2)+
+  scale_color_manual(values=(c("#C77CFF","#00BFC4")))+
+  scale_y_continuous(breaks=0:max(temp_df$complexity_gene))+
+  theme_bw(base_size = 8)+
+  theme(plot.title = element_text(size=5),
+        axis.text.x = element_text(angle=90),
+        #axis.title = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.text = element_blank(), legend.title = element_blank(),
+        legend.key.size = unit(0.5,"line"),
+        legend.position = "bottom")
+  
+temp_df_2 <- temp[which( is.element(temp$chrom_subset_name,c("chrom","all")) &
+                           temp$major_systems_affected != ""),]
+temp_df_2$chrom_subset_name <- factor(temp_df_2$chrom_subset_name, levels=rev(levels(factor(temp_df_2$chrom_subset_name))))
+gg3 <- ggplot(temp_df_2 , aes(y=major_systems_affected, x=num_genes_w_sys_affected/num_genes_w_syndrome,
+                       fill=chrom_subset_name, label=num_genes_w_sys_affected))+
+  geom_col(position="dodge",width = 0.8)+
+  scale_fill_manual(values=rev(c("#C77CFF","#00BFC4")))+
+  geom_vline(xintercept = 1)+
+  # geom_hline(linetype="dashed", color="grey30",
+  #            yintercept = (0.5+0:(-1+length(unique(temp$major_systems_affected))) ))+
+  geom_text(size=1.4, hjust=1.5, position=position_dodge(0.8))+
+  #geom_text(size=1.8, vjust=0.5,hjust=-.2, position=position_dodge(0.8),angle=90)+
+  #scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  scale_x_continuous(breaks = seq(0,1,by=0.1)) +
+  theme_bw(base_size = 8)+
+  theme(plot.title = element_text(size=5),
+        strip.text.y = element_text(angle = 0),
+        axis.text =  element_text(size=5),
+        panel.grid.minor = element_blank(),
+        axis.text.x =  element_text(angle = 90),
+        legend.position = "bottom"
+        )
+
+filename <- paste0(dirs$figures,"sysphen_prop_complexity.png")
+ggsave( filename, gridExtra::grid.arrange(gg3, gg1,
+      ncol=2, widths=c(2,1)),width=5,height=3)
+
 
 ```
 

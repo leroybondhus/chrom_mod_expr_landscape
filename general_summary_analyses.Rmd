@@ -33,31 +33,54 @@ for(chrom_subset_name in c("control_set__non_chrom_mod","all_chrom_modifiers")){
   
 }
 
+for(type in c("gene","transcript")){
+  gg1 <- ggplot(df[df$type==type,], aes(x=log10(length), color=paste0(chrom_subset_name)))+#,type) ))+
+    scale_color_manual(values=c("#C77CFF","#00BFC4"))+ # ,"purple2""turquoise4"))+
+    scale_y_continuous(breaks=seq(0,1,by=0.1))+
+    geom_vline(xintercept =  log10( c(seq(1e1,1e2,by=1e1),
+                                     seq(1e2,1e3,by=1e2),
+                                     seq(1e3,1e4,by=1e3),
+                                     seq(1e4,1e5,by=1e4),
+                                     seq(1e5,1e6,by=1e5),
+                                     seq(1e6,1e7,by=1e6))),color="grey75", linewidth=0.1)+
+    coord_cartesian(xlim = c(2, 6.2))+
+    geom_step(aes(y=..y..),stat="ecdf")+
+    theme_bw()+
+    theme(axis.title.x = element_blank(),
+          panel.grid.minor = element_blank(),
+          legend.position = "none")
+  
+  gg2 <- ggplot(df[df$type==type,], aes(x=log10(length), color=paste0(chrom_subset_name)))+ # ,type) ))+
+    scale_color_manual(values=c("#C77CFF","#00BFC4"))+#"purple2","#00BFC4","turquoise4"))+
+    geom_vline(xintercept =  log10( c(seq(1e1,1e2,by=1e1),
+                                     seq(1e2,1e3,by=1e2),
+                                     seq(1e3,1e4,by=1e3),
+                                     seq(1e4,1e5,by=1e4),
+                                     seq(1e5,1e6,by=1e5),
+                                     seq(1e6,1e7,by=1e6))),color="grey75", linewidth=0.1)+
+    coord_cartesian(xlim = c(2, 6.2))+
+    geom_density(alpha=0.5)+
+    theme_bw()+
+    theme(axis.title.x = element_blank(),
+          panel.grid.minor = element_blank(),
+          legend.position = "none")
+  filename <- paste0(dirs$figures, type, "_size.png")
+  ggsave(filename = filename,
+         gg2,
+         #gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
+         height = 1, width=4.6)
+}
 
-gg1 <- ggplot(df, aes(x=log10(length), color=paste0(chrom_subset_name,type) ))+
-  scale_color_manual(values=c("#C77CFF","purple2","#00BFC4","turquoise3"))+
-  scale_y_continuous(breaks=seq(0,1,by=0.1))+
-  coord_cartesian(xlim = c(2, 6.2))+
-  geom_step(aes(y=..y..),stat="ecdf")+
-  theme_bw()+
-  theme(axis.title.x = element_blank(),
-        legend.position = "none")
-
-gg2 <- ggplot(df, aes(x=log10(length), color=paste0(chrom_subset_name,type) ))+
-  scale_color_manual(values=c("#C77CFF","purple2","#00BFC4","turquoise3"))+
-  coord_cartesian(xlim = c(2, 6.2))+
-  geom_density(alpha=0.5)+
-  theme_bw()+
-  theme(axis.title.x = element_blank(),
-        legend.position = "bottom")
 
 
 
-filename <- paste0(dirs$figures, "gene_size.png")
-ggsave(filename = filename,
-       gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(2,3)),
-       height = 4, width=6)
+sink(file=paste0(dirs$figures,"gene_size.txt"))
+t.test(log10(df$length[df$type=="gene" & df$chrom_subset_name=="all_chrom_modifiers"]),
+       log10(df$length[df$type=="gene" & df$chrom_subset_name=="control_set__non_chrom_mod"]))
 
+t.test(log10(df$length[df$type=="transcript" & df$chrom_subset_name=="all_chrom_modifiers"]),
+       log10(df$length[df$type=="transcript" & df$chrom_subset_name=="control_set__non_chrom_mod"]))
+sink()
 ```
 
 ```{r, first and last exon v all exons, pretty}
@@ -108,58 +131,157 @@ df$first_last_single_middle[which(df$is_last)] <- "last"
 df$first_last_single_middle <- factor(df$first_last_single_middle, levels=c("first","middle","last","single"))
 df$is_chrom <- !grepl("non_chrom",df$chrom_subset_name)
 
-ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(exon_length), linetype=chrom_subset_name))+
-  coord_cartesian(xlim = c(0, 5.5))+
-  geom_density(alpha=0.5)+
-  theme_bw()+
-  theme(axis.title.x = element_blank())+
-  facet_grid(first_last_single_middle ~ .,scale="free")
-filename <- paste0(dirs$figures, "exon_size__group_by_fmls.png")
-ggsave(filename = filename, height=4,width=6)
 
-ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(transcript_length),y=exon_length/transcript_length,color=is_chrom))+
-  coord_cartesian(xlim = c(2, 5))+
-  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
-  geom_point(data=df[!df$is_chrom & df$first_last_single_middle != "single",],alpha=0.1,size=0.5)+
-  geom_point(data=df[df$is_chrom & df$first_last_single_middle != "single",],alpha=0.7,size=0.5)+
-  scale_y_continuous(breaks = seq(0,1,by=0.1))+
+ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(exon_length), color=chrom_subset_name))+
+  coord_cartesian(xlim = c(1, 4.5))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  geom_vline(xintercept =  log10( c(seq(1e1,1e2,by=1e1),
+                                 seq(1e2,1e3,by=1e2),
+                                 seq(1e3,1e4,by=1e3),
+                                 seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  coord_cartesian(xlim = c(1, 4.2))+
+  geom_step(aes(y=..y..),stat="ecdf")+
   theme_bw()+
   theme(axis.title.x = element_blank(),
-        panel.grid.minor.y = element_blank())+
+        panel.grid.minor = element_blank(),
+        legend.position = "top")+
+  facet_grid(. ~ first_last_single_middle)
+filename <- paste0(dirs$figures, "exon_size_ecdf__group_by_fmls.png")
+ggsave(filename = filename, height=2.4,width=5.2)
+
+ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(exon_length), color=chrom_subset_name))+
+  coord_cartesian(xlim = c(1, 4.5))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  geom_vline(xintercept =  log10( c(seq(1e1,1e2,by=1e1),
+                                 seq(1e2,1e3,by=1e2),
+                                 seq(1e3,1e4,by=1e3),
+                                 seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  coord_cartesian(xlim = c(1, 4.2))+
+  geom_density()+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        legend.position = "top")+
+  facet_grid(. ~ first_last_single_middle)
+filename <- paste0(dirs$figures, "exon_size__group_by_fmls.png")
+ggsave(filename = filename, height=2.4,width=5.2)
+
+
+sink(file=paste0(dirs$figures,"exon_size.txt"))
+t.test(log10(df$exon_length[df$first_last_single_middle=="first" & df$chrom_subset_name=="all_chrom_modifiers"]),
+       log10(df$exon_length[df$first_last_single_middle=="first" & df$chrom_subset_name=="control_set__non_chrom_mod"]))
+t.test(log10(df$exon_length[df$first_last_single_middle=="middle" & df$chrom_subset_name=="all_chrom_modifiers"]),
+       log10(df$exon_length[df$first_last_single_middle=="middle" & df$chrom_subset_name=="control_set__non_chrom_mod"]))
+t.test(log10(df$exon_length[df$first_last_single_middle=="last" & df$chrom_subset_name=="all_chrom_modifiers"]),
+       log10(df$exon_length[df$first_last_single_middle=="last" & df$chrom_subset_name=="control_set__non_chrom_mod"]))
+sink()
+
+
+ggplot(df[df$first_last_single_middle != "single",], aes(x=log10(transcript_length),y=exon_length/transcript_length,color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_vline(xintercept =  log10( c(seq(1e2,1e3,by=1e2),
+                                 seq(1e3,1e4,by=1e3),
+                                 seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  coord_cartesian(xlim = c(2, 4.7), ylim=c(0,1))+
+  geom_point(data=df[!df$is_chrom & df$first_last_single_middle != "single",],color="#00BFC4",alpha=0.2,size=0.2)+
+  geom_point(data=df[df$is_chrom & df$first_last_single_middle != "single",],color="#C77CFF",alpha=0.7,size=0.5)+
+  scale_y_continuous(limits = c(0,1),breaks = seq(0,1,by=0.1))+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none")+
   stat_smooth(method=lm)+
-  facet_grid(first_last_single_middle ~ .,scale="free")
+  facet_grid(. ~ first_last_single_middle)
 filename <- paste0(dirs$figures, "exon_size_v_transcript_len_group_by_fmls.png")
-ggsave(filename = filename, height=6,width=9)
+ggsave(filename = filename, height=1.6,width=4.6)
 
 
-model <- lm(log10(exon_length) ~ 
+sink(file=paste0(dirs$figures,"exon_size_v_transcript_len.txt"))
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="first" & df$chrom_subset_name =="all_chrom_modifiers",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="first" & df$chrom_subset_name =="control_set__non_chrom_mod",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ 
+              chrom_subset_name + log10(transcript_length),
+            data = df[df$first_last_single_middle=="first",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="middle" & df$chrom_subset_name =="all_chrom_modifiers",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="middle" & df$chrom_subset_name =="control_set__non_chrom_mod",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ 
+              chrom_subset_name + log10(transcript_length),
+            data = df[df$first_last_single_middle=="middle",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="last" & df$chrom_subset_name =="all_chrom_modifiers",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ log10(transcript_length),
+            data = df[df$first_last_single_middle=="last" & df$chrom_subset_name =="control_set__non_chrom_mod",])
+summary(model)
+model <- lm(exon_length/transcript_length ~ 
               chrom_subset_name + log10(transcript_length),
             data = df[df$first_last_single_middle=="last",])
 summary(model)
-
+sink()
 
   
 df$tau <- global_taus[df$ensembl_gene_id]
 df$is_ubiq <- df$tau < 0.4
 df <- df[complete.cases(df),]
 temp_df <- unique(df[,c("ensembl_gene_id","exon_count","transcript_length","chrom_subset_name","is_chrom","is_ubiq","tau")])
-ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=is_chrom))+
-  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
-  geom_point(data=df[which(df$first_last_single_middle=="last" & 
-                             !df$is_chrom),], size=0.8, alpha=0.2)+
-  geom_point(data=df[which(df$first_last_single_middle=="last" &
-                             df$is_chrom),], size=1.6, alpha=0.8)+
+gg1 <- ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_hline(yintercept = 1:6,color="grey75", linewidth=0.1)+
+  geom_vline(xintercept =  log10( c(seq(1e2,1e3,by=1e2),
+                                 seq(1e3,1e4,by=1e3),
+                                 seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  coord_cartesian(xlim = c(2.5, 4.5))+
+  geom_jitter(height=0.1, data=df[which(df$first_last_single_middle=="last" & 
+                             !df$is_chrom),],color="#00BFC4", size=0.4, alpha=0.1)+
+  geom_jitter(height=0.1, data=df[which(df$first_last_single_middle=="last" &
+                             df$is_chrom),],color="#C77CFF", size=0.8, alpha=0.6)+
   stat_smooth(method=lm)+
-  #geom_density_2d()+
-  xlim(2.5,4.5)
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())+
+  scale_x_continuous(breaks=2:5)+
+  scale_y_continuous(limits=c(0.8,6.4) ,breaks=1:6)
+gg2 <- ggplot(temp_df,aes(y=log2(exon_count), color=is_chrom))+
+  scale_color_manual(values=c("steelblue3","purple"))+
+  geom_hline(yintercept = 1:6,color="grey75", linewidth=0.1)+
+  geom_density(data=df[which(df$first_last_single_middle=="last"),])+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank())+
+  scale_y_continuous(limits=c(0.8,6.4) ,breaks=1:6)
 
-temp_df$tau <- global_taus[temp_df$ensembl_gene_id]
+filename <- paste0(dirs$figures, "exon_count_v_transcript_len.png")
+ggsave(filename = filename,
+       gridExtra::grid.arrange(gg1,gg2,ncol=2,widths=c(3,1)),
+       height=2.8,width=4.6)
+
+
+sink(file= paste0(dirs$figures,"exon_count_v_transcript_len.txt"))
+model <- lm(log2(exon_count) ~ log10(transcript_length),
+            data = temp_df[temp_df$chrom_subset_name=="all_chrom_modifiers",])
+summary(model)
+model <- lm(log2(exon_count) ~ log10(transcript_length),
+            data = temp_df[temp_df$chrom_subset_name=="control_set__non_chrom_mod",])
+summary(model)
 model <- lm(log2(exon_count) ~ 
-              is_chrom + log10(transcript_length) + tau,
+              is_chrom + log10(transcript_length),
             data = temp_df)
 summary(model)
+sink()
 
-
+temp_df$tau <- global_taus[temp_df$ensembl_gene_id]
 ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=paste0(is_ubiq,is_chrom) ))+
   scale_color_manual(values=c("gold2","#F8766D","#00BFC4","#C77CFF"))+
   theme_bw()+
@@ -171,9 +293,21 @@ ggplot(temp_df,aes(y=log2(exon_count), x=log10(transcript_length), color=paste0(
   xlim(2.5,4.5)+
   ylim(0.8,6.5)+
   facet_grid(. ~ is_ubiq )
-filename <- paste0(dirs$figures, "exon_count_v_transcript_len.png")
-ggsave(filename = filename, height=5,width=8)
+filename <- paste0(dirs$figures, "exon_count_v_transcript_len_by_ubiq.png")
 
+ggsave(filename = filename, height=5,width=8)
+sink(file= paste0(dirs$figures,"exon_count_v_transcript_len_by_ubiq.txt"))
+model <- lm(log2(exon_count) ~ log10(transcript_length) + tau,
+            data = temp_df[temp_df$chrom_subset_name=="all_chrom_modifiers",])
+summary(model)
+model <- lm(log2(exon_count) ~ log10(transcript_length) + tau,
+            data = temp_df[temp_df$chrom_subset_name=="control_set__non_chrom_mod",])
+summary(model)
+model <- lm(log2(exon_count) ~ 
+              is_chrom + log10(transcript_length) + tau,
+            data = temp_df)
+summary(model)
+sink()
 
 
 ```
@@ -191,47 +325,136 @@ ggsave(filename = filename, height=5,width=8)
 protein_domains$is_chrom <- is.element(protein_domains$ensembl_gene_id,
                                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)
 protein_domains$is_chrom_f <- factor(protein_domains$is_chrom, levels=c("TRUE","FALSE"))
-gg1 <- ggplot(protein_domains[protein_domains$prop_disordered > 0,], aes(y=log10(prop_disordered*Length), x=log10(Length),color=is_chrom_f ))+
-  geom_abline(slope=1, intercept = log10(1-c(0,0.5,0.75,0.9,0.99)),color="grey40",linetype="dashed")+
-  scale_color_manual(values=c("purple","steelblue3"))+
-  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
-                                    !protein_domains$is_chrom,],color="#00BFC4",alpha=0.2,size=0.3)+
-  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
-                                    protein_domains$is_chrom,],color="#C77CFF",alpha=0.6)+
-  #geom_point(data=data.frame(x=log10(seq(0,1e4,length.out=100)),y=log10(0.1*seq(0,1e4,length.out=100))),aes(x=x,y=y),inherit.aes = F)+
-  xlim(1,5)+ylim(1,4)+
-  theme_bw()+
-  stat_smooth(method=lm)+
-  facet_grid(. ~ is_chrom_f)
+df <- protein_domains[is.element(protein_domains$ensembl_gene_id
+  ,gene_sets$genes_all$ensembl_gene_id[which(gene_sets$genes_all$gene_biotype=="protein_coding")]),]
+# gg1 <- ggplot(df[df$prop_disordered > 0,], aes(y=log10(prop_disordered*Length), x=log10(Length),color=is_chrom_f ))+
+#   geom_abline(slope=1, intercept = log10(1-c(0,0.5,0.75,0.9,0.99)),color="grey40",linetype="dashed")+
+#   scale_color_manual(values=c("purple","steelblue3"))+
+#   geom_point(data=df[df$prop_disordered > 0 &
+#                                     !df$is_chrom,],color="#00BFC4",alpha=0.2,size=0.3)+
+#   geom_point(data=df[df$prop_disordered > 0 &
+#                        df$is_chrom,],color="#C77CFF",alpha=0.6)+
+#   #geom_point(data=data.frame(x=log10(seq(0,1e4,length.out=100)),y=log10(0.1*seq(0,1e4,length.out=100))),aes(x=x,y=y),inherit.aes = F)+
+#   xlim(1,5)+ylim(1,4)+
+#   theme_bw()+
+#   stat_smooth(method=lm)+
+#   facet_grid(. ~ is_chrom_f)
 
-gg2 <- ggplot(protein_domains[protein_domains$prop_disordered > 0,], aes(y=prop_disordered, x=log10(Length),color=is_chrom_f ))+
-  scale_color_manual(values=c("purple","steelblue3"))+
-  geom_abline(slope=0,intercept = 1-c(0,0.5,0.75,0.9,0.99),color="grey40",linetype="dashed")+
-  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
-                                    !protein_domains$is_chrom,],color="#00BFC4",alpha=0.2,size=0.3)+
-  geom_point(data=protein_domains[protein_domains$prop_disordered > 0 &
-                                    protein_domains$is_chrom,],color="#C77CFF",alpha=0.6)+
+temp_df <- aggregate( prop_disordered  ~ is_chrom, data=df, FUN=function(x){sum(x>0)/length(x)} )
+gg1 <- ggplot(temp_df, aes(y=is_chrom, x=prop_disordered , fill=is_chrom ))+
+  geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("#C77CFF","#00BFC4"))+
   theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        legend.position = "none")+
+  scale_x_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))
+
+filename <- paste0(dirs$figures,"prop_chrom_w_disordered_domain.png")
+ggsave(filename = filename, gg1,
+        #gridExtra::grid.arrange(gg2,gg1,ncol=2,widths=c(3,1)),
+       height = 1, width=3.6)
+
+
+gg1 <- ggplot(df[df$prop_disordered > 0 ,], aes(y=prop_disordered, color=is_chrom_f))+
+  geom_density()+
+  scale_color_manual(values=c("purple","steelblue3"))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y =  element_blank(),
+        legend.position = "none")+
+  scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))
+gg2 <- ggplot(df[df$prop_disordered > 0,], aes(y=prop_disordered, x=log10(Length),color=is_chrom_f ))+
+  scale_color_manual(values=c("purple","steelblue3"))+
+  geom_vline(xintercept =  log10(c(seq(1e1,1e2,by=1e1),
+                               seq(1e2,1e3,by=1e2),
+                               seq(1e3,1e4,by=1e3),
+                               seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+
+  geom_point(data=df[df$prop_disordered > 0 &
+                                    !df$is_chrom,],color="#00BFC4",alpha=0.2,size=0.2)+
+  geom_point(data=df[df$prop_disordered > 0 &
+                                    df$is_chrom,],color="#C77CFF",alpha=0.8,size=0.5)+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "none")+
   scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))+
-  scale_x_continuous(limits = c(1,4.5))+
-  stat_smooth(method=lm)+
-  facet_grid(. ~ is_chrom_f)
+  scale_x_continuous(limits = c(1.5,4),breaks=seq(2,4,by=1))+
+  stat_smooth(method=lm)#+
+  #facet_grid(is_chrom_f ~ .)
 
 
 filename <- paste0(dirs$figures,"chrom_disordered_domain_proportion.png")
-ggsave(filename = filename, gg1,
+ggsave(filename = filename, 
+        gridExtra::grid.arrange(gg2,gg1,ncol=2,widths=c(3,1)),
+       height = 3, width=3.6)
+
+sink(file=paste0(dirs$figures,"chrom_disordered_domain_proportion.txt"))
+model <- lm(prop_disordered ~ log10(Length),
+            data = protein_domains[protein_domains$prop_disordered > 0 & 
+                                     protein_domains$is_chrom,])
+summary(model)
+model <- lm(prop_disordered  ~ log10(Length),
+            data = protein_domains[protein_domains$prop_disordered > 0 & 
+                                     !protein_domains$is_chrom,])
+summary(model)
+
+model <- lm(prop_disordered  ~ log10(Length) + is_chrom,
+            data = protein_domains[protein_domains$prop_disordered > 0,])
+summary(model)
+sink()
+
+df$max_disorder_length <- sapply(str_split(df$disorder_lengths,","),function(x){max(as.numeric(x))} ) 
+
+gg1 <- ggplot(df[df$prop_disordered > 0,], aes(x=log10(max_disorder_length), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_x_continuous(limits = c(1,3.4),breaks=0:5)+
+  geom_vline(xintercept =  log10(c(seq(1e1,1e2,by=1e1),
+                               seq(1e2,1e3,by=1e2),
+                               seq(1e3,1e4,by=1e3),
+                               seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  geom_density()+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())
+
+gg2 <- ggplot(df[df$prop_disordered > 0,], aes(y=(max_disorder_length/Length), x=log10(Length),color=is_chrom_f ))+
+  scale_color_manual(values=c("purple","steelblue3"))+
+  geom_vline(xintercept =  log10(c(seq(1e1,1e2,by=1e1),
+                               seq(1e2,1e3,by=1e2),
+                               seq(1e3,1e4,by=1e3),
+                               seq(1e4,1e5,by=1e4))),color="grey75", linewidth=0.1)+
+  # geom_hline(yintercept =  log10(c(seq(1e1,1e2,by=1e1),
+  #                              seq(1e2,1e3,by=1e2),
+  #                              seq(1e3,1e4,by=1e3))),color="grey75", linewidth=0.1)+
+  geom_point(data=df[df$prop_disordered > 0 &
+                                    !df$is_chrom,],color="#00BFC4",alpha=0.2,size=0.2)+
+  geom_point(data=df[df$prop_disordered > 0 &
+                                    df$is_chrom,],color="#C77CFF",alpha=0.8,size=0.5)+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "none")+
+  scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(1,4.5))+
+  stat_smooth(method=lm)
+
+filename <- paste0(dirs$figures,"chrom_disordered_domain_maxlen.png")
+ggsave(filename = filename,gg1,
         #gridExtra::grid.arrange(gg1,gg2,nrow=2,heights=c(3,3)),
-       height = 3, width=7)
+       height = 1.2, width=3.6)
 
-model <- lm(log10(prop_disordered * Length) ~ 
-              log10(Length) + is_chrom,
-            data = protein_domains[protein_domains$prop_disordered > 0,])
-summary(model)
-model <- lm(log10(prop_disordered * Length) ~ 
-              log10(Length) + is_chrom + is_chrom:log10(Length),
-            data = protein_domains[protein_domains$prop_disordered > 0,])
-summary(model)
 
+
+
+
+
+
+
+sink(file=paste0(dirs$figures,"chrom_disordered_domain_maxlen.txt"))
+t.test(log10(df$max_disorder_length[df$prop_disordered > 0 & df$is_chrom]),
+       log10(df$max_disorder_length[df$prop_disordered > 0 & !df$is_chrom]))
+sink()
 ```
 
 
@@ -274,21 +497,89 @@ for(f in temp_files){
   }  
 }
 
+df <- data.frame(complex_name = character(length=length(complex)),
+                 is_chrom_complex = logical(length=length(complex)),
+                 complex_partner_count  = numeric(length=length(complex)))
+for(i in 1:length(complex)){
+  df$complex_name[i] <- complex[[i]]$name
+  df$is_chrom_complex[i] <- any(is.element(complex[[i]]$members,
+                                       gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))
+  df$complex_partner_count[i] <- length(complex[[i]]$members)
+}
+
+
+df2 <- data.frame(
+  ensembl_gene_id = c(
+    gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers,
+    gene_sets$human_chromatin_modifiers$gene_subsets$control_set__non_chrom_mod),
+  is_chrom = c(rep(T, length(gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers)),
+               rep(F, length(gene_sets$human_chromatin_modifiers$gene_subsets$control_set__non_chrom_mod))),
+  complex_count=0,
+  complex_count_chrom=0,
+  complex_count_nonchrom=0
+  )
+for(i in 1:length(complex)){
+  which <- which(is.element(df2$ensembl_gene_id, complex[[i]]$members))
+  df2$complex_count[which] <- df2$complex_count[which] + 1
+  if(any(is.element(complex[[i]]$members,
+                    gene_sets$human_chromatin_modifiers$gene_subsets$all_chrom_modifiers))){
+    df2$complex_count_chrom[which] <- df2$complex_count_chrom[which] + 1
+  } else {
+    df2$complex_count_nonchrom[which] <- df2$complex_count_nonchrom[which] + 1
+  }
+}
+
+ggplot(df,aes(x=log2(complex_partner_count+1) ))+
+  geom_vline(xintercept =  log2(1:64),color="white")+
+  geom_histogram(bins=200)+
+  facet_grid(is_chrom_complex ~ ., scale="free")
+
+ggplot(df2,aes(x=log2(complex_count) ))+
+  geom_vline(xintercept =  log2(1:64),color="grey85")+
+  geom_histogram(bins=200)+
+  theme_bw()+
+  facet_grid(is_chrom ~ ., scale="free")
+
+
+
+ggplot(df,aes(x=log2(complex_partner_count+1), color=is_chrom_complex))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  geom_boxplot()
+ggplot(df2,aes(x=log2(complex_count), color=is_chrom))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  geom_boxplot()
+
+
+ggplot(df,aes(x=log2(complex_partner_count+1), color=is_chrom_complex))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  geom_vline(xintercept =  log2(1:max(df$complex_partner_count)),color="grey85")+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()
+ggplot(df2,aes(x=log2(complex_count), color=is_chrom))+
+  scale_color_manual(values=c("#00BFC4","#C77CFF"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  geom_vline(xintercept =  log2(1:max(df2$complex_count)),color="grey85")+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()
+  #facet_grid(is_chrom ~ ., scale="free")
+
+
+
 ### FOR EACH CHROM MODIFIER -> ID NUM OF COMPLEX SPECIES AND THEIR RESPECTIVE NUMBER OF TOTAL UNIQUE SUBUNITS ID'D
 ### PLOT SUMMARY DISTRIBUTION FOR ALL GENES
 ### BARCODE PLOT
 
-df <- data.frame(ensembl_gene_id = character(),
-                 complex_name = character(),
+df3 <- data.frame(ensembl_gene_id = character(),
                  complex_partners = character(),
-                 complex_partner_count  = numeric(),
-                 complex_count = numeric(),
+                 complex_partners_const = character(),
+                 complex_partner_count_mean = numeric(),
+                 complex_partner_count_median = numeric(),
                  chrom_subset_name = character())
 
-for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
+for(chrom_subset_name in c("control_set__non_chrom_mod","all_chrom_modifiers")){
   ## get current subset of genes
-  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[i]]
-  chrom_subset_name <- names(gene_sets$human_chromatin_modifiers$gene_subsets)[i]
+  chrom_subset <- gene_sets$human_chromatin_modifiers$gene_subsets[[chrom_subset_name]]
   if(length(chrom_subset)==0){next}
   ## map current subset to table with exon info
   
@@ -296,6 +587,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   temp_list$complex_names <- vector(mode = "list", length=length(temp_list$gene_id))
   temp_list$complex_partners <- vector(mode = "list", length=length(temp_list$gene_id))
   temp_list$constitutive_partners <- vector(mode = "list", length=length(temp_list$gene_id))
+  temp_list$complex_partner_count <- vector(mode = "list", length=length(temp_list$gene_id))
     
   for(j in 1:length(complex)){
     temp_modifiers <- complex[[j]]$members[is.element(complex[[j]]$members, temp_list$gene_id)]
@@ -304,6 +596,7 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
       which <- which(temp_list$gene_id == temp_modifiers[k])
       temp_list$complex_names[[which]] <- c(temp_list$complex_names[[which]],complex[[j]]$name)
       temp_list$complex_partners[[which]] <- c(temp_list$complex_partners[[which]],list(complex[[j]]$members))
+      temp_list$complex_partner_count[[which]] <- c(temp_list$complex_partner_count[[which]],length(complex[[j]]$members))
     }
   }
   for(j in 1:length(temp_list$complex_partners)){
@@ -321,49 +614,161 @@ for(i in 1:length(gene_sets$human_chromatin_modifiers$gene_subsets)){
   names(temp_list$complex_names) <- 
     names(temp_list$complex_partners) <- 
     names(temp_list$constitutive_partners) <-
+    names(temp_list$complex_partner_count) <-
     temp_list$gene_id
   # temp_list2 <- temp_list
   # temp_list2$complex_names <- NULL
   
-  temp_list$complex_partners_concat <- sapply(temp_list$complex_partners,function(x){sapply(x, paste,collapse=",")})
-  temp_list$complex_partners_count <- lapply(temp_list$complex_partners,function(x){sapply(x,length)})
+  temp_list$complex_partners_concat <- sapply(temp_list$complex_partners,
+                                              function(x){ paste(unique(unlist(x)),collapse=",")})
+  temp_list$constitutive_partners_concat <- sapply(temp_list$constitutive_partners,
+                                              function(x){ paste(unique(unlist(x)),collapse=",")})
+  temp_list$complex_partner_count_mean <- sapply(temp_list$complex_partner_count,function(x){ifelse(length(x)>0,mean(x),0)})
+  temp_list$complex_partner_count_median <- sapply(temp_list$complex_partner_count,function(x){ifelse(length(x)>0,median(x),0)})
   
+  df3 <- rbind(df3,
+              data.frame(ensembl_gene_id=temp_list$gene_id,
+                         complex_partners=temp_list$complex_partners_concat,
+                         complex_partners_const=temp_list$constitutive_partners_concat,
+                         complex_partner_count_mean=temp_list$complex_partner_count_mean,
+                         complex_partner_count_median=temp_list$complex_partner_count_median,
+                         chrom_subset_name=chrom_subset_name
+                         ))
  
-  temp_df <- melt(temp_list$complex_names[!sapply(temp_list$complex_names,is.null)], value.name="complex_name")
-  temp_df_2 <- melt(temp_list$complex_partners_concat[!sapply(temp_list$complex_names,is.null)], value.name="complex_partners")
-  temp_df <- cbind(temp_df, temp_df_2[,1,drop=F])
-  temp_df_2 <- melt(temp_list$complex_partners_count[!sapply(temp_list$complex_names,is.null)], value.name="complex_partner_count")
-  temp_df <- cbind(temp_df, temp_df_2[,1,drop=F])
-  colnames(temp_df)[which(colnames(temp_df)=="L1")] <- "ensembl_gene_id"
-  temp_df <- cbind(temp_df, data.frame(complex_count=as.numeric(table(temp_df$ensembl_gene_id)[temp_df$ensembl_gene_id])))
-  temp_df$chrom_subset_name <- chrom_subset_name
-  df <- rbind(df, temp_df)
 }
 
+temp_all <- str_split(df3$complex_partners,",") 
+temp_const <- str_split(df3$complex_partners_const,",")
+df3$num_const_partners <- df3$num_var_partners <- NA
+for(i in 1:nrow(df3)){
+  if(i %% 500 == 0){print(i)}
+  df3$num_const_partners[i] <- length(setdiff(temp_const[[i]],df3$ensembl_gene_id[i] ))
+  df3$num_var_partners[i] <- length(setdiff(setdiff(temp_all[[i]],temp_const[[i]]),df3$ensembl_gene_id[i]) )
+}
 
-ggl <- list()
-ggl[["complex_partner_count"]] <- ggplot(df, aes(x=complex_partner_count))+
-  geom_histogram(bins=100, alpha=0.7, fill="grey20")+
-  theme_classic()+
-  theme(strip.text.y = element_text(angle = 0),
-        panel.border = element_rect(fill=NA,color="grey50"))+
-  facet_grid(chrom_subset_name ~ ., scales="free_y")
+df3 <- unique(merge(df3,df2, by="ensembl_gene_id"))
+### add 1/(mean number of complex partners) as a weight for regression (and alpha value)
+df3$is_chrom_f <- factor(df3$is_chrom, levels = c("TRUE","FALSE"))
 
-ggl[["complex_count"]] <- ggplot(unique(df[,c("ensembl_gene_id",
-                                              "complex_count",
-                                              "chrom_subset_name")]),
-                                 aes(x=complex_count))+
-  geom_histogram(bins=100, alpha=0.7, fill="grey20")+
-  theme_classic()+
-  theme(strip.text.y = element_text(angle = 0),
-        panel.border = element_rect(fill=NA,color="grey50"))+
-  facet_grid(chrom_subset_name ~ ., scales="free_y")
-  
+temp_df <-aggregate(complex_count ~ is_chrom_f, data=df3, FUN=function(x){sum(x>0)/length(x)})
+gg1 <- ggplot(temp_df, aes(x=is_chrom_f, y=complex_count , fill=is_chrom_f ))+
+  geom_bar(position="dodge", stat="identity")+
+  scale_fill_manual(values=c("#C77CFF","#00BFC4"))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.position = "none")+
+  scale_y_continuous(limits = c(0,1),breaks=seq(0,1,by=0.1))
 
-filename <- paste0(dirs$figures, "complex_partner_count__partition_by_chromModType.png")
-ggsave(filename, ggl$complex_partner_count, height = 6, width =8, units="in" )
-filename <- paste0(dirs$figures, "complex_count__partition_by_chromModType.png")
-ggsave(filename, ggl$complex_count, height = 6, width =8, units="in")
+filename <- paste0(dirs$figures,"prop_chrom_in_complex.png")
+ggsave(filename = filename, gg1,
+        #gridExtra::grid.arrange(gg2,gg1,ncol=2,widths=c(3,1)),
+       height = 2.4, width=1)
+
+gg1 <- ggplot(df3[df3$complex_count >= 1,],aes(x=log2(complex_count), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,6.2),breaks=seq(0,6,by=1))+
+#  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())
+filename <- paste0(dirs$figures,"complex_count.png")
+ggsave(filename = filename, height = 2.4, width=2.4)
+
+gg <- ggplot(df3[df3$complex_count >= 1,],aes(x=log2(complex_partner_count_mean), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,7),breaks=seq(0,7,by=1))+
+# geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_density()+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())
+gg2 <- ggplot(df3[df3$complex_count >= 1,],aes(x=log2(complex_partner_count_mean), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.title.y = element_blank())
+filename <- paste0(dirs$figures,"complex_partner_count_mean.png")
+ggsave(filename = filename, gg, height = 1.2, width=3.4)
+
+
+gg3 <- ggplot(df3[df3$complex_count >= 1,],aes(x=log2(num_const_partners+1), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,max( log2(df3$num_const_partners+df3$num_var_partners+1) )))+
+  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.title.y = element_blank())
+filename <- paste0(dirs$figures,"complex_num_const_partners.png")
+ggsave(filename = filename, height = 2.5, width=2.5)
+
+
+
+gg <- ggplot(df3[df3$complex_count > 1,],aes(x=log2(num_var_partners+1), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,8),breaks=seq(0,8,by=1))+
+#  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_density()+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())
+gg4 <- ggplot(df3[df3$complex_count > 1,],aes(x=log2(num_var_partners+1), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,max( log2(df3$num_const_partners+df3$num_var_partners+1) )))+
+  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.title.y = element_blank()
+        )
+filename <- paste0(dirs$figures,"complex_num_var_partners.png")
+ggsave(filename = filename,gg, height = 1.2, width=3.4)
+
+filename <- paste0(dirs$figures,"complex_stats_agg.png")
+ggsave(filename = filename,
+       gridExtra::grid.arrange(gg1, gg2,gridExtra::grid.arrange(gg3,gg4,nrow=2,heights=c(1,1)), ncol=3,widths=c(3,3,2.1)),
+       height = 3, width=8)
+
+
+
+
+ggplot(df3[df3$complex_count >= 1,],aes(x=log2(num_var_partners+1), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,max( log2(df3$num_const_partners+df3$num_var_partners+1) )))+
+  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.title.y = element_blank()
+        )
+filename <- paste0(dirs$figures,"complex_var_part_include0.png")
+ggsave(filename = filename, height = 3, width=3)
+
+ggplot(df3[df3$complex_count >= 1,],aes(x=log2(complex_count), color=is_chrom_f))+
+  scale_color_manual(values=c("#C77CFF","#00BFC4"))+
+  scale_y_continuous(breaks=seq(0,1,by=0.1))+
+  scale_x_continuous(limits = c(0,max( log2(df3$num_const_partners+df3$num_var_partners+1) )))+
+  geom_vline(xintercept =  log2(1:33),color="grey75", linewidth=0.1)+
+  geom_step(aes(y=..y..),stat="ecdf")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.title.y = element_blank()
+        )
+filename <- paste0(dirs$figures,"complex_count.png")
+ggsave(filename = filename, height = 2, width=2.7)
+
+
 ```
 
 ```{r, paralog groups analysis}
